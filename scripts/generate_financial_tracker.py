@@ -593,19 +593,22 @@ def fetch_live_prices(categories):
         for stock in cat.get("stocks", []):
             all_tickers.append(stock["ticker"])
 
-    print(f"Fetching live prices + daily changes for {len(all_tickers)} tickers...")
+    print(f"Fetching live prices + today's change for {len(all_tickers)} tickers...")
     prices = {}
     daily_changes = {}
     try:
-        data = yf.download(all_tickers, period="5d", auto_adjust=True, progress=False)
-        closes = data["Close"].dropna(how="all")
-        today_row   = closes.iloc[-1]
-        prev_row    = closes.iloc[-2]
+        tickers_obj = yf.Tickers(" ".join(all_tickers))
         for t in all_tickers:
-            if t in today_row and not str(today_row[t]) == "nan":
-                prices[t] = float(today_row[t])
-            if t in today_row and t in prev_row and not str(prev_row[t]) == "nan":
-                daily_changes[t] = float((today_row[t] - prev_row[t]) / prev_row[t])
+            try:
+                fi         = tickers_obj.tickers[t].fast_info
+                last_price = fi.last_price
+                prev_close = fi.previous_close
+                if last_price:
+                    prices[t] = round(float(last_price), 2)
+                if last_price and prev_close and prev_close != 0:
+                    daily_changes[t] = float((last_price - prev_close) / prev_close)
+            except Exception:
+                pass
         print(f"  ✓ Got prices for {len(prices)} tickers, daily changes for {len(daily_changes)}")
     except Exception as e:
         print(f"  ⚠ Price fetch failed: {e}. Using 0.00 placeholders.")
