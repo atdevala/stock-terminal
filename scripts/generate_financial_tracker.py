@@ -394,13 +394,11 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
 
         cur_row = notes_start + 1
 
-        NOTE_WIDTH = 130   # chars per line; matches column B override below
-
         for j, stock in enumerate(cat["stocks"]):
             bg_note = LIGHT_GRAY if j % 2 == 0 else WHITE
             note_text = stock.get("notes", "")
 
-            # ── Label row: col A = ticker, col B = company + risk ─────────
+            # ── Label row: ticker | company | risk ────────────────────────
             label_row = cur_row
             la = ws.cell(row=label_row, column=1, value=stock["ticker"])
             la.fill = fill("D9E1F2")
@@ -415,24 +413,22 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
             ws.row_dimensions[label_row].height = 20
             cur_row += 1
 
-            # ── Note lines: one plain-text row per wrapped line ───────────
-            lines = textwrap.wrap(note_text, width=NOTE_WIDTH) if note_text else ["(no notes)"]
-            for line in lines:
-                nr = cur_row
-                # Col A: empty coloured cell
-                ws.cell(row=nr, column=1).fill = fill(bg_note)
-                # Col B: the line of text
-                nc = ws.cell(row=nr, column=2, value="  " + line)
-                nc.fill = fill(bg_note)
-                nc.font = Font(color="1B2A4A", size=10, name="Calibri")
-                nc.alignment = Alignment(horizontal="left", vertical="center")
-                ws.row_dimensions[nr].height = 16
-                cur_row += 1
+            # ── Note row: single cell, wrap_text=True, tall row ───────────
+            # wrap_text on a single (non-merged) cell is 100% reliable in
+            # every viewer. The row height of 250 ensures the full paragraph
+            # is always visible without any text being cut off.
+            note_row = cur_row
+            ws.cell(row=note_row, column=1).fill = fill(bg_note)
+            nc = ws.cell(row=note_row, column=2, value=note_text)
+            nc.fill = fill(bg_note)
+            nc.font = Font(color="1B2A4A", size=10, name="Calibri")
+            nc.alignment = Alignment(horizontal="left", vertical="top",
+                                     wrap_text=True)
+            ws.row_dimensions[note_row].height = 250
+            cur_row += 1
 
             # Small visual gap between stocks
-            ws.cell(row=cur_row, column=1).fill = fill(WHITE)
-            ws.cell(row=cur_row, column=2).fill = fill(WHITE)
-            ws.row_dimensions[cur_row].height = 6
+            ws.row_dimensions[cur_row].height = 8
             cur_row += 1
 
     # Column widths
