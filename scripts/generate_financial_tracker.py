@@ -394,6 +394,11 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
 
         cur_row = notes_start + 1
 
+        # Hard-wrap at 55 chars — matches visible column B width in all viewers.
+        # Embedding \n directly in the cell value guarantees line breaks render
+        # regardless of whether the viewer honours wrap_text or column widths.
+        WRAP_WIDTH = 55
+
         for j, stock in enumerate(cat["stocks"]):
             bg_note = LIGHT_GRAY if j % 2 == 0 else WHITE
             note_text = stock.get("notes", "")
@@ -413,18 +418,23 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
             ws.row_dimensions[label_row].height = 20
             cur_row += 1
 
-            # ── Note row: single cell, wrap_text=True, tall row ───────────
-            # wrap_text on a single (non-merged) cell is 100% reliable in
-            # every viewer. The row height of 250 ensures the full paragraph
-            # is always visible without any text being cut off.
+            # ── Note row: hard \n line breaks + exact row height ──────────
+            # textwrap.wrap splits at word boundaries every WRAP_WIDTH chars.
+            # Joining with \n embeds hard line breaks the viewer must respect.
+            # Row height = lines × 15pt so every line is fully visible.
+            lines = textwrap.wrap(note_text, width=WRAP_WIDTH) if note_text \
+                    else ["(no notes)"]
+            cell_value = "\n".join(lines)
+            num_lines  = len(lines)
+
             note_row = cur_row
             ws.cell(row=note_row, column=1).fill = fill(bg_note)
-            nc = ws.cell(row=note_row, column=2, value=note_text)
+            nc = ws.cell(row=note_row, column=2, value=cell_value)
             nc.fill = fill(bg_note)
             nc.font = Font(color="1B2A4A", size=10, name="Calibri")
             nc.alignment = Alignment(horizontal="left", vertical="top",
                                      wrap_text=True)
-            ws.row_dimensions[note_row].height = 250
+            ws.row_dimensions[note_row].height = num_lines * 15 + 12
             cur_row += 1
 
             # Small visual gap between stocks
