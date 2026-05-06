@@ -261,7 +261,7 @@ def write_stock_row(ws, row, stock, cat_color):
 
 
 def build_tracker_sheet(wb, cat):
-    ws = wb.create_sheet(cat["name"])
+    ws = wb[cat["name"]]
     ws.sheet_properties.tabColor = cat["tab_color"]
     ws.freeze_panes = "A4"
     ws.row_dimensions[1].height = 28
