@@ -246,18 +246,21 @@ def write_stock_row(ws, row, stock, cat_color):
     live_price = stock.get("live_price", 0.00)
     cell(cur_col, live_price, is_input=True, fmt='"$"#,##0.00')
 
-    # Today's +/-% — green if up, red if down, bold white text
+    # Today's +/-% — store as e.g. 5.27 (not 0.0527), display with literal %
+    # so Excel does NOT apply its built-in ×100 multiplication
     daily_chg = stock.get("daily_change", None)
     chg_cell = ws.cell(row=row, column=change_col)
     chg_cell.border = THIN_BORDER
     chg_cell.alignment = center()
-    chg_cell.number_format = '+0.00%;-0.00%;0.00%'
     if daily_chg is not None:
-        chg_cell.value = daily_chg
-        if daily_chg > 0:
+        pct_value = daily_chg * 100   # e.g. 0.052728 → 5.2728
+        chg_cell.value = pct_value
+        # '+0.00"%"' uses a literal % so no auto-multiplication
+        chg_cell.number_format = '+0.00"%";-0.00"%";0.00"%"'
+        if pct_value > 0:
             chg_cell.fill = fill("375623")   # dark green bg
             chg_cell.font = Font(bold=True, color=WHITE, size=11, name="Calibri")
-        elif daily_chg < 0:
+        elif pct_value < 0:
             chg_cell.fill = fill("9C0006")   # dark red bg
             chg_cell.font = Font(bold=True, color=WHITE, size=11, name="Calibri")
         else:
@@ -265,6 +268,7 @@ def write_stock_row(ws, row, stock, cat_color):
             chg_cell.font = Font(bold=True, color="595959", size=11, name="Calibri")
     else:
         chg_cell.value = None
+        chg_cell.number_format = '0.00"%"'
         chg_cell.fill = fill(bg)
 
     cell(buy_col,    0.00, is_input=True, fmt='"$"#,##0.00')
