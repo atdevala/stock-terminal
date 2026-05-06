@@ -403,7 +403,16 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
         # One row per stock
         for j, stock in enumerate(cat["stocks"]):
             nr = sub_row + 1 + j
-            ws.row_dimensions[nr].height = 48
+
+            # Dynamic row height: estimate lines needed based on note length
+            # Merged area spans cols 3–17 (~15 cols × ~11 chars wide ≈ 165 chars/line)
+            note_text = stock.get("notes", "")
+            chars_per_line = 165
+            explicit_newlines = note_text.count("\n")
+            wrapped_lines = max(1, len(note_text) // chars_per_line + 1)
+            total_lines = wrapped_lines + explicit_newlines
+            row_h = max(40, total_lines * 16 + 8)
+            ws.row_dimensions[nr].height = row_h
 
             bg_note = LIGHT_GRAY if j % 2 == 0 else WHITE
 
