@@ -170,23 +170,24 @@ CATEGORIES = [
 
 # ── Column definitions for tracker sheets ────────────────────────────────────
 COLS = [
-    ("Ticker",              10,  False),
-    ("Company",             28,  False),
-    ("Focus / Niche",       30,  False),
-    ("Risk",                11,  False),
-    ("Current\nPrice",      12,  True),   # E - yellow input
-    ("Purchase\nPrice",     12,  True),   # F - yellow input
-    ("Shares\nOwned",       10,  True),   # G - yellow input
-    ("Total\nCost",         13,  False),  # H = F*G
-    ("Current\nValue",      13,  False),  # I = E*G
-    ("P&L ($)",             13,  False),  # J = I-H
-    ("P&L (%)",             10,  False),  # K = J/H
-    ("52W\nHigh",           11,  True),   # L - yellow input
-    ("52W\nLow",            11,  True),   # M - yellow input
-    ("% from\n52W High",    12,  False),  # N = E/L-1
-    ("Analyst\nTarget",     12,  True),   # O - yellow input
-    ("Upside to\nTarget",   12,  False),  # P = O/E-1
-    ("Investment Thesis / Notes",  50,  False),
+    ("Ticker",              10,  False),   # 1  A
+    ("Company",             28,  False),   # 2  B
+    ("Focus / Niche",       30,  False),   # 3  C
+    ("Risk",                11,  False),   # 4  D
+    ("Current\nPrice",      12,  True),    # 5  E - yellow input
+    ("Today's\n+/- %",      11,  False),   # 6  F - green/red auto
+    ("Purchase\nPrice",     12,  True),    # 7  G - yellow input
+    ("Shares\nOwned",       10,  True),    # 8  H - yellow input
+    ("Total\nCost",         13,  False),   # 9  I = G*H
+    ("Current\nValue",      13,  False),   # 10 J = E*H
+    ("P&L ($)",             13,  False),   # 11 K = J-I
+    ("P&L (%)",             10,  False),   # 12 L = K/I
+    ("52W\nHigh",           11,  True),    # 13 M - yellow input
+    ("52W\nLow",            11,  True),    # 14 N - yellow input
+    ("% from\n52W High",    12,  False),   # 15 O = E/M-1
+    ("Analyst\nTarget",     12,  True),    # 16 P - yellow input
+    ("Upside to\nTarget",   12,  False),   # 17 Q = P/E-1
+    ("Investment Thesis / Notes",  50,  False),  # 18 R
 ]
 
 def col_letter(idx):  # 1-based
@@ -201,23 +202,24 @@ def apply_header_row(ws, row, cat_color, names_widths):
         cell.border = hdr_border()
 
 def write_stock_row(ws, row, stock, cat_color):
-    tickers_col  = 1
-    company_col  = 2
-    focus_col    = 3
-    risk_col     = 4
-    cur_col      = 5   # E
-    buy_col      = 6   # F
-    shares_col   = 7   # G
-    cost_col     = 8   # H
-    val_col      = 9   # I
-    pnl_col      = 10  # J
-    pnlp_col     = 11  # K
-    hi_col       = 12  # L
-    lo_col       = 13  # M
-    fromhi_col   = 14  # N
-    tgt_col      = 15  # O
-    upside_col   = 16  # P
-    notes_col    = 17  # Q
+    tickers_col  = 1   # A
+    company_col  = 2   # B
+    focus_col    = 3   # C
+    risk_col     = 4   # D
+    cur_col      = 5   # E - current price (yellow input)
+    change_col   = 6   # F - today's +/-% (green/red auto)
+    buy_col      = 7   # G - purchase price (yellow input)
+    shares_col   = 8   # H - shares (yellow input)
+    cost_col     = 9   # I = G*H
+    val_col      = 10  # J = E*H
+    pnl_col      = 11  # K = J-I
+    pnlp_col     = 12  # L = K/I
+    hi_col       = 13  # M - 52W High (yellow input)
+    lo_col       = 14  # N - 52W Low (yellow input)
+    fromhi_col   = 15  # O = E/M-1
+    tgt_col      = 16  # P - analyst target (yellow input)
+    upside_col   = 17  # Q = P/E-1
+    notes_col    = 18  # R
 
     bg = LIGHT_GRAY if row % 2 == 0 else WHITE
 
@@ -235,32 +237,54 @@ def write_stock_row(ws, row, stock, cat_color):
 
     # Static data
     c = cell(tickers_col, stock["ticker"])
-    c.font = Font(bold=True, color="00" + "0070C0", name="Calibri", size=11)
+    c.font = Font(bold=True, color="000070C0", name="Calibri", size=11)
     cell(company_col, stock["company"])
     cell(focus_col,   stock["focus"])
     cell(risk_col,    stock["risk"])
 
-    # Current price — pre-filled with live data (still yellow so user can override)
+    # Current price — pre-filled with live data (yellow so user can override)
     live_price = stock.get("live_price", 0.00)
-    cell(cur_col,    live_price, is_input=True, fmt='"$"#,##0.00')
+    cell(cur_col, live_price, is_input=True, fmt='"$"#,##0.00')
+
+    # Today's +/-% — green if up, red if down, bold white text
+    daily_chg = stock.get("daily_change", None)
+    chg_cell = ws.cell(row=row, column=change_col)
+    chg_cell.border = THIN_BORDER
+    chg_cell.alignment = center()
+    chg_cell.number_format = '+0.00%;-0.00%;0.00%'
+    if daily_chg is not None:
+        chg_cell.value = daily_chg
+        if daily_chg > 0:
+            chg_cell.fill = fill("375623")   # dark green bg
+            chg_cell.font = Font(bold=True, color=WHITE, size=11, name="Calibri")
+        elif daily_chg < 0:
+            chg_cell.fill = fill("9C0006")   # dark red bg
+            chg_cell.font = Font(bold=True, color=WHITE, size=11, name="Calibri")
+        else:
+            chg_cell.fill = fill(bg)
+            chg_cell.font = Font(bold=True, color="595959", size=11, name="Calibri")
+    else:
+        chg_cell.value = None
+        chg_cell.fill = fill(bg)
+
     cell(buy_col,    0.00, is_input=True, fmt='"$"#,##0.00')
     cell(shares_col, 0,    is_input=True, fmt='#,##0')
 
     r = row
-    # Formulas
-    cell(cost_col,   formula=f"=F{r}*G{r}",            fmt='"$"#,##0.00')
-    cell(val_col,    formula=f"=E{r}*G{r}",             fmt='"$"#,##0.00')
-    cell(pnl_col,    formula=f"=I{r}-H{r}",             fmt='"$"#,##0.00')
-    cell(pnlp_col,   formula=f'=IFERROR(J{r}/H{r},"")', fmt='0.00%')
+    # Formulas — note column letters shifted by 1
+    cell(cost_col,   formula=f"=G{r}*H{r}",             fmt='"$"#,##0.00')
+    cell(val_col,    formula=f"=E{r}*H{r}",              fmt='"$"#,##0.00')
+    cell(pnl_col,    formula=f"=J{r}-I{r}",              fmt='"$"#,##0.00')
+    cell(pnlp_col,   formula=f'=IFERROR(K{r}/I{r},"")',  fmt='0.00%')
 
     cell(hi_col,     0.00, is_input=True, fmt='"$"#,##0.00')
     cell(lo_col,     0.00, is_input=True, fmt='"$"#,##0.00')
-    cell(fromhi_col, formula=f'=IFERROR(E{r}/L{r}-1,"")', fmt='0.00%')
+    cell(fromhi_col, formula=f'=IFERROR(E{r}/M{r}-1,"")', fmt='0.00%')
 
     cell(tgt_col,    0.00, is_input=True, fmt='"$"#,##0.00')
-    cell(upside_col, formula=f'=IFERROR(O{r}/E{r}-1,"")',  fmt='0.00%')
+    cell(upside_col, formula=f'=IFERROR(P{r}/E{r}-1,"")',  fmt='0.00%')
 
-    cell(notes_col,  stock["notes"])
+    cell(notes_col, stock["notes"])
 
 
 def build_tracker_sheet(wb, cat, fetched_at=""):
@@ -569,29 +593,38 @@ def fetch_live_prices(categories):
         for stock in cat.get("stocks", []):
             all_tickers.append(stock["ticker"])
 
-    print(f"Fetching live prices for {len(all_tickers)} tickers...")
+    print(f"Fetching live prices + daily changes for {len(all_tickers)} tickers...")
+    prices = {}
+    daily_changes = {}
     try:
-        data = yf.download(all_tickers, period="1d", auto_adjust=True, progress=False)
-        prices_series = data["Close"].iloc[-1]
-        prices = {t: float(prices_series[t]) for t in all_tickers if t in prices_series and not str(prices_series[t]) == "nan"}
-        print(f"  ✓ Got prices for {len(prices)} tickers")
+        data = yf.download(all_tickers, period="5d", auto_adjust=True, progress=False)
+        closes = data["Close"].dropna(how="all")
+        today_row   = closes.iloc[-1]
+        prev_row    = closes.iloc[-2]
+        for t in all_tickers:
+            if t in today_row and not str(today_row[t]) == "nan":
+                prices[t] = float(today_row[t])
+            if t in today_row and t in prev_row and not str(prev_row[t]) == "nan":
+                daily_changes[t] = float((today_row[t] - prev_row[t]) / prev_row[t])
+        print(f"  ✓ Got prices for {len(prices)} tickers, daily changes for {len(daily_changes)}")
     except Exception as e:
         print(f"  ⚠ Price fetch failed: {e}. Using 0.00 placeholders.")
-        prices = {}
 
     fetched_at = datetime.now().strftime("%B %d, %Y at %I:%M %p")
-    return prices, fetched_at
+    return prices, daily_changes, fetched_at
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
-    # Fetch live prices first
-    live_prices, fetched_at = fetch_live_prices(CATEGORIES)
+    # Fetch live prices + daily changes
+    live_prices, daily_changes, fetched_at = fetch_live_prices(CATEGORIES)
 
-    # Inject prices into stock dicts
+    # Inject prices and daily changes into stock dicts
     for cat in CATEGORIES:
         for stock in cat.get("stocks", []):
-            stock["live_price"] = round(live_prices.get(stock["ticker"], 0.00), 2)
+            t = stock["ticker"]
+            stock["live_price"]   = round(live_prices.get(t, 0.00), 2)
+            stock["daily_change"] = daily_changes.get(t, None)
 
     wb = openpyxl.Workbook()
 
