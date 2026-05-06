@@ -376,66 +376,48 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
         last_col_letter = col_letter(len(COLS))
         notes_start = tot_row + 2
 
-        # Section header
+        # Section header — full width
         ws.merge_cells(f"A{notes_start}:{last_col_letter}{notes_start}")
         nh = ws[f"A{notes_start}"]
         nh.value = "📌  INVESTMENT THESIS & RESEARCH NOTES"
         nh.fill = fill(cat_color)
         nh.font = Font(bold=True, color=WHITE, size=11, name="Calibri")
         nh.alignment = left()
-        ws.row_dimensions[notes_start].height = 20
+        ws.row_dimensions[notes_start].height = 22
 
-        # Column sub-headers
-        sub_row = notes_start + 1
-        for ci, (label, col_fill) in enumerate([("Ticker", cat_color), ("Company", cat_color), ("Notes / Thesis", cat_color)], 1):
-            pass  # handled inline below
-        for ci, label in enumerate(["Ticker", "Company", "Notes / Thesis"], 1):
-            c = ws.cell(row=sub_row, column=ci, value=label)
-            c.fill = fill("D9E1F2")
-            c.font = Font(bold=True, color=DARK_BLUE, size=10, name="Calibri")
-            c.alignment = left() if ci == 3 else center()
-            c.border = THIN_BORDER
-        # Merge notes column header across remaining columns
-        if len(COLS) > 3:
-            ws.merge_cells(f"C{sub_row}:{last_col_letter}{sub_row}")
-        ws.row_dimensions[sub_row].height = 16
+        cur_row = notes_start + 1
 
-        # One row per stock
         for j, stock in enumerate(cat["stocks"]):
-            nr = sub_row + 1 + j
-
-            # Dynamic row height: estimate lines needed based on note length
-            # Merged area spans cols 3–17 (~15 cols × ~11 chars wide ≈ 165 chars/line)
-            note_text = stock.get("notes", "")
-            chars_per_line = 165
-            explicit_newlines = note_text.count("\n")
-            wrapped_lines = max(1, len(note_text) // chars_per_line + 1)
-            total_lines = wrapped_lines + explicit_newlines
-            row_h = max(40, total_lines * 16 + 8)
-            ws.row_dimensions[nr].height = row_h
-
             bg_note = LIGHT_GRAY if j % 2 == 0 else WHITE
+            note_text = stock.get("notes", "")
 
-            tc = ws.cell(row=nr, column=1, value=stock["ticker"])
-            tc.fill = fill(bg_note)
-            tc.font = Font(bold=True, color="000070C0", size=11, name="Calibri")
-            tc.alignment = center()
-            tc.border = THIN_BORDER
+            # ── Row A: Ticker | Company (full width, bold label row) ──────
+            label_row = cur_row
+            ws.merge_cells(f"A{label_row}:{last_col_letter}{label_row}")
+            lc = ws[f"A{label_row}"]
+            lc.value = f"  {stock['ticker']}  —  {stock['company']}  |  Risk: {stock['risk']}"
+            lc.fill = fill("D9E1F2")
+            lc.font = Font(bold=True, color=DARK_BLUE, size=10, name="Calibri")
+            lc.alignment = Alignment(horizontal="left", vertical="center")
+            lc.border = Border(top=side("medium"), left=side("medium"), right=side("medium"))
+            ws.row_dimensions[label_row].height = 18
+            cur_row += 1
 
-            cc = ws.cell(row=nr, column=2, value=stock["company"])
-            cc.fill = fill(bg_note)
-            cc.font = Font(color=DARK_BLUE, size=10, name="Calibri")
-            cc.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-            cc.border = THIN_BORDER
+            # ── Row B: Full-width note text ───────────────────────────────
+            note_row = cur_row
+            # Estimate lines: full 17-col width ≈ 220 chars per line
+            chars_per_line = 220
+            lines_needed = max(2, (len(note_text) // chars_per_line) + note_text.count("\n") + 1)
+            ws.row_dimensions[note_row].height = max(52, lines_needed * 18 + 10)
 
-            # Merge notes across remaining columns
-            if len(COLS) > 3:
-                ws.merge_cells(f"C{nr}:{last_col_letter}{nr}")
-            nc = ws.cell(row=nr, column=3, value=stock["notes"])
+            ws.merge_cells(f"A{note_row}:{last_col_letter}{note_row}")
+            nc = ws[f"A{note_row}"]
+            nc.value = note_text
             nc.fill = fill(bg_note)
             nc.font = Font(color="1B2A4A", size=10, name="Calibri")
             nc.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-            nc.border = THIN_BORDER
+            nc.border = Border(bottom=side("medium"), left=side("medium"), right=side("medium"))
+            cur_row += 1
 
     # Column widths
     for ci, (_, width, _) in enumerate(COLS, 1):
