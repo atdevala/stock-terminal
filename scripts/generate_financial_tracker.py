@@ -188,6 +188,7 @@ COLS = [
     ("% from\n52W High",    12,  False),   # 15 O = E/M-1
     ("Analyst\nTarget",     12,  True),    # 16 P - yellow input
     ("Upside to\nTarget",   12,  False),   # 17 Q = P/E-1
+    ("Price\nAlert",        14,  False),   # 18 R - buy zone flag
 ]
 
 def col_letter(idx):  # 1-based
@@ -287,6 +288,15 @@ def write_stock_row(ws, row, stock, cat_color):
     cell(tgt_col,    0.00, is_input=True, fmt='"$"#,##0.00')
     cell(upside_col, formula=f'=IFERROR(P{r}/E{r}-1,"")',  fmt='0.00%')
 
+    # Price Alert — lights up orange when stock is ≥20% below its 52W high
+    alert_col = 18  # R
+    ac = ws.cell(row=row, column=alert_col,
+                 value=f'=IF(AND(M{r}>0,E{r}>0,O{r}<-0.2),"▼  BUY ZONE  (-20%+ off high)","")')
+    ac.border = THIN_BORDER
+    ac.alignment = center()
+    ac.fill = fill(bg)
+    ac.font = Font(bold=True, color="7F3F00", name="Calibri", size=10)
+
 
 def build_tracker_sheet(wb, cat, fetched_at=""):
     ws = wb[cat["name"]]
@@ -361,7 +371,7 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
         pnlp_tot.number_format = "0.00%"
         pnlp_tot.border = hdr_border()
 
-        # Conditional formatting P&L $ column
+        # Conditional formatting — P&L columns
         green_rule = CellIsRule(operator="greaterThan", formula=["0"],
                                 fill=fill(GREEN_BG), font=Font(color=GREEN_FONT, bold=True, name="Calibri"))
         red_rule   = CellIsRule(operator="lessThan",   formula=["0"],
@@ -372,6 +382,22 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
         ws.conditional_formatting.add(rng_pnl,  red_rule)
         ws.conditional_formatting.add(rng_pnlp, green_rule)
         ws.conditional_formatting.add(rng_pnlp, red_rule)
+
+        # Conditional formatting — Price Alert column (R) + entire row highlight
+        from openpyxl.formatting.rule import FormulaRule
+        # Orange fill on the alert cell itself
+        alert_cell_rule = FormulaRule(
+            formula=[f"$O{first_data}<-0.2"],
+            fill=PatternFill(start_color="FF6600", end_color="FF6600", fill_type="solid"),
+            font=Font(bold=True, color="FFFFFF", name="Calibri", size=10),
+        )
+        ws.conditional_formatting.add(f"R{first_data}:R{last_data}", alert_cell_rule)
+        # Soft orange wash across the whole row so it jumps out
+        row_alert_rule = FormulaRule(
+            formula=[f"$O{first_data}<-0.2"],
+            fill=PatternFill(start_color="FFF0E0", end_color="FFF0E0", fill_type="solid"),
+        )
+        ws.conditional_formatting.add(f"A{first_data}:Q{last_data}", row_alert_rule)
 
         # ── Notes section below totals ─────────────────────────────────────
         # Strategy: NO merged cells, NO wrap_text dependency.
