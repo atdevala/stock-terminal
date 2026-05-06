@@ -187,7 +187,6 @@ COLS = [
     ("% from\n52W High",    12,  False),   # 15 O = E/M-1
     ("Analyst\nTarget",     12,  True),    # 16 P - yellow input
     ("Upside to\nTarget",   12,  False),   # 17 Q = P/E-1
-    ("Investment Thesis / Notes",  50,  False),  # 18 R
 ]
 
 def col_letter(idx):  # 1-based
@@ -219,14 +218,13 @@ def write_stock_row(ws, row, stock, cat_color):
     fromhi_col   = 15  # O = E/M-1
     tgt_col      = 16  # P - analyst target (yellow input)
     upside_col   = 17  # Q = P/E-1
-    notes_col    = 18  # R
 
     bg = LIGHT_GRAY if row % 2 == 0 else WHITE
 
     def cell(col, value=None, formula=None, fmt=None, is_input=False):
         c = ws.cell(row=row, column=col, value=value if formula is None else formula)
         c.border = THIN_BORDER
-        c.alignment = left() if col in (company_col, focus_col, notes_col) else center()
+        c.alignment = left() if col in (company_col, focus_col) else center()
         if is_input:
             c.fill = fill(YELLOW_IN)
         else:
@@ -287,8 +285,6 @@ def write_stock_row(ws, row, stock, cat_color):
 
     cell(tgt_col,    0.00, is_input=True, fmt='"$"#,##0.00')
     cell(upside_col, formula=f'=IFERROR(P{r}/E{r}-1,"")',  fmt='0.00%')
-
-    cell(notes_col, stock["notes"])
 
 
 def build_tracker_sheet(wb, cat, fetched_at=""):
@@ -375,6 +371,62 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
         ws.conditional_formatting.add(rng_pnl,  red_rule)
         ws.conditional_formatting.add(rng_pnlp, green_rule)
         ws.conditional_formatting.add(rng_pnlp, red_rule)
+
+        # ── Notes section below totals ─────────────────────────────────────
+        last_col_letter = col_letter(len(COLS))
+        notes_start = tot_row + 2
+
+        # Section header
+        ws.merge_cells(f"A{notes_start}:{last_col_letter}{notes_start}")
+        nh = ws[f"A{notes_start}"]
+        nh.value = "📌  INVESTMENT THESIS & RESEARCH NOTES"
+        nh.fill = fill(cat_color)
+        nh.font = Font(bold=True, color=WHITE, size=11, name="Calibri")
+        nh.alignment = left()
+        ws.row_dimensions[notes_start].height = 20
+
+        # Column sub-headers
+        sub_row = notes_start + 1
+        for ci, (label, col_fill) in enumerate([("Ticker", cat_color), ("Company", cat_color), ("Notes / Thesis", cat_color)], 1):
+            pass  # handled inline below
+        for ci, label in enumerate(["Ticker", "Company", "Notes / Thesis"], 1):
+            c = ws.cell(row=sub_row, column=ci, value=label)
+            c.fill = fill("D9E1F2")
+            c.font = Font(bold=True, color=DARK_BLUE, size=10, name="Calibri")
+            c.alignment = left() if ci == 3 else center()
+            c.border = THIN_BORDER
+        # Merge notes column header across remaining columns
+        if len(COLS) > 3:
+            ws.merge_cells(f"C{sub_row}:{last_col_letter}{sub_row}")
+        ws.row_dimensions[sub_row].height = 16
+
+        # One row per stock
+        for j, stock in enumerate(cat["stocks"]):
+            nr = sub_row + 1 + j
+            ws.row_dimensions[nr].height = 48
+
+            bg_note = LIGHT_GRAY if j % 2 == 0 else WHITE
+
+            tc = ws.cell(row=nr, column=1, value=stock["ticker"])
+            tc.fill = fill(bg_note)
+            tc.font = Font(bold=True, color="000070C0", size=11, name="Calibri")
+            tc.alignment = center()
+            tc.border = THIN_BORDER
+
+            cc = ws.cell(row=nr, column=2, value=stock["company"])
+            cc.fill = fill(bg_note)
+            cc.font = Font(color=DARK_BLUE, size=10, name="Calibri")
+            cc.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+            cc.border = THIN_BORDER
+
+            # Merge notes across remaining columns
+            if len(COLS) > 3:
+                ws.merge_cells(f"C{nr}:{last_col_letter}{nr}")
+            nc = ws.cell(row=nr, column=3, value=stock["notes"])
+            nc.fill = fill(bg_note)
+            nc.font = Font(color="1B2A4A", size=10, name="Calibri")
+            nc.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
+            nc.border = THIN_BORDER
 
     # Column widths
     for ci, (_, width, _) in enumerate(COLS, 1):
