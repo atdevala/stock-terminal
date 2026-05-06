@@ -1,5 +1,6 @@
 
 import openpyxl
+import textwrap
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.formatting.rule import CellIsRule, ColorScaleRule
@@ -373,53 +374,72 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
         ws.conditional_formatting.add(rng_pnlp, red_rule)
 
         # ── Notes section below totals ─────────────────────────────────────
-        n_cols = len(COLS)
+        # Strategy: NO merged cells, NO wrap_text dependency.
+        # Column A (width 14) = ticker label.
+        # Column B (overridden to width 130 below) = note text, one wrapped
+        # line per row. Plain text cells — works in every viewer.
         notes_start = tot_row + 2
 
-        # Section header — explicit keyword merge, always reliable
-        ws.merge_cells(start_row=notes_start, start_column=1,
-                       end_row=notes_start, end_column=n_cols)
+        # Section header in column A
         nh = ws.cell(row=notes_start, column=1)
-        nh.value = "📌  INVESTMENT THESIS & RESEARCH NOTES"
+        nh.value = "INVESTMENT THESIS & RESEARCH NOTES"
         nh.fill = fill(cat_color)
         nh.font = Font(bold=True, color=WHITE, size=11, name="Calibri")
         nh.alignment = Alignment(horizontal="left", vertical="center")
+        # Extend the header colour across all columns manually
+        for ci in range(2, len(COLS) + 1):
+            hc = ws.cell(row=notes_start, column=ci)
+            hc.fill = fill(cat_color)
         ws.row_dimensions[notes_start].height = 22
 
         cur_row = notes_start + 1
+
+        NOTE_WIDTH = 130   # chars per line; matches column B override below
 
         for j, stock in enumerate(cat["stocks"]):
             bg_note = LIGHT_GRAY if j % 2 == 0 else WHITE
             note_text = stock.get("notes", "")
 
-            # Label row: ticker — company (merged, full width)
+            # ── Label row: col A = ticker, col B = company + risk ─────────
             label_row = cur_row
-            ws.merge_cells(start_row=label_row, start_column=1,
-                           end_row=label_row, end_column=n_cols)
-            lc = ws.cell(row=label_row, column=1)
-            lc.value = f"  {stock['ticker']}  —  {stock['company']}  |  Risk: {stock['risk']}"
-            lc.fill = fill("D9E1F2")
-            lc.font = Font(bold=True, color=DARK_BLUE, size=11, name="Calibri")
-            lc.alignment = Alignment(horizontal="left", vertical="center")
+            la = ws.cell(row=label_row, column=1, value=stock["ticker"])
+            la.fill = fill("D9E1F2")
+            la.font = Font(bold=True, color=DARK_BLUE, size=11, name="Calibri")
+            la.alignment = Alignment(horizontal="center", vertical="center")
+
+            lb = ws.cell(row=label_row, column=2,
+                         value=f"  {stock['company']}   |   Risk: {stock['risk']}")
+            lb.fill = fill("D9E1F2")
+            lb.font = Font(bold=True, color=DARK_BLUE, size=11, name="Calibri")
+            lb.alignment = Alignment(horizontal="left", vertical="center")
             ws.row_dimensions[label_row].height = 20
             cur_row += 1
 
-            # Note text row: merged full width, tall enough to show everything
-            note_row = cur_row
-            ws.merge_cells(start_row=note_row, start_column=1,
-                           end_row=note_row, end_column=n_cols)
-            nc = ws.cell(row=note_row, column=1)
-            nc.value = note_text
-            nc.fill = fill(bg_note)
-            nc.font = Font(color="1B2A4A", size=10, name="Calibri")
-            nc.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-            # 409 is Excel's max row height — guarantees nothing is ever cut off
-            ws.row_dimensions[note_row].height = 409
+            # ── Note lines: one plain-text row per wrapped line ───────────
+            lines = textwrap.wrap(note_text, width=NOTE_WIDTH) if note_text else ["(no notes)"]
+            for line in lines:
+                nr = cur_row
+                # Col A: empty coloured cell
+                ws.cell(row=nr, column=1).fill = fill(bg_note)
+                # Col B: the line of text
+                nc = ws.cell(row=nr, column=2, value="  " + line)
+                nc.fill = fill(bg_note)
+                nc.font = Font(color="1B2A4A", size=10, name="Calibri")
+                nc.alignment = Alignment(horizontal="left", vertical="center")
+                ws.row_dimensions[nr].height = 16
+                cur_row += 1
+
+            # Small visual gap between stocks
+            ws.cell(row=cur_row, column=1).fill = fill(WHITE)
+            ws.cell(row=cur_row, column=2).fill = fill(WHITE)
+            ws.row_dimensions[cur_row].height = 6
             cur_row += 1
 
     # Column widths
     for ci, (_, width, _) in enumerate(COLS, 1):
         ws.column_dimensions[col_letter(ci)].width = width
+    # Column B overridden wide so notes text is fully visible (no merging needed)
+    ws.column_dimensions["B"].width = 130
 
     return ws
 
