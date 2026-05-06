@@ -373,16 +373,17 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
         ws.conditional_formatting.add(rng_pnlp, red_rule)
 
         # ── Notes section below totals ─────────────────────────────────────
-        last_col_letter = col_letter(len(COLS))
+        n_cols = len(COLS)
         notes_start = tot_row + 2
 
-        # Section header — full width
-        ws.merge_cells(f"A{notes_start}:{last_col_letter}{notes_start}")
-        nh = ws[f"A{notes_start}"]
+        # Section header — explicit keyword merge, always reliable
+        ws.merge_cells(start_row=notes_start, start_column=1,
+                       end_row=notes_start, end_column=n_cols)
+        nh = ws.cell(row=notes_start, column=1)
         nh.value = "📌  INVESTMENT THESIS & RESEARCH NOTES"
         nh.fill = fill(cat_color)
         nh.font = Font(bold=True, color=WHITE, size=11, name="Calibri")
-        nh.alignment = left()
+        nh.alignment = Alignment(horizontal="left", vertical="center")
         ws.row_dimensions[notes_start].height = 22
 
         cur_row = notes_start + 1
@@ -391,32 +392,29 @@ def build_tracker_sheet(wb, cat, fetched_at=""):
             bg_note = LIGHT_GRAY if j % 2 == 0 else WHITE
             note_text = stock.get("notes", "")
 
-            # ── Row A: Ticker | Company (full width, bold label row) ──────
+            # Label row: ticker — company (merged, full width)
             label_row = cur_row
-            ws.merge_cells(f"A{label_row}:{last_col_letter}{label_row}")
-            lc = ws[f"A{label_row}"]
+            ws.merge_cells(start_row=label_row, start_column=1,
+                           end_row=label_row, end_column=n_cols)
+            lc = ws.cell(row=label_row, column=1)
             lc.value = f"  {stock['ticker']}  —  {stock['company']}  |  Risk: {stock['risk']}"
             lc.fill = fill("D9E1F2")
-            lc.font = Font(bold=True, color=DARK_BLUE, size=10, name="Calibri")
+            lc.font = Font(bold=True, color=DARK_BLUE, size=11, name="Calibri")
             lc.alignment = Alignment(horizontal="left", vertical="center")
-            lc.border = Border(top=side("medium"), left=side("medium"), right=side("medium"))
-            ws.row_dimensions[label_row].height = 18
+            ws.row_dimensions[label_row].height = 20
             cur_row += 1
 
-            # ── Row B: Full-width note text ───────────────────────────────
+            # Note text row: merged full width, tall enough to show everything
             note_row = cur_row
-            # Estimate lines: full 17-col width ≈ 220 chars per line
-            chars_per_line = 220
-            lines_needed = max(2, (len(note_text) // chars_per_line) + note_text.count("\n") + 1)
-            ws.row_dimensions[note_row].height = max(52, lines_needed * 18 + 10)
-
-            ws.merge_cells(f"A{note_row}:{last_col_letter}{note_row}")
-            nc = ws[f"A{note_row}"]
+            ws.merge_cells(start_row=note_row, start_column=1,
+                           end_row=note_row, end_column=n_cols)
+            nc = ws.cell(row=note_row, column=1)
             nc.value = note_text
             nc.fill = fill(bg_note)
             nc.font = Font(color="1B2A4A", size=10, name="Calibri")
             nc.alignment = Alignment(horizontal="left", vertical="top", wrap_text=True)
-            nc.border = Border(bottom=side("medium"), left=side("medium"), right=side("medium"))
+            # 409 is Excel's max row height — guarantees nothing is ever cut off
+            ws.row_dimensions[note_row].height = 409
             cur_row += 1
 
     # Column widths
