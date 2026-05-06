@@ -4,6 +4,8 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from openpyxl.formatting.rule import CellIsRule, ColorScaleRule
 from openpyxl.chart import BarChart, Reference
+import yfinance as yf
+from datetime import datetime
 
 # ── Palette ──────────────────────────────────────────────────────────────────
 DARK_BLUE   = "1B2A4A"
@@ -238,8 +240,9 @@ def write_stock_row(ws, row, stock, cat_color):
     cell(focus_col,   stock["focus"])
     cell(risk_col,    stock["risk"])
 
-    # Input cells (yellow)
-    cell(cur_col,    0.00, is_input=True, fmt='"$"#,##0.00')
+    # Current price — pre-filled with live data (still yellow so user can override)
+    live_price = stock.get("live_price", 0.00)
+    cell(cur_col,    live_price, is_input=True, fmt='"$"#,##0.00')
     cell(buy_col,    0.00, is_input=True, fmt='"$"#,##0.00')
     cell(shares_col, 0,    is_input=True, fmt='#,##0')
 
@@ -260,7 +263,7 @@ def write_stock_row(ws, row, stock, cat_color):
     cell(notes_col,  stock["notes"])
 
 
-def build_tracker_sheet(wb, cat):
+def build_tracker_sheet(wb, cat, fetched_at=""):
     ws = wb[cat["name"]]
     ws.sheet_properties.tabColor = cat["tab_color"]
     ws.freeze_panes = "A4"
@@ -289,7 +292,7 @@ def build_tracker_sheet(wb, cat):
     # Row 3 — Legend
     ws.merge_cells(f"A3:{col_letter(len(COLS))}3")
     leg = ws["A3"]
-    leg.value = "🟡 Yellow cells = your inputs  |  All other cells auto-calculate"
+    leg.value = f"🟡 Yellow cells = your inputs  |  All other cells auto-calculate  |  📡 Prices fetched: {fetched_at}"
     leg.fill = fill(YELLOW_IN)
     leg.font = Font(italic=True, color="7F6000", size=9, name="Calibri")
     leg.alignment = center()
@@ -352,7 +355,7 @@ def build_tracker_sheet(wb, cat):
     return ws
 
 
-def build_dashboard(wb, categories):
+def build_dashboard(wb, categories, fetched_at=""):
     ws = wb.active
     ws.title = "📊 Dashboard"
     ws.sheet_properties.tabColor = "1B2A4A"
@@ -377,7 +380,7 @@ def build_dashboard(wb, categories):
 
     ws.merge_cells("A3:P3")
     leg3 = ws["A3"]
-    leg3.value = "🟡 Yellow cells = your inputs  |  All other cells auto-calculate  |  Green = gain  |  Red = loss"
+    leg3.value = f"🟡 Yellow cells = your inputs  |  All other cells auto-calculate  |  Green = gain  |  Red = loss  |  📡 Prices fetched: {fetched_at}"
     leg3.fill = fill(YELLOW_IN)
     leg3.font = Font(italic=True, color="7F6000", size=9, name="Calibri")
     leg3.alignment = center()
@@ -559,25 +562,52 @@ def build_notes_sheet(wb):
         bc.border = THIN_BORDER
 
 
+# ── Fetch live prices ─────────────────────────────────────────────────────────
+def fetch_live_prices(categories):
+    all_tickers = []
+    for cat in categories:
+        for stock in cat.get("stocks", []):
+            all_tickers.append(stock["ticker"])
+
+    print(f"Fetching live prices for {len(all_tickers)} tickers...")
+    try:
+        data = yf.download(all_tickers, period="1d", auto_adjust=True, progress=False)
+        prices_series = data["Close"].iloc[-1]
+        prices = {t: float(prices_series[t]) for t in all_tickers if t in prices_series and not str(prices_series[t]) == "nan"}
+        print(f"  ✓ Got prices for {len(prices)} tickers")
+    except Exception as e:
+        print(f"  ⚠ Price fetch failed: {e}. Using 0.00 placeholders.")
+        prices = {}
+
+    fetched_at = datetime.now().strftime("%B %d, %Y at %I:%M %p")
+    return prices, fetched_at
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
+    # Fetch live prices first
+    live_prices, fetched_at = fetch_live_prices(CATEGORIES)
+
+    # Inject prices into stock dicts
+    for cat in CATEGORIES:
+        for stock in cat.get("stocks", []):
+            stock["live_price"] = round(live_prices.get(stock["ticker"], 0.00), 2)
+
     wb = openpyxl.Workbook()
 
     # Pre-create all sheets so ordering is correct
-    # wb.active will be used for dashboard
-    # First, add all other sheets
     for cat in CATEGORIES:
         if cat["name"] == "📊 Dashboard":
             continue
-        ws = wb.create_sheet(cat["name"])
+        wb.create_sheet(cat["name"])
 
-    build_dashboard(wb, CATEGORIES)
+    build_dashboard(wb, CATEGORIES, fetched_at)
 
     for cat in CATEGORIES:
         if cat["name"] in ("📊 Dashboard", "📝 Research Notes"):
             continue
         if cat["stocks"]:
-            build_tracker_sheet(wb, cat)
+            build_tracker_sheet(wb, cat, fetched_at)
 
     build_notes_sheet(wb)
 
