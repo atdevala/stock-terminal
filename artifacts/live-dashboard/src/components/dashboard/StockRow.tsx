@@ -28,10 +28,31 @@ function insColor(s: number): string {
   return "text-zinc-500 border-zinc-700/40 bg-zinc-800/30";
 }
 
+function acsColor(s: number): string {
+  if (s >= 75) return "text-teal-300 border-teal-500/50 bg-teal-500/10";
+  if (s >= 55) return "text-teal-400 border-teal-600/40 bg-teal-600/10";
+  if (s >= 35) return "text-teal-500/80 border-teal-700/40 bg-teal-700/10";
+  return "text-zinc-500 border-zinc-700/40 bg-zinc-800/30";
+}
+
 function divergenceStyle(tag: string): string {
   if (tag === "EARLY OPPORTUNITY")  return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
   if (tag === "LATE STAGE RISK")    return "bg-red-500/15 text-red-300 border-red-500/30";
   if (tag === "HIGH CONVICTION")    return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+  return "";
+}
+
+function tierStyle(tier: number): string {
+  if (tier === 3) return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+  if (tier === 2) return "bg-blue-500/15 text-blue-300 border-blue-500/30";
+  if (tier === 1) return "bg-zinc-700/40 text-zinc-400 border-zinc-600/30";
+  return "";
+}
+
+function tierLabel(tier: number): string {
+  if (tier === 3) return "T3";
+  if (tier === 2) return "T2";
+  if (tier === 1) return "T1";
   return "";
 }
 
@@ -134,7 +155,6 @@ function InsTooltipContent({ score }: { score: StockScore }) {
 
   return (
     <div className="text-xs" style={{ backgroundColor: "#000000", color: "#ffffff" }}>
-      {/* Header */}
       <div className="px-3 py-2.5 border-b" style={{ borderColor: "#27272a", backgroundColor: "#0d0d14" }}>
         <div className="flex items-center justify-between mb-1">
           <span className="uppercase tracking-widest text-[9px]" style={{ color: "#7c6fcd" }}>INS — Inflection Signal</span>
@@ -147,7 +167,6 @@ function InsTooltipContent({ score }: { score: StockScore }) {
           </div>
         )}
       </div>
-      {/* Sub-component breakdown */}
       <div className="px-3 py-2 space-y-1.5">
         <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "#52525b" }}>Score Breakdown</div>
         {subRows.map(([k, v, w]) => (
@@ -169,6 +188,48 @@ function InsTooltipContent({ score }: { score: StockScore }) {
   );
 }
 
+function AcsTooltipContent({ score }: { score: StockScore }) {
+  const acs = score.acs ?? 50;
+  const label = acs >= 80 ? "Strong Institutional Accumulation"
+              : acs >= 60 ? "Moderate Accumulation"
+              : "Weak / No Accumulation";
+
+  return (
+    <div className="text-xs" style={{ backgroundColor: "#000000", color: "#ffffff" }}>
+      <div className="px-3 py-2.5 border-b" style={{ borderColor: "#27272a", backgroundColor: "#0d1414" }}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="uppercase tracking-widest text-[9px]" style={{ color: "#2dd4bf" }}>ACS — Accumulation Confidence</span>
+          <span className={cn("text-lg font-bold leading-none", acsColor(acs).split(" ")[0])}>{acs}</span>
+        </div>
+        <div className="text-[9px] leading-tight" style={{ color: "#a1a1aa" }}>{label}</div>
+      </div>
+      <div className="px-3 py-2 space-y-1.5">
+        <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "#52525b" }}>Formula Components</div>
+        {[
+          ["30%", "Up-Volume Strength",  "% of total vol on up-days"],
+          ["25%", "Relative Strength",   "Excess return vs SPY (20D)"],
+          ["20%", "Price Compression",   "Recent vol < historical vol"],
+          ["15%", "Breakout Volume",     "5D avg vol vs 20D avg vol"],
+          ["10%", "Closing Strength",    "Price above 10-day SMA"],
+        ].map(([w, k, desc]) => (
+          <div key={k} className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-1.5">
+              <span className="font-mono text-[9px] mt-0.5 shrink-0" style={{ color: "#52525b" }}>{w}</span>
+              <div>
+                <div style={{ color: "#71717a" }}>{k}</div>
+                <div className="text-[9px]" style={{ color: "#52525b" }}>{desc}</div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="px-3 pb-2 text-[9px] italic" style={{ color: "#52525b" }}>
+        ACS detects quiet institutional buying before the crowd notices.
+      </div>
+    </div>
+  );
+}
+
 export function StockRow({ stock, quote, score }: StockRowProps) {
   if (!quote) {
     return (
@@ -177,7 +238,7 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
           <div className="font-bold text-sm">{stock.ticker}</div>
           <div className="text-xs text-muted-foreground truncate max-w-[150px]">{stock.company}</div>
         </td>
-        <td colSpan={11} className="py-2.5 px-4 text-center text-muted-foreground text-sm">
+        <td colSpan={12} className="py-2.5 px-4 text-center text-muted-foreground text-sm">
           Loading...
         </td>
       </tr>
@@ -193,15 +254,43 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
 
   const divTag = score?.divergenceTag;
   const hasDivTag = divTag && divTag.length > 0;
+  const fbrs = score?.fbrs ?? 0;
+  const showFbrsCaution = fbrs > 70;
+  const isSuperstock = score?.isSuperstock ?? false;
+  const tier = score?.convictionTier ?? 0;
 
   return (
     <tr className="border-b border-border/50 hover:bg-muted/50 transition-colors group" data-testid={`stock-row-${stock.ticker}`}>
       <td className="py-2.5 px-4 align-top">
-        <div className="font-bold text-sm" data-testid={`stock-ticker-${stock.ticker}`}>{stock.ticker}</div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-bold text-sm" data-testid={`stock-ticker-${stock.ticker}`}>{stock.ticker}</span>
+          {isSuperstock && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="text-[11px] cursor-help select-none" title="Superstock Candidate">⭐</span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="text-xs" style={{ backgroundColor: "#000000", border: "1px solid #44403c" }}>
+                <div style={{ color: "#fcd34d" }} className="font-semibold mb-0.5">SUPERSTOCK CANDIDATE</div>
+                <div style={{ color: "#a1a1aa" }} className="text-[10px]">INS ≥ 72 · ACS ≥ 68 · FBRS &lt; 28</div>
+                <div style={{ color: "#71717a" }} className="text-[10px] mt-0.5">Early NVDA / CRDO-type setup</div>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          {tier > 0 && (
+            <span className={cn("text-[9px] font-bold px-1 py-0.5 rounded border leading-none", tierStyle(tier))}>
+              {tierLabel(tier)}
+            </span>
+          )}
+        </div>
         <div className="text-xs text-muted-foreground truncate max-w-[200px]" title={stock.company}>{stock.company}</div>
         {hasDivTag && (
           <div className={cn("mt-1 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border inline-block", divergenceStyle(divTag))}>
             {divTag}
+          </div>
+        )}
+        {showFbrsCaution && (
+          <div className="mt-1 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border inline-block bg-red-500/10 text-red-300 border-red-500/30">
+            ⚠ CAUTION: HYPE-DRIVEN MOVE
           </div>
         )}
       </td>
@@ -282,6 +371,18 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
             score={score.ins}
             colorFn={insColor}
             tooltip={<InsTooltipContent score={score} />}
+          />
+        ) : <span className="text-muted-foreground text-xs">—</span>}
+      </td>
+
+      {/* ACS */}
+      <td className="py-2.5 px-3 text-center align-middle hidden 2xl:table-cell">
+        {score ? (
+          <ScoreBadge
+            label={`acs-${stock.ticker}`}
+            score={score.acs}
+            colorFn={acsColor}
+            tooltip={<AcsTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
       </td>

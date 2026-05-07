@@ -105,6 +105,31 @@ export const GetScoresResponseItem = zod.object({
       narrativeMomentum: zod.number(),
     })
     .optional(),
+  acs: zod
+    .number()
+    .describe(
+      "Accumulation Confidence Score (0-100) — detects institutional accumulation",
+    ),
+  fbrs: zod
+    .number()
+    .describe(
+      "False Breakout Risk Score (0-100) — high = dangerous\/hype-driven setup",
+    ),
+  trendLabel: zod
+    .string()
+    .describe(
+      "Multi-timeframe trend: LONG-TERM LEADER | MID-TERM BREAKOUT | SHORT-TERM IGNITION | NEUTRAL",
+    ),
+  convictionTier: zod
+    .number()
+    .describe(
+      "Conviction tier: 3=High-Conviction, 2=Speculative, 1=Watchlist, 0=No Signal",
+    ),
+  isSuperstock: zod
+    .boolean()
+    .describe(
+      "True when stock shows early NVDA\/CRDO\/AVGO-type accumulation characteristics",
+    ),
 });
 export const GetScoresResponse = zod.array(GetScoresResponseItem);
 
@@ -151,6 +176,11 @@ export const GetScannerResponse = zod.object({
       cos: zod.number(),
       gvs: zod.number(),
       vqs: zod.number(),
+      acs: zod.number().describe("Accumulation Confidence Score (0-100)"),
+      fbrs: zod.number().describe("False Breakout Risk Score (0-100)"),
+      trendLabel: zod.string(),
+      convictionTier: zod.number(),
+      isSuperstock: zod.boolean(),
       breakoutScore: zod
         .number()
         .describe(
@@ -181,4 +211,34 @@ export const GetScannerResponse = zod.object({
  */
 export const RefreshScannerResponse = zod.object({
   message: zod.string(),
+});
+
+/**
+ * @summary Sector rotation engine — aggregated INS/COS/ACS per category
+ */
+export const GetSectorsResponseItem = zod.object({
+  name: zod.string(),
+  color: zod.string(),
+  avgIns: zod.number().describe("Average INS across stocks in this sector"),
+  avgCos: zod.number().describe("Average COS across stocks in this sector"),
+  avgAcs: zod.number().describe("Average ACS across stocks in this sector"),
+  stockCount: zod.number(),
+  hotRank: zod.number().describe("Rank 1 = hottest sector by avg INS"),
+});
+export const GetSectorsResponse = zod.array(GetSectorsResponseItem);
+
+/**
+ * @summary Current market regime computed from SPY trend and volatility
+ */
+export const GetMarketRegimeResponse = zod.object({
+  regime: zod
+    .string()
+    .describe(
+      "RISK-ON MOMENTUM | QUALITY GROWTH | DEFENSIVE MARKET | HIGH VOLATILITY \/ UNSTABLE | NEUTRAL | UNKNOWN",
+    ),
+  spyRet5d: zod.number().describe("SPY 5-day return (%)"),
+  spyRet20d: zod.number().describe("SPY 20-day return (%)"),
+  spyVolatility: zod
+    .number()
+    .describe("SPY 20-day daily return standard deviation"),
 });

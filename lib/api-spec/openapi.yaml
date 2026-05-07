@@ -125,6 +125,34 @@ paths:
                     type: string
                 required: [message]
 
+  /sectors:
+    get:
+      operationId: getSectors
+      tags: [stocks]
+      summary: Sector rotation engine — aggregated INS/COS/ACS per category
+      responses:
+        "200":
+          description: Sector averages ranked by momentum
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SectorData"
+
+  /market-regime:
+    get:
+      operationId: getMarketRegime
+      tags: [stocks]
+      summary: Current market regime computed from SPY trend and volatility
+      responses:
+        "200":
+          description: Market regime classification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketRegime"
+
 components:
   schemas:
     HealthStatus:
@@ -284,7 +312,22 @@ components:
             narrativeMomentum:
               type: number
           required: [deltaGvs, deltaVqs, volumeAccel, epsSlope, narrativeMomentum]
-      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel]
+        acs:
+          type: number
+          description: Accumulation Confidence Score (0-100) — detects institutional accumulation
+        fbrs:
+          type: number
+          description: False Breakout Risk Score (0-100) — high = dangerous/hype-driven setup
+        trendLabel:
+          type: string
+          description: "Multi-timeframe trend: LONG-TERM LEADER | MID-TERM BREAKOUT | SHORT-TERM IGNITION | NEUTRAL"
+        convictionTier:
+          type: number
+          description: "Conviction tier: 3=High-Conviction, 2=Speculative, 1=Watchlist, 0=No Signal"
+        isSuperstock:
+          type: boolean
+          description: True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics
+      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, trendLabel, convictionTier, isSuperstock]
 
     MoverStock:
       type: object
@@ -334,6 +377,18 @@ components:
           type: number
         vqs:
           type: number
+        acs:
+          type: number
+          description: Accumulation Confidence Score (0-100)
+        fbrs:
+          type: number
+          description: False Breakout Risk Score (0-100)
+        trendLabel:
+          type: string
+        convictionTier:
+          type: number
+        isSuperstock:
+          type: boolean
         breakoutScore:
           type: number
           description: "Breakout Probability: 50% INS + 30% 7D Momentum + 20% Volume Accel"
@@ -358,7 +413,7 @@ components:
             narrativeMomentum:
               type: number
           required: [deltaGvs, deltaVqs, volumeAccel, epsSlope, narrativeMomentum]
-      required: [rank, ticker, company, source, ins, insLabel, cos, gvs, vqs, breakoutScore, insMomentum, divergenceTag, alert]
+      required: [rank, ticker, company, source, ins, insLabel, cos, gvs, vqs, acs, fbrs, trendLabel, convictionTier, isSuperstock, breakoutScore, insMomentum, divergenceTag, alert]
 
     ScannerResponse:
       type: object
@@ -381,3 +436,43 @@ components:
           items:
             $ref: "#/components/schemas/ScanResult"
       required: [status, lastScanTime, progress, results]
+
+    SectorData:
+      type: object
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+        avgIns:
+          type: number
+          description: Average INS across stocks in this sector
+        avgCos:
+          type: number
+          description: Average COS across stocks in this sector
+        avgAcs:
+          type: number
+          description: Average ACS across stocks in this sector
+        stockCount:
+          type: number
+        hotRank:
+          type: number
+          description: Rank 1 = hottest sector by avg INS
+      required: [name, color, avgIns, avgCos, avgAcs, stockCount, hotRank]
+
+    MarketRegime:
+      type: object
+      properties:
+        regime:
+          type: string
+          description: "RISK-ON MOMENTUM | QUALITY GROWTH | DEFENSIVE MARKET | HIGH VOLATILITY / UNSTABLE | NEUTRAL | UNKNOWN"
+        spyRet5d:
+          type: number
+          description: SPY 5-day return (%)
+        spyRet20d:
+          type: number
+          description: SPY 20-day return (%)
+        spyVolatility:
+          type: number
+          description: SPY 20-day daily return standard deviation
+      required: [regime, spyRet5d, spyRet20d, spyVolatility]

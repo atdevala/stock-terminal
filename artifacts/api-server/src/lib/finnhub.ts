@@ -489,6 +489,51 @@ export function getSpyCloses60d(): number[] {
   return spyCloses60d;
 }
 
+// ── Market Regime Detection ───────────────────────────────────────────────────
+// Uses SPY closes already loaded during Phase 7 — no additional API calls.
+
+export function getMarketRegime(): {
+  regime: string;
+  spyRet5d: number;
+  spyRet20d: number;
+  spyVolatility: number;
+} {
+  if (spyCloses60d.length < 21) {
+    return { regime: "UNKNOWN", spyRet5d: 0, spyRet20d: 0, spyVolatility: 0 };
+  }
+  const len  = spyCloses60d.length;
+  const curr = spyCloses60d[len - 1]!;
+  const c5   = len >= 6  ? spyCloses60d[len - 6]!  : spyCloses60d[0]!;
+  const c20  = spyCloses60d[len - 21]!;
+  const r5   = (curr - c5)  / c5  * 100;
+  const r20  = (curr - c20) / c20 * 100;
+
+  // 20-day daily return std dev as volatility proxy
+  const rets: number[] = [];
+  for (let i = Math.max(1, len - 20); i < len; i++) {
+    const prev = spyCloses60d[i - 1];
+    if (prev) rets.push((spyCloses60d[i]! - prev) / prev * 100);
+  }
+  const m   = rets.length ? rets.reduce((s, v) => s + v, 0) / rets.length : 0;
+  const vol = rets.length >= 2
+    ? Math.sqrt(rets.reduce((s, v) => s + (v - m) ** 2, 0) / rets.length)
+    : 0;
+
+  let regime: string;
+  if      (vol > 2.5)                  regime = "HIGH VOLATILITY / UNSTABLE";
+  else if (r5 > 1.5 && r20 > 4)       regime = "RISK-ON MOMENTUM";
+  else if (r20 < -3)                   regime = "DEFENSIVE MARKET";
+  else if (r20 > 0 && vol < 1.2)      regime = "QUALITY GROWTH";
+  else                                  regime = "NEUTRAL";
+
+  return {
+    regime,
+    spyRet5d:     Math.round(r5  * 10) / 10,
+    spyRet20d:    Math.round(r20 * 10) / 10,
+    spyVolatility: Math.round(vol * 100) / 100,
+  };
+}
+
 // Expose rate-limited fetch so scanner.ts can share the same queue
 export { finnhubGet };
 

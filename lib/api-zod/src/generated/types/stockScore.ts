@@ -34,4 +34,14 @@ export interface StockScore {
   insLabel?: string;
   divergenceTag?: string;
   insComponents?: StockScoreInsComponents;
+  /** Accumulation Confidence Score (0-100) — detects institutional accumulation */
+  acs: number;
+  /** False Breakout Risk Score (0-100) — high = dangerous/hype-driven setup */
+  fbrs: number;
+  /** Multi-timeframe trend: LONG-TERM LEADER | MID-TERM BREAKOUT | SHORT-TERM IGNITION | NEUTRAL */
+  trendLabel: string;
+  /** Conviction tier: 3=High-Conviction, 2=Speculative, 1=Watchlist, 0=No Signal */
+  convictionTier: number;
+  /** True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics */
+  isSuperstock: boolean;
 }

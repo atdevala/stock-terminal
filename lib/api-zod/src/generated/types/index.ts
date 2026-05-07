@@ -7,6 +7,7 @@
  */
 
 export * from "./healthStatus";
+export * from "./marketRegime";
 export * from "./marketStatus";
 export * from "./moverStock";
 export * from "./quote";
@@ -18,6 +19,7 @@ export * from "./scannerResponseStatus";
 export * from "./scanResult";
 export * from "./scanResultInsComponents";
 export * from "./scanResultSource";
+export * from "./sectorData";
 export * from "./stockCategory";
 export * from "./stockInfo";
 export * from "./stockScore";

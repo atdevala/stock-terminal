@@ -80,6 +80,11 @@ export interface ScanResult {
   cos: number;
   gvs: number;
   vqs: number;
+  acs: number;
+  fbrs: number;
+  trendLabel: string;
+  convictionTier: number;
+  isSuperstock: boolean;
   breakoutScore: number;
   insMomentum: number;
   divergenceTag: string;
@@ -229,15 +234,20 @@ function buildScanResult(
     company,
     source,
     ins,
-    insLabel:      scored.insLabel ?? getInsLabel(ins),
-    cos:           scored.cos,
-    gvs:           scored.gvs,
-    vqs:           scored.vqs,
-    breakoutScore: Math.round(clamp(0.5 * ins + 0.3 * insMom + 0.2 * volAccel)),
-    insMomentum:   Math.round(insMom),
-    divergenceTag: scannerDivTag(ins, scored.cos),
-    alert:         computeAlert(ins, scored.cos, scored.insComponents?.deltaGvs ?? 50),
-    insComponents: scored.insComponents,
+    insLabel:       scored.insLabel ?? getInsLabel(ins),
+    cos:            scored.cos,
+    gvs:            scored.gvs,
+    vqs:            scored.vqs,
+    acs:            scored.acs,
+    fbrs:           scored.fbrs,
+    trendLabel:     scored.trendLabel,
+    convictionTier: scored.convictionTier,
+    isSuperstock:   scored.isSuperstock,
+    breakoutScore:  Math.round(clamp(0.5 * ins + 0.3 * insMom + 0.2 * volAccel)),
+    insMomentum:    Math.round(insMom),
+    divergenceTag:  scannerDivTag(ins, scored.cos),
+    alert:          computeAlert(ins, scored.cos, scored.insComponents?.deltaGvs ?? 50),
+    insComponents:  scored.insComponents,
   };
 }
 

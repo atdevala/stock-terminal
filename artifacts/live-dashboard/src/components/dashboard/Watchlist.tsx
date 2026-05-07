@@ -215,6 +215,23 @@ export function Watchlist() {
                           </TooltipContent>
                         </Tooltip>
                       </th>
+                      <th className="py-3 px-4 font-medium text-center hidden 2xl:table-cell">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-teal-500">ACS</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
+                            <p className="font-semibold text-teal-300">(Accumulation Confidence Score)</p>
+                            <p className="text-zinc-300 text-xs">Detects quiet institutional accumulation before it becomes public knowledge. Combines up-volume ratio, relative strength vs SPY, price compression (coiling), volume surge, and closing strength.</p>
+                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
+                              <div><span className="text-teal-300 font-mono">80+</span><span className="text-zinc-300"> → strong institutional accumulation</span></div>
+                              <div><span className="text-teal-400 font-mono">60–79</span><span className="text-zinc-300"> → moderate accumulation</span></div>
+                              <div><span className="text-zinc-400 font-mono">below 60</span><span className="text-zinc-300"> → weak / no detectable accumulation</span></div>
+                            </div>
+                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">High ACS + high INS = institutional buying before market consensus forms.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </th>
                       <th className="py-3 px-4 font-medium text-center hidden lg:table-cell">Focus</th>
                     </tr>
                   </thead>

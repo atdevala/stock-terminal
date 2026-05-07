@@ -18,10 +18,12 @@ import type {
 
 import type {
   HealthStatus,
+  MarketRegime,
   MarketStatus,
   QuotesResponse,
   RefreshScanner200,
   ScannerResponse,
+  SectorData,
   StockCategory,
   StockScore,
   TopMovers,
@@ -607,3 +609,153 @@ export const useRefreshScanner = <
 > => {
   return useMutation(getRefreshScannerMutationOptions(options));
 };
+
+/**
+ * @summary Sector rotation engine — aggregated INS/COS/ACS per category
+ */
+export const getGetSectorsUrl = () => {
+  return `/api/sectors`;
+};
+
+export const getSectors = async (
+  options?: RequestInit,
+): Promise<SectorData[]> => {
+  return customFetch<SectorData[]>(getGetSectorsUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSectorsQueryKey = () => {
+  return [`/api/sectors`] as const;
+};
+
+export const getGetSectorsQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSectors>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSectors>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSectorsQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSectors>>> = ({
+    signal,
+  }) => getSectors({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSectors>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSectorsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSectors>>
+>;
+export type GetSectorsQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Sector rotation engine — aggregated INS/COS/ACS per category
+ */
+
+export function useGetSectors<
+  TData = Awaited<ReturnType<typeof getSectors>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSectors>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSectorsQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Current market regime computed from SPY trend and volatility
+ */
+export const getGetMarketRegimeUrl = () => {
+  return `/api/market-regime`;
+};
+
+export const getMarketRegime = async (
+  options?: RequestInit,
+): Promise<MarketRegime> => {
+  return customFetch<MarketRegime>(getGetMarketRegimeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMarketRegimeQueryKey = () => {
+  return [`/api/market-regime`] as const;
+};
+
+export const getGetMarketRegimeQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMarketRegime>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketRegime>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMarketRegimeQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMarketRegime>>> = ({
+    signal,
+  }) => getMarketRegime({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketRegime>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMarketRegimeQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMarketRegime>>
+>;
+export type GetMarketRegimeQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Current market regime computed from SPY trend and volatility
+ */
+
+export function useGetMarketRegime<
+  TData = Awaited<ReturnType<typeof getMarketRegime>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketRegime>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMarketRegimeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}

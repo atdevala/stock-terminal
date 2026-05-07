@@ -6,8 +6,9 @@ import {
   getQuote,
   getMarketStatus,
   isWsConnected,
+  getMarketRegime,
 } from "../lib/finnhub";
-import { computeScore } from "../lib/scores";
+import { computeScore, mean } from "../lib/scores";
 import { getScannerState, triggerScan } from "../lib/scanner";
 
 const router = Router();
@@ -57,6 +58,54 @@ router.get("/scanner", (_req, res) => {
 router.post("/scanner/refresh", (_req, res) => {
   triggerScan();
   res.json({ message: "Scan triggered" });
+});
+
+// ── Sector Rotation Engine ─────────────────────────────────────────────────────
+// Aggregates avg INS / COS / ACS per watchlist category, ranked by momentum.
+
+router.get("/sectors", (_req, res) => {
+  const metrics = getAllExtendedMetrics();
+  const qMap    = new Map(getAllQuotes().map(q => [q.ticker, q]));
+
+  type CatEntry = { name: string; color: string; ins: number[]; cos: number[]; acs: number[] };
+  const catMap  = new Map<string, CatEntry>();
+  for (const cat of CATEGORIES) {
+    catMap.set(cat.name, { name: cat.name, color: cat.color, ins: [], cos: [], acs: [] });
+  }
+
+  for (const ext of metrics) {
+    const q = qMap.get(ext.ticker);
+    if (!q || q.price === 0) continue;
+    const scored = computeScore(ext.ticker, ext, q.price, q.changePercent);
+    const cat    = CATEGORIES.find(c => c.stocks.some(s => s.ticker === ext.ticker));
+    if (!cat) continue;
+    const entry  = catMap.get(cat.name)!;
+    entry.ins.push(scored.ins ?? 0);
+    entry.cos.push(scored.cos);
+    entry.acs.push(scored.acs);
+  }
+
+  const sectors = [...catMap.values()]
+    .filter(c => c.ins.length > 0)
+    .map(c => ({
+      name:       c.name,
+      color:      c.color,
+      avgIns:     Math.round(mean(c.ins)),
+      avgCos:     Math.round(mean(c.cos)),
+      avgAcs:     Math.round(mean(c.acs)),
+      stockCount: c.ins.length,
+      hotRank:    0,
+    }))
+    .sort((a, b) => b.avgIns - a.avgIns)
+    .map((s, i) => ({ ...s, hotRank: i + 1 }));
+
+  res.json(sectors);
+});
+
+// ── Market Regime Detection ────────────────────────────────────────────────────
+
+router.get("/market-regime", (_req, res) => {
+  res.json(getMarketRegime());
 });
 
 export default router;

@@ -88,6 +88,16 @@ export interface StockScore {
   insLabel?: string;
   divergenceTag?: string;
   insComponents?: StockScoreInsComponents;
+  /** Accumulation Confidence Score (0-100) — detects institutional accumulation */
+  acs: number;
+  /** False Breakout Risk Score (0-100) — high = dangerous/hype-driven setup */
+  fbrs: number;
+  /** Multi-timeframe trend: LONG-TERM LEADER | MID-TERM BREAKOUT | SHORT-TERM IGNITION | NEUTRAL */
+  trendLabel: string;
+  /** Conviction tier: 3=High-Conviction, 2=Speculative, 1=Watchlist, 0=No Signal */
+  convictionTier: number;
+  /** True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics */
+  isSuperstock: boolean;
 }
 
 export interface MoverStock {
@@ -128,6 +138,13 @@ export interface ScanResult {
   cos: number;
   gvs: number;
   vqs: number;
+  /** Accumulation Confidence Score (0-100) */
+  acs: number;
+  /** False Breakout Risk Score (0-100) */
+  fbrs: number;
+  trendLabel: string;
+  convictionTier: number;
+  isSuperstock: boolean;
   /** Breakout Probability: 50% INS + 30% 7D Momentum + 20% Volume Accel */
   breakoutScore: number;
   /** 7-day INS momentum proxy (0-100): compares 7d vs prior 7d return */
@@ -156,6 +173,31 @@ export interface ScannerResponse {
   lastScanTime: number;
   progress: ScannerResponseProgress;
   results: ScanResult[];
+}
+
+export interface SectorData {
+  name: string;
+  color: string;
+  /** Average INS across stocks in this sector */
+  avgIns: number;
+  /** Average COS across stocks in this sector */
+  avgCos: number;
+  /** Average ACS across stocks in this sector */
+  avgAcs: number;
+  stockCount: number;
+  /** Rank 1 = hottest sector by avg INS */
+  hotRank: number;
+}
+
+export interface MarketRegime {
+  /** RISK-ON MOMENTUM | QUALITY GROWTH | DEFENSIVE MARKET | HIGH VOLATILITY / UNSTABLE | NEUTRAL | UNKNOWN */
+  regime: string;
+  /** SPY 5-day return (%) */
+  spyRet5d: number;
+  /** SPY 20-day return (%) */
+  spyRet20d: number;
+  /** SPY 20-day daily return standard deviation */
+  spyVolatility: number;
 }
 
 export type RefreshScanner200 = {

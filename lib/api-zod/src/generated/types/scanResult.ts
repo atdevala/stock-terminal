@@ -18,6 +18,13 @@ export interface ScanResult {
   cos: number;
   gvs: number;
   vqs: number;
+  /** Accumulation Confidence Score (0-100) */
+  acs: number;
+  /** False Breakout Risk Score (0-100) */
+  fbrs: number;
+  trendLabel: string;
+  convictionTier: number;
+  isSuperstock: boolean;
   /** Breakout Probability: 50% INS + 30% 7D Momentum + 20% Volume Accel */
   breakoutScore: number;
   /** 7-day INS momentum proxy (0-100): compares 7d vs prior 7d return */
