@@ -73,6 +73,27 @@ def color(h):
     h = h.lstrip("#")
     return {"red": int(h[0:2],16)/255, "green": int(h[2:4],16)/255, "blue": int(h[4:6],16)/255}
 
+_STOP_WORDS = {"inc", "corp", "corporation", "ltd", "llc", "co", "group",
+               "holdings", "the", "and", "of", "usa", "us", "company"}
+
+def _is_relevant(headline, summary, ticker, company):
+    """Return True if this article is meaningfully about the given ticker."""
+    import re
+    text = (headline + " " + (summary or "")).lower()
+    # 1. Exact ticker match (word boundary)
+    if re.search(r'\b' + re.escape(ticker.lower()) + r'\b', text):
+        return True
+    # 2. Ticker in parentheses — common in financial news e.g. (NVDA)
+    if f"({ticker.upper()})" in (headline + " " + (summary or "")):
+        return True
+    # 3. Significant words from the company name
+    words = re.split(r'\W+', company.lower())
+    sig = [w for w in words if w not in _STOP_WORDS and len(w) > 3]
+    for word in sig:
+        if re.search(r'\b' + re.escape(word) + r'\b', text):
+            return True
+    return False
+
 def col_letter(n):
     result = ""
     while n:
@@ -221,20 +242,32 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
             ticker_alt[t] = alt
             alt = 1 - alt
         try:
-            items = yf.Ticker(t).news or []
+            # Fetch up to 20 articles so we have a large pool to filter
+            items = yf.Ticker(t).get_news(count=20) or []
             if not items:
                 raw_news.append({"ticker": t, "company": stock["company"],
                                  "headline": "(no recent news)", "url": None, "est": ""})
                 continue
-            for item in items[:4]:
+            kept = 0
+            for item in items:
                 content  = item.get("content", {})
                 headline = content.get("title") or item.get("title", "No title")
-                pub_ts   = content.get("pubDate") or item.get("providerPublishTime")
-                url_obj  = content.get("canonicalUrl")
-                url      = url_obj.get("url") if isinstance(url_obj, dict) else None
+                summary  = content.get("summary", "")
+                # Skip articles not meaningfully about this stock
+                if not _is_relevant(headline, summary, t, stock["company"]):
+                    continue
+                pub_ts  = content.get("pubDate") or item.get("providerPublishTime")
+                url_obj = content.get("canonicalUrl")
+                url     = url_obj.get("url") if isinstance(url_obj, dict) else None
                 raw_news.append({"ticker": t, "company": stock["company"],
                                  "headline": headline, "url": url,
                                  "est": _est_time(pub_ts)})
+                kept += 1
+                if kept >= 4:
+                    break
+            if kept == 0:
+                raw_news.append({"ticker": t, "company": stock["company"],
+                                 "headline": "(no relevant news found)", "url": None, "est": ""})
         except Exception as e:
             raw_news.append({"ticker": t, "company": stock["company"],
                              "headline": f"(error fetching news: {e})",
