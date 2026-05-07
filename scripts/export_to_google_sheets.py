@@ -142,6 +142,32 @@ def gf(ticker, attr):
     return f'=GOOGLEFINANCE("{ticker}","{attr}")'
 
 
+def fmt_mcap(v):
+    """Format market cap as $1.23T / $456B / $12B etc."""
+    if v is None:
+        return "—"
+    if v >= 1e12:
+        return f"${v/1e12:.2f}T"
+    if v >= 1e9:
+        return f"${v/1e9:.1f}B"
+    if v >= 1e6:
+        return f"${v/1e6:.0f}M"
+    return f"${v:,.0f}"
+
+
+def fmt_vol(v):
+    """Format volume as 188.2M / 35.2M / 3.4M / 542K etc."""
+    if v is None:
+        return "—"
+    if v >= 1e9:
+        return f"{v/1e9:.2f}B"
+    if v >= 1e6:
+        return f"{v/1e6:.1f}M"
+    if v >= 1e3:
+        return f"{v/1e3:.0f}K"
+    return str(int(v))
+
+
 def fetch_historical_returns():
     """
     Fetch 1W, 1M, 3M, and YTD returns for all tickers via yfinance.
@@ -251,8 +277,8 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None, analys
             low52     if low52     is not None else "—",    # L 52W Low   (yfinance)
             vs52      if vs52      is not None else "—",    # M % from 52W Hi (yfinance)
             pe        if pe        is not None else "—",    # N P/E       (yfinance)
-            marketcap if marketcap is not None else "—",    # O Market Cap (yfinance)
-            volume    if volume    is not None else "—",    # P Volume    (yfinance)
+            fmt_mcap(marketcap),                            # O Market Cap (yfinance)
+            fmt_vol(volume),                                # P Volume    (yfinance)
             buy_zone,                                       # Q BUY ZONE alert (yfinance)
         ]
         all_values.append(row)
