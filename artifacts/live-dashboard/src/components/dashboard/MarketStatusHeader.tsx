@@ -1,7 +1,19 @@
 import { useGetMarketStatus } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { format } from "date-fns";
 import { useState, useEffect } from "react";
+
+function formatInTimezone(date: Date, timezone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
 
 export function MarketStatusHeader() {
   const { data: status, isLoading, isError } = useGetMarketStatus({
@@ -47,7 +59,7 @@ export function MarketStatusHeader() {
       </div>
       <div className="flex items-center gap-4 text-sm font-mono text-muted-foreground">
         <div data-testid="market-timezone">{status.exchange} ({status.timezone})</div>
-        <div data-testid="current-time">{format(now, "MMM d, yyyy HH:mm:ss")}</div>
+        <div data-testid="current-time">{formatInTimezone(now, status.timezone)}</div>
       </div>
     </div>
   );
