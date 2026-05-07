@@ -154,7 +154,7 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         nr_idx += 1
 
     # Write all values
-    ws.update("A1", all_values, value_input_option="USER_ENTERED")
+    ws.update(all_values, "A1", value_input_option="USER_ENTERED")
 
     # ── Batch format requests ─────────────────────────────────────────────────
     reqs = []
@@ -282,10 +282,10 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
                       "startIndex": ci, "endIndex": ci+1},
             "properties": {"pixelSize": px}, "fields": "pixelSize"}})
 
-    # Freeze rows 1-4 and column A
+    # Freeze rows 1-4 only (no column freeze — conflicts with row-spanning merges)
     reqs.append({"updateSheetProperties": {
         "properties": {"sheetId": sheet_id,
-                       "gridProperties": {"frozenRowCount": 4, "frozenColumnCount": 1}},
+                       "gridProperties": {"frozenRowCount": 4, "frozenColumnCount": 0}},
         "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount"}})
 
     # Tab colour
@@ -349,7 +349,7 @@ def build_news_sheet(spreadsheet):
 
         rows.append(["", "", "", "", ""])   # blank row between stocks
 
-    ws.update("A1", rows, value_input_option="USER_ENTERED")
+    ws.update(rows, "A1", value_input_option="USER_ENTERED")
 
     # ── Format ────────────────────────────────────────────────────────────────
     reqs = []
@@ -370,7 +370,7 @@ def build_news_sheet(spreadsheet):
 
     # Title
     reqs += [merge(0,1,0,5), fmt_req(0,1,0,5,bg=DARK_BLUE,bold=True,fg=WHITE,size=14,h="CENTER")]
-    reqs += [merge(1,2,0,5), fmt_req(1,2,0,5,bg="D9E1F2",italic=False,fg=DARK_BLUE,size=10,h="CENTER")]
+    reqs += [merge(1,2,0,5), fmt_req(1,2,0,5,bg="D9E1F2",fg=DARK_BLUE,size=10,h="CENTER")]
     # Header row
     reqs.append(fmt_req(3,4,0,5,bg=DARK_BLUE,bold=True,fg=WHITE,size=10,h="CENTER"))
 

@@ -29,3 +29,8 @@ externalPort = 80
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1XZ1hpB73pGi1DtC5dXKZ-CAIvHrgHGSOCyYQxCyXrZ0/edit?gid=0#gid=0"
