@@ -16,9 +16,7 @@ export const SCANNER_UNIVERSE: Record<string, string> = {
   TSLA: "Tesla Inc",
   // Cloud / SaaS
   CRM:  "Salesforce Inc",
-  SNOW: "Snowflake Inc",
   DDOG: "Datadog Inc",
-  NET:  "Cloudflare Inc",
   MDB:  "MongoDB Inc",
   NOW:  "ServiceNow Inc",
   WDAY: "Workday Inc",
@@ -39,13 +37,10 @@ export const SCANNER_UNIVERSE: Record<string, string> = {
   SQ:   "Block Inc",
   // Semiconductors
   QCOM: "Qualcomm Inc",
-  MRVL: "Marvell Technology",
   AMAT: "Applied Materials",
-  KLAC: "KLA Corporation",
   MU:   "Micron Technology",
   ASML: "ASML Holding NV",
   TXN:  "Texas Instruments",
-  SMCI: "Super Micro Computer",
   // Healthcare / Biotech
   LLY:  "Eli Lilly and Co",
   ABBV: "AbbVie Inc",
