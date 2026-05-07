@@ -3,6 +3,19 @@ import { logger } from "./lib/logger";
 import { startFinnhubService } from "./lib/finnhub";
 import { startScannerService } from "./lib/scanner";
 
+// ── Startup environment validation ────────────────────────────────────────────
+// Fail fast with a clear message rather than silently misbehaving.
+
+const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+if (!FINNHUB_KEY || FINNHUB_KEY.trim() === "") {
+  console.error(
+    "\n[FATAL] FINNHUB_API_KEY is not set.\n" +
+    "  Get a free key at https://finnhub.io and add it to your .env file.\n" +
+    "  See .env.example for all required variables.\n"
+  );
+  process.exit(1);
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

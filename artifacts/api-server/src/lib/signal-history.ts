@@ -54,8 +54,19 @@ export interface SignalDelta {
 const MAX_SNAPSHOTS    = 500;
 const MIN_INTERVAL_MS  = 30 * 60 * 1000; // 30 min minimum between snapshots
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_FILE = path.resolve(__dirname, "../../data/signal-history.json");
+// DATA_DIR resolution — portable across dev (tsx source) and prod (esbuild bundle):
+//
+//   Dev  (tsx runs src/lib/signal-history.ts):  __dirname = src/lib  → ../../data = api-server/data ✓
+//   Prod (bundle at dist/index.mjs):             __dirname = dist     → ../data   = api-server/data ✓
+//
+// Set DATA_DIR env var to an absolute path to override in any environment.
+// The api-server dev script sets DATA_DIR=$(pwd)/data automatically so both modes work.
+const _thisDir = path.dirname(fileURLToPath(import.meta.url));
+const _isDist  = _thisDir.endsWith("dist") || _thisDir.endsWith("dist/");
+const DATA_FILE = path.resolve(
+  process.env.DATA_DIR ?? path.resolve(_thisDir, _isDist ? "../data" : "../../data"),
+  "signal-history.json"
+);
 
 // ── In-memory store ───────────────────────────────────────────────────────────
 
