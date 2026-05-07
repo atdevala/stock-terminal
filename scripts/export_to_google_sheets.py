@@ -144,7 +144,51 @@ def gf(ticker, attr):
     return f'=GOOGLEFINANCE("{ticker}","{attr}")'
 
 
-def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
+def fetch_historical_returns():
+    """
+    Fetch 1W, 1M, 3M, and YTD returns for all tickers via yfinance.
+    Returns dict: {ticker: {"w1": float|None, "m1": float|None, "m3": float|None, "ytd": float|None}}
+
+    Why: GOOGLEFINANCE historical date-range queries are unreliable and frequently return blank
+    cells via IFERROR. Fetching directly from yfinance guarantees consistent, always-visible values.
+    """
+    all_tickers = [s["ticker"] for cat in CATEGORIES for s in cat["stocks"]]
+
+    def _fetch_one(t):
+        try:
+            hist = yf.Ticker(t).history(period="1y", auto_adjust=True)
+            if hist.empty:
+                return t, {}
+            closes = hist["Close"].dropna()
+            if closes.empty:
+                return t, {}
+            current = float(closes.iloc[-1])
+
+            def pct(n):
+                if len(closes) > n:
+                    return round(current / float(closes.iloc[-n - 1]) - 1, 6)
+                return None
+
+            # YTD: first close of this calendar year
+            this_year = datetime.now().year
+            yr = closes[closes.index.year == this_year]
+            ytd = round(current / float(yr.iloc[0]) - 1, 6) if not yr.empty else None
+
+            return t, {"w1": pct(5), "m1": pct(21), "m3": pct(63), "ytd": ytd}
+        except Exception:
+            return t, {}
+
+    result = {}
+    print("  Fetching historical returns (1W/1M/3M/YTD) via yfinance...")
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        for ticker, data in ex.map(_fetch_one, all_tickers):
+            result[ticker] = data
+    ok = sum(1 for v in result.values() if v.get("m1") is not None)
+    print(f"  ✓  Historical returns: {ok}/{len(result)} tickers")
+    return result
+
+
+def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None):
     """Create one watchlist tab for a category."""
     stocks  = cat["stocks"]
     cat_hex = cat["color"]
@@ -176,24 +220,23 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
     all_values.append(headers)
 
     first_data = 5   # 1-based row index of first stock
+    hist_data = hist_data or {}
     for stock in stocks:
         t = stock["ticker"]
+        h = hist_data.get(t, {})
+        # Historical % returns from yfinance — reliable, always visible (no GOOGLEFINANCE flakiness)
+        w1  = h.get("w1");  m1 = h.get("m1");  m3 = h.get("m3");  ytd = h.get("ytd")
         row = [
             t,                                          # A ticker
             stock["company"],                           # B company
             stock["focus"],                             # C focus
             stock["risk"],                              # D risk
-            gf(t, "price"),                             # E live price
+            gf(t, "price"),                             # E live price (single GOOGLEFINANCE call — reliable)
             f'=IFERROR(GOOGLEFINANCE("{t}","changepct")/100,"")',  # F today %
-            # G–J: QUERY forces a single scalar — prevents array spillover during GOOGLEFINANCE load
-            # G 1-Week: price vs closest trading day ~7 days ago
-            f'=IFERROR(GOOGLEFINANCE("{t}","price")/QUERY(GOOGLEFINANCE("{t}","price",TODAY()-10,TODAY()-1),"SELECT Col2 LIMIT 1",1)-1,"")',
-            # H 1-Month: price vs closest trading day ~30 days ago
-            f'=IFERROR(GOOGLEFINANCE("{t}","price")/QUERY(GOOGLEFINANCE("{t}","price",TODAY()-35,TODAY()-1),"SELECT Col2 LIMIT 1",1)-1,"")',
-            # I 3-Month: price vs closest trading day ~90 days ago
-            f'=IFERROR(GOOGLEFINANCE("{t}","price")/QUERY(GOOGLEFINANCE("{t}","price",TODAY()-95,TODAY()-1),"SELECT Col2 LIMIT 1",1)-1,"")',
-            # J YTD: price vs first trading day of this calendar year
-            f'=IFERROR(GOOGLEFINANCE("{t}","price")/QUERY(GOOGLEFINANCE("{t}","price",DATE(YEAR(TODAY()),1,2),TODAY()-1),"SELECT Col2 LIMIT 1",1)-1,"")',
+            w1  if w1  is not None else "—",            # G 1-Week  (yfinance direct)
+            m1  if m1  is not None else "—",            # H 1-Month (yfinance direct)
+            m3  if m3  is not None else "—",            # I 3-Month (yfinance direct)
+            ytd if ytd is not None else "—",            # J YTD    (yfinance direct)
             gf(t, "high52"),                            # K 52W High
             gf(t, "low52"),                             # L 52W Low
             f'=IFERROR(E{first_data + len(all_values) - 4}/K{first_data + len(all_values) - 4}-1,"")',  # M % from 52W Hi
@@ -885,12 +928,14 @@ def main():
     print("\nFetching analyst & technical data...")
     analyst_data = fetch_analyst_data()
 
+    hist_data = fetch_historical_returns()
+
     print("\nBuilding detail watchlist tabs...")
     cat_sheet_ids = {}   # cat name → gid, used for dashboard hyperlinks
     for cat in CATEGORIES:
         if not cat["stocks"]:
             continue
-        gid = build_watchlist_sheet(sh, cat, {})
+        gid = build_watchlist_sheet(sh, cat, {}, hist_data=hist_data)
         cat_sheet_ids[cat["name"]] = gid
 
     print("\nBuilding Dashboard tab...")
