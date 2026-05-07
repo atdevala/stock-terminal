@@ -10,7 +10,10 @@ Watchlist export to Google Sheets.
 
 import os, sys, json, textwrap
 from datetime import datetime, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import pytz
+import openai
 import gspread
 from google.oauth2.service_account import Credentials
 import yfinance as yf
@@ -22,6 +25,43 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
     "https://www.googleapis.com/auth/drive",
 ]
+
+# ── OpenAI client (Replit AI Integrations proxy) ──────────────────────────────
+_openai_client = openai.OpenAI(
+    base_url=os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL"),
+    api_key=os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY", "dummy"),
+)
+_EST = pytz.timezone("US/Eastern")
+
+def _est_time(pub_ts):
+    """Convert a pubDate string or unix timestamp to 'Mon DD HH:MM EST'."""
+    try:
+        if isinstance(pub_ts, str):
+            dt = datetime.fromisoformat(pub_ts.replace("Z", "+00:00"))
+        elif isinstance(pub_ts, (int, float)):
+            dt = datetime.fromtimestamp(pub_ts, tz=timezone.utc)
+        else:
+            return ""
+        return dt.astimezone(_EST).strftime("%b %d %H:%M EST")
+    except Exception:
+        return ""
+
+def _ai_analysis(ticker, headline):
+    """Return a 1-sentence bullish/bearish/neutral assessment via OpenAI."""
+    try:
+        resp = _openai_client.chat.completions.create(
+            model="gpt-5-nano",
+            max_completion_tokens=90,
+            messages=[{"role": "user", "content": (
+                f"In one sentence, state whether this news is Bullish, Bearish, or Neutral "
+                f"for ${ticker} stock and briefly explain why.\n"
+                f"Headline: \"{headline}\"\n"
+                f"Start with 🟢 Bullish, 🔴 Bearish, or 🟡 Neutral —"
+            )}],
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        return f"(AI error: {e})"
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 WHITE      = "FFFFFF"
@@ -162,17 +202,19 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         nr_idx += 1
 
     # ── News Feed section (below notes) ───────────────────────────────────────
-    # News cols: Ticker | Company | Headline | Published (4 cols, fits in N_COLS)
+    # Cols: A=Ticker | B=Company | C-I=Headline(linked) | J=Time(EST) | K-S=AI Analysis
     news_section_r0 = len(all_values)   # 0-based
     all_values.append(["📰  LATEST NEWS"] + [""] * (N_COLS - 1))
     news_hdr = [""] * N_COLS
     news_hdr[0] = "Ticker"; news_hdr[1] = "Company"
-    news_hdr[2] = "Headline"; news_hdr[16] = "Published"
+    news_hdr[2] = "Headline (click to open)"; news_hdr[9] = "Published (EST)"
+    news_hdr[10] = "🤖 AI Impact Analysis"
     all_values.append(news_hdr)
 
-    news_row_info = []   # (0-based index, ticker) for formatting
+    # ── Step 1: collect raw news items ────────────────────────────────────────
     alt = 0
     ticker_alt = {}
+    raw_news = []   # list of dicts or None (gap marker)
     for stock in stocks:
         t = stock["ticker"]
         if t not in ticker_alt:
@@ -181,37 +223,58 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         try:
             items = yf.Ticker(t).news or []
             if not items:
-                idx = len(all_values)
-                row = [""] * N_COLS
-                row[0] = t; row[1] = stock["company"]
-                row[2] = "(no recent news)"
-                all_values.append(row)
-                news_row_info.append((idx, t))
+                raw_news.append({"ticker": t, "company": stock["company"],
+                                 "headline": "(no recent news)", "url": None, "est": ""})
                 continue
             for item in items[:4]:
                 content  = item.get("content", {})
                 headline = content.get("title") or item.get("title", "No title")
                 pub_ts   = content.get("pubDate") or item.get("providerPublishTime")
-                if isinstance(pub_ts, (int, float)):
-                    pub = datetime.fromtimestamp(pub_ts).strftime("%Y-%m-%d %H:%M")
-                elif isinstance(pub_ts, str):
-                    pub = pub_ts[:16]
-                else:
-                    pub = ""
-                idx = len(all_values)
-                row = [""] * N_COLS
-                row[0] = t; row[1] = stock["company"]
-                row[2] = headline; row[16] = pub
-                all_values.append(row)
-                news_row_info.append((idx, t))
+                url_obj  = content.get("canonicalUrl")
+                url      = url_obj.get("url") if isinstance(url_obj, dict) else None
+                raw_news.append({"ticker": t, "company": stock["company"],
+                                 "headline": headline, "url": url,
+                                 "est": _est_time(pub_ts)})
         except Exception as e:
-            idx = len(all_values)
-            row = [""] * N_COLS
-            row[0] = t; row[1] = stock["company"]
-            row[2] = f"(error fetching news: {e})"
-            all_values.append(row)
-            news_row_info.append((idx, t))
-        all_values.append([""] * N_COLS)   # gap between stocks
+            raw_news.append({"ticker": t, "company": stock["company"],
+                             "headline": f"(error fetching news: {e})",
+                             "url": None, "est": ""})
+        raw_news.append(None)   # gap between stocks
+
+    # ── Step 2: AI analysis — run concurrently ────────────────────────────────
+    print("  Running AI impact analysis on news articles (concurrent)...")
+    analysable = [(i, n) for i, n in enumerate(raw_news)
+                  if n is not None and not n["headline"].startswith("(")]
+
+    analyses = {}
+    def _analyse(args):
+        i, n = args
+        return i, _ai_analysis(n["ticker"], n["headline"])
+
+    with ThreadPoolExecutor(max_workers=10) as ex:
+        for i, result in ex.map(_analyse, analysable):
+            analyses[i] = result
+    print(f"  ✓  AI analysis: {len(analyses)} articles processed")
+
+    # ── Step 3: build rows ────────────────────────────────────────────────────
+    news_row_info = []   # (0-based index, ticker) for formatting
+    for i, n in enumerate(raw_news):
+        if n is None:
+            all_values.append([""] * N_COLS)
+            continue
+        idx = len(all_values)
+        row = [""] * N_COLS
+        row[0] = n["ticker"]
+        row[1] = n["company"]
+        if n["url"] and not n["headline"].startswith("("):
+            esc = n["headline"].replace('"', '""')
+            row[2] = f'=HYPERLINK("{n["url"]}","{esc}")'
+        else:
+            row[2] = n["headline"]
+        row[9]  = n["est"]
+        row[10] = analyses.get(i, "")
+        all_values.append(row)
+        news_row_info.append((idx, n["ticker"]))
 
     # Write all values
     ws.update(all_values, "A1", value_input_option="USER_ENTERED")
@@ -329,17 +392,22 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         reqs.append(fmt_req(nr0, nr0+1, 0, 1, bg=bg, bold=True, fg="0070C0", size=10))
         # Company (B=1) left-aligned
         reqs.append(fmt_req(nr0, nr0+1, 1, 2, bg=bg, size=10, h="LEFT"))
-        # Headline: merge C through P (cols 2–15) so it has full width, then wrap
-        reqs.append(merge(nr0, nr0+1, 2, 16))
-        reqs.append(fmt_req(nr0, nr0+1, 2, 16, bg=bg, size=10, wrap=True, h="LEFT"))
-        # Date (Q=16) right-aligned, small
-        reqs.append(fmt_req(nr0, nr0+1, 16, 17, bg=bg, size=9, h="RIGHT",
-                            fg="888888", italic=True))
-        # Row height — 52px fits 2-line headlines
+        # Headline: merge C-I (cols 2-8), blue hyperlink colour, wrap
+        reqs.append(merge(nr0, nr0+1, 2, 9))
+        reqs.append(fmt_req(nr0, nr0+1, 2, 9, bg=bg, size=10, wrap=True,
+                            h="LEFT", fg="1155CC"))
+        # Published EST (J=9) centred, small grey italic
+        reqs.append(fmt_req(nr0, nr0+1, 9, 10, bg=bg, size=9, h="CENTER",
+                            fg="666666", italic=True))
+        # AI Analysis: merge K-S (cols 10-18), dark text, wrap
+        reqs.append(merge(nr0, nr0+1, 10, N_COLS))
+        reqs.append(fmt_req(nr0, nr0+1, 10, N_COLS, bg=bg, size=9, wrap=True,
+                            h="LEFT", fg="1A1A2E"))
+        # Row height — 60px fits 2-line headline + 2-line AI analysis
         reqs.append({"updateDimensionProperties": {
             "range": {"sheetId": sheet_id, "dimension": "ROWS",
                       "startIndex": nr0, "endIndex": nr0+1},
-            "properties": {"pixelSize": 52}, "fields": "pixelSize"}})
+            "properties": {"pixelSize": 60}, "fields": "pixelSize"}})
 
     # Conditional formatting — alert col S orange
     reqs.append({"addConditionalFormatRule": {"rule": {
