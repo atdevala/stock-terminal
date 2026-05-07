@@ -1,11 +1,19 @@
 import { useGetMarketStatus } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
+import { useState, useEffect } from "react";
 
 export function MarketStatusHeader() {
   const { data: status, isLoading, isError } = useGetMarketStatus({
     query: { refetchInterval: 30000 }
   });
+
+  const [now, setNow] = useState(new Date());
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   if (isLoading) {
     return (
@@ -19,8 +27,6 @@ export function MarketStatusHeader() {
   if (isError || !status) {
     return null;
   }
-
-  const now = new Date();
 
   return (
     <div className="flex items-center justify-between py-3 px-6 border-b border-border bg-card/50 backdrop-blur">
