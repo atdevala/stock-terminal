@@ -73,8 +73,16 @@ export function Watchlist() {
                       <TooltipTrigger asChild>
                         <span className="cursor-help underline decoration-dotted underline-offset-2">VQS</span>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs text-center">
-                        Look for VQS &gt; 55 — This filters out hype stocks with no real business, companies burning cash with no path forward
+                      <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2">
+                        <p className="font-semibold text-white">(Valuation Quality Score)</p>
+                        <p className="text-zinc-300 text-xs">Measures how fundamentally strong and reasonably priced a company is. Higher VQS = Stronger business quality relative to price.</p>
+                        <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
+                          <div><span className="text-emerald-400 font-mono">80+</span><span className="text-zinc-300"> → high-quality undervalued growth</span></div>
+                          <div><span className="text-emerald-400 font-mono">65–79</span><span className="text-zinc-300"> → strong fundamentals</span></div>
+                          <div><span className="text-yellow-400 font-mono">50–64</span><span className="text-zinc-300"> → mixed / fair value</span></div>
+                          <div><span className="text-red-400 font-mono">below 50</span><span className="text-zinc-300"> → weaker fundamentals or overpriced</span></div>
+                        </div>
+                        <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Use VQS to filter out weak hype stocks and identify companies with sustainable long-term strength.</p>
                       </TooltipContent>
                     </Tooltip>
                   </th>
@@ -83,8 +91,17 @@ export function Watchlist() {
                       <TooltipTrigger asChild>
                         <span className="cursor-help underline decoration-dotted underline-offset-2">GVS</span>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs text-center">
-                        Look for GVS &gt; 70 — These are potential break out stocks / early momentum names
+                      <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2">
+                        <p className="font-semibold text-white">(Growth Volatility Score)</p>
+                        <p className="text-zinc-300 text-xs">Measures how strong a stock's growth, momentum, and breakout potential currently are. Higher GVS = Stronger momentum and higher probability of a major breakout move.</p>
+                        <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
+                          <div><span className="text-emerald-400 font-mono">85+</span><span className="text-zinc-300"> → explosive breakout setup</span></div>
+                          <div><span className="text-emerald-400 font-mono">70–84</span><span className="text-zinc-300"> → strong momentum growth stock</span></div>
+                          <div><span className="text-yellow-400 font-mono">55–69</span><span className="text-zinc-300"> → early-stage or re-accelerating growth</span></div>
+                          <div><span className="text-orange-400 font-mono">40–54</span><span className="text-zinc-300"> → weakening momentum</span></div>
+                          <div><span className="text-red-400 font-mono">below 40</span><span className="text-zinc-300"> → broken or low-interest growth story</span></div>
+                        </div>
+                        <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Use GVS to identify stocks gaining institutional attention and entering strong growth cycles.</p>
                       </TooltipContent>
                     </Tooltip>
                   </th>
@@ -93,8 +110,17 @@ export function Watchlist() {
                       <TooltipTrigger asChild>
                         <span className="cursor-help underline decoration-dotted underline-offset-2">COS</span>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs text-center">
-                        Look for COS &gt; 70 — These are your best setups. Good business, Strong Momentum, Aligned Fundamentals + Trend. This tells you what is actually worth risking money on
+                      <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2">
+                        <p className="font-semibold text-white">(Combined Opportunity Score)</p>
+                        <p className="text-zinc-300 text-xs">Blends VQS and GVS into one overall opportunity score that balances business quality, valuation, growth acceleration, and breakout potential. Higher COS = Strongest combination of quality fundamentals and upside momentum.</p>
+                        <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
+                          <div><span className="text-emerald-400 font-mono">80+</span><span className="text-zinc-300"> → elite growth opportunity</span></div>
+                          <div><span className="text-emerald-400 font-mono">70–79</span><span className="text-zinc-300"> → strong risk/reward setup</span></div>
+                          <div><span className="text-yellow-400 font-mono">55–69</span><span className="text-zinc-300"> → decent but incomplete setup</span></div>
+                          <div><span className="text-orange-400 font-mono">40–54</span><span className="text-zinc-300"> → weak or inconsistent signals</span></div>
+                          <div><span className="text-red-400 font-mono">below 40</span><span className="text-zinc-300"> → avoid / low conviction</span></div>
+                        </div>
+                        <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Use COS to rank the best overall opportunities after filtering for both quality and momentum.</p>
                       </TooltipContent>
                     </Tooltip>
                   </th>
