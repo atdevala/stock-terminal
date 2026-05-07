@@ -73,7 +73,7 @@ export function Watchlist() {
                       <TooltipTrigger asChild>
                         <span className="cursor-help underline decoration-dotted underline-offset-2">VQS</span>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2">
+                      <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
                         <p className="font-semibold text-white">(Valuation Quality Score)</p>
                         <p className="text-zinc-300 text-xs">Measures how fundamentally strong and reasonably priced a company is. Higher VQS = Stronger business quality relative to price.</p>
                         <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
@@ -91,7 +91,7 @@ export function Watchlist() {
                       <TooltipTrigger asChild>
                         <span className="cursor-help underline decoration-dotted underline-offset-2">GVS</span>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2">
+                      <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
                         <p className="font-semibold text-white">(Growth Volatility Score)</p>
                         <p className="text-zinc-300 text-xs">Measures how strong a stock's growth, momentum, and breakout potential currently are. Higher GVS = Stronger momentum and higher probability of a major breakout move.</p>
                         <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
@@ -110,7 +110,7 @@ export function Watchlist() {
                       <TooltipTrigger asChild>
                         <span className="cursor-help underline decoration-dotted underline-offset-2">COS</span>
                       </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2">
+                      <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
                         <p className="font-semibold text-white">(Combined Opportunity Score)</p>
                         <p className="text-zinc-300 text-xs">Blends VQS and GVS into one overall opportunity score that balances business quality, valuation, growth acceleration, and breakout potential. Higher COS = Strongest combination of quality fundamentals and upside momentum.</p>
                         <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
