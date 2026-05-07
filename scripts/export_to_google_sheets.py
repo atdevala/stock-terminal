@@ -132,9 +132,7 @@ WATCH_COLS = [
     ("P/E Ratio",            78,  False),   # N — GOOGLEFINANCE
     ("Market Cap",           108, False),   # O — GOOGLEFINANCE
     ("Volume",               98,  False),   # P — GOOGLEFINANCE
-    ("Analyst Target",       98,  True),    # Q — user input (yellow)
-    ("Upside to Target",     98,  False),   # R — formula
-    ("Price Alert",          195, False),   # S — formula (buy zone flag — needs room)
+    ("Price Alert",          195, False),   # Q — buy zone flag (needs room)
 ]
 N_COLS = len(WATCH_COLS)
 
@@ -213,7 +211,7 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None, analys
     all_values.append([cat.get("description", "")] + [""] * (N_COLS - 1))
     # Row 3: legend
     all_values.append(
-        ["🟡 Yellow cells = your inputs  |  All other data is LIVE via Google Finance (auto-refreshes every ~20 min)"]
+        ["All data is LIVE via Google Finance & yfinance (auto-refreshes every ~20 min — re-run script to refresh news & analysis)"]
         + [""] * (N_COLS - 1)
     )
     # Row 4: column headers
@@ -238,7 +236,6 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None, analys
         # BUY ZONE computed directly — no formula dependency
         buy_zone = ("▼  BUY ZONE  (-20%+ off 52W high)"
                     if vs52 is not None and vs52 < -0.2 else "—")
-        r_row = first_data + len(all_values) - 4   # 1-based row for upside formula (Q/E)
         row = [
             t,                                              # A ticker
             stock["company"],                               # B company
@@ -256,9 +253,7 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None, analys
             pe        if pe        is not None else "—",    # N P/E       (yfinance)
             marketcap if marketcap is not None else "—",    # O Market Cap (yfinance)
             volume    if volume    is not None else "—",    # P Volume    (yfinance)
-            "",                                             # Q analyst target (user fills)
-            f'=IFERROR(Q{r_row}/E{r_row}-1,"")',            # R upside vs user target
-            buy_zone,                                       # S BUY ZONE alert (yfinance)
+            buy_zone,                                       # Q BUY ZONE alert (yfinance)
         ]
         all_values.append(row)
 
@@ -441,15 +436,13 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None, analys
         reqs.append(fmt_req(r0, r0+1, 0, N_COLS, bg=bg, size=10))
         # Wrap + left-align Company (B=1) and Focus/Niche (C=2) so text shows fully
         reqs.append(fmt_req(r0, r0+1, 1, 3, bg=bg, size=10, h="LEFT", wrap=True))
-        # Yellow for user-input col Q (index 16)
-        reqs.append(fmt_req(r0, r0+1, 16, 17, bg=YELLOW_IN, size=10))
-        # % formatting for F, G, H, I, J, M, R (indices 5,6,7,8,9,12,17)
-        for ci in [5,6,7,8,9,12,17]:
-            reqs.append(fmt_req(r0, r0+1, ci, ci+1, bg=bg if ci != 16 else YELLOW_IN,
+        # % formatting for F, G, H, I, J, M (indices 5,6,7,8,9,12)
+        for ci in [5,6,7,8,9,12]:
+            reqs.append(fmt_req(r0, r0+1, ci, ci+1, bg=bg,
                                 fmt={"type":"PERCENT","pattern":"0.00%"}, size=10))
-        # Currency for E, K, L, Q (indices 4,10,11,16)
-        for ci in [4,10,11,16]:
-            reqs.append(fmt_req(r0, r0+1, ci, ci+1, bg=YELLOW_IN if ci==16 else bg,
+        # Currency for E, K, L (indices 4,10,11)
+        for ci in [4,10,11]:
+            reqs.append(fmt_req(r0, r0+1, ci, ci+1, bg=bg,
                                 fmt={"type":"CURRENCY","pattern":'"$"#,##0.00'}, size=10))
         # Row height — 36px fits 2 lines of wrapped text comfortably
         reqs.append({"updateDimensionProperties": {
@@ -530,9 +523,9 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None, analys
                       "startIndex": nr0, "endIndex": nr0+1},
             "properties": {"pixelSize": 60}, "fields": "pixelSize"}})
 
-    # Conditional formatting — alert col S orange
+    # Conditional formatting — alert col Q orange (index 16)
     reqs.append({"addConditionalFormatRule": {"rule": {
-        "ranges": [rng(first_data-1, last_data, 18, 19)],
+        "ranges": [rng(first_data-1, last_data, 16, 17)],
         "booleanRule": {
             "condition": {"type": "CUSTOM_FORMULA",
                           "values": [{"userEnteredValue": f"=$M{first_data}<-0.2"}]},
