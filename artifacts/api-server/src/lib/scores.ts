@@ -1,4 +1,4 @@
-import type { ExtendedMetrics } from "./finnhub";
+import type { ExtendedMetrics, QuoteData } from "./finnhub";
 import { computeINS } from "./ins";
 import { getSpyCloses60d } from "./finnhub";
 
@@ -56,132 +56,169 @@ function cosLabel(s: number): string {
 
 // ── ACS: Accumulation Confidence Score ────────────────────────────────────────
 // Detects quiet institutional accumulation before consensus forms.
-// Formula: 0.30 UpVolumeStrength + 0.25 RelativeStrength + 0.20 PriceCompression
-//        + 0.15 BreakoutVolume   + 0.10 ClosingStrength
+// Uses: 52W range position, EPS surprise momentum, revenue acceleration,
+//       margin quality, analyst consensus — all from REST endpoints.
+//
+// Formula: 0.30 RangePosition + 0.25 EPSSurpriseMomentum
+//        + 0.20 RevenueAcceleration + 0.15 MarginQuality + 0.10 AnalystConsensus
 
-function computeACS(ext: ExtendedMetrics, spyCloses: number[]): number {
-  const closes  = ext.closes60d  ?? [];
-  const volumes = ext.volumes60d ?? [];
-  if (closes.length < 21 || volumes.length < 20) return 50;
+function computeACS(ext: ExtendedMetrics, quote: QuoteData | undefined): number {
+  const price  = quote?.price   ?? 0;
+  const high52 = quote?.high52  ?? 0;
+  const low52  = quote?.low52   ?? 0;
 
-  // 1. Up-Volume Strength (30%): % of total volume on up-days (last 20 days)
-  let upVol = 0, totalVol = 0;
-  const c21 = closes.slice(-21);
-  const v20 = volumes.slice(-20);
-  for (let i = 1; i < c21.length; i++) {
-    const vol = v20[i - 1] ?? 0;
-    totalVol += vol;
-    if (c21[i]! > c21[i - 1]!) upVol += vol;
-  }
-  const upVolRatio   = totalVol > 0 ? upVol / totalVol : 0.5;
-  const upVolStr     = clamp((upVolRatio - 0.35) / 0.35 * 100, 0, 100);
-
-  // 2. Relative Strength vs SPY (25%): 20-day excess return
-  const curr   = closes[closes.length - 1]!;
-  const c20    = closes[closes.length - 21] ?? closes[0]!;
-  const spyNow = spyCloses.length > 0  ? spyCloses[spyCloses.length - 1]!  : null;
-  const spy20  = spyCloses.length >= 21 ? spyCloses[spyCloses.length - 21]! : null;
-  let relStr = 50;
-  if (spy20 && spyNow && c20) {
-    const stkRet = (curr - c20) / c20 * 100;
-    const spyRet = (spyNow - spy20) / spy20 * 100;
-    relStr = clamp(50 + (stkRet - spyRet) * 2, 0, 100);
+  // 1. 52W Range Position (30%)
+  // Sweet spot: 50–85% of 52W range signals sustained accumulation.
+  // Bottom half = weak / distribution; very top = overextended.
+  let rangeSig = 50;
+  if (high52 > low52 && price > 0) {
+    const pos = (price - low52) / (high52 - low52); // 0–1
+    if (pos <= 0.35) {
+      rangeSig = clamp(pos / 0.35 * 45, 0, 45);           // 0–45 — weak range
+    } else if (pos <= 0.85) {
+      rangeSig = clamp(45 + (pos - 0.35) / 0.50 * 55, 45, 100); // 45–100 — sweet spot
+    } else {
+      rangeSig = clamp(100 - (pos - 0.85) / 0.15 * 20, 80, 100); // 80–100 — slightly penalised at top
+    }
   }
 
-  // 3. Price Compression (20%): recent vol < historical vol → coiling before breakout
-  const rets20    = dailyRets(closes.slice(-21));
-  const rets5     = rets20.slice(-5);
-  const vol20d    = stddev(rets20);
-  const vol5d     = stddev(rets5);
-  const compression = vol20d > 0 ? clamp(100 - (vol5d / vol20d) * 100, 0, 100) : 50;
+  // 2. EPS Surprise Momentum (25%)
+  // Consecutive beats = smart money positioned ahead of public.
+  const eps = ext.epsSurprises ?? [];
+  let epsSig = 50;
+  if (eps.length > 0) {
+    const avg = eps.reduce((a, b) => a + b, 0) / eps.length;
+    // avg beat of +10% → ~58; +50% → ~90; miss of -20% → ~34
+    epsSig = clamp(50 + avg * 0.8, 0, 100);
+  }
 
-  // 4. Breakout Volume (15%): 5-day avg vol vs 20-day avg vol
-  const avgV5   = mean(volumes.slice(-5));
-  const avgV20  = mean(volumes.slice(-20));
-  const brkVol  = avgV20 > 0 ? clamp((avgV5 / avgV20 - 0.8) / 1.2 * 100, 0, 100) : 50;
+  // 3. Revenue Acceleration (20%)
+  // QoQ growth > YoY = accelerating — institutions detect this early.
+  const yoy = ext.revenueGrowthYoy ?? 0;
+  const qoq = ext.revenueGrowthQoQ ?? 0;
+  // If both are positive and QoQ > YoY the score rises above 50.
+  // Also lift for strongly positive YoY even without QoQ signal.
+  const baseMomentum = clamp(50 + yoy * 0.5, 0, 100);
+  const accelBonus   = clamp((qoq - yoy) * 1.5, -30, 30);
+  const revAccel     = clamp(baseMomentum + accelBonus, 0, 100);
 
-  // 5. Closing Strength (10%): price above 10-day SMA
-  const sma10   = mean(closes.slice(-10));
-  const closStr = sma10 > 0 ? clamp(50 + (curr - sma10) / sma10 * 1000, 0, 100) : 50;
+  // 4. Margin Quality (15%)
+  // High gross + positive operating margins = institutional-grade business.
+  const gm  = ext.grossMargin     ?? 0;
+  const opM = ext.operatingMargin ?? 0;
+  // Gross margin 60% → ~24; operating margin 20% → ~20; combined ~44 + base 30 ≈ 74
+  const marginSig = clamp(30 + gm * 0.4 + Math.max(opM, 0) * 0.6, 0, 100);
+
+  // 5. Analyst Consensus Upgrade (10%)
+  const consensusSig = ext.earningsRevisionsUp ? 75 : 35;
 
   return Math.round(clamp(
-    0.30 * upVolStr +
-    0.25 * relStr   +
-    0.20 * compression +
-    0.15 * brkVol   +
-    0.10 * closStr,
+    0.30 * rangeSig    +
+    0.25 * epsSig      +
+    0.20 * revAccel    +
+    0.15 * marginSig   +
+    0.10 * consensusSig,
   ));
 }
 
 // ── FBRS: False Breakout Risk Score ──────────────────────────────────────────
 // Detects hype-driven, unsustainable setups. High score = dangerous setup.
-// Formula: 0.30 VolumeSpikeRisk + 0.25 PriceVolDivergence
-//        + 0.25 RSWeakening     + 0.20 ExtremeVolatility
+// Uses: valuation overextension, 52W overextension, EPS miss history,
+//       revenue deceleration — all from REST endpoints.
+//
+// Formula: 0.30 ValuationRisk + 0.25 52WOverextension
+//        + 0.25 EPSMissRisk   + 0.20 RevenueDeceleration
 
-function computeFBRS(ext: ExtendedMetrics, spyCloses: number[]): number {
-  const closes  = ext.closes60d  ?? [];
-  const volumes = ext.volumes60d ?? [];
-  if (closes.length < 11 || volumes.length < 10) return 50;
+function computeFBRS(ext: ExtendedMetrics, quote: QuoteData | undefined): number {
+  const price  = quote?.price   ?? 0;
+  const high52 = quote?.high52  ?? 0;
+  const low52  = quote?.low52   ?? 0;
 
-  // 1. Volume Spike Risk (30%): one-day spike then collapse
-  const vols5     = volumes.slice(-5);
-  const maxV5     = Math.max(...vols5);
-  const avgV5     = mean(vols5);
-  const spikeRisk = maxV5 > 0 ? clamp((1 - avgV5 / maxV5) * 150, 0, 100) : 0;
-
-  // 2. Price–Volume Divergence (25%): price rising while volume weakens
-  const priceRet5 = closes.length >= 6
-    ? (closes[closes.length - 1]! - closes[closes.length - 6]!) / closes[closes.length - 6]! * 100
-    : 0;
-  const volFirst5 = mean(volumes.slice(-10, -5));
-  const volLast5  = mean(volumes.slice(-5));
-  const volDecl   = volFirst5 > 0 ? (volFirst5 - volLast5) / volFirst5 : 0;
-  const pvDiv = priceRet5 > 0
-    ? clamp(50 + volDecl * 200, 0, 100)
-    : clamp(50 - volDecl * 100, 0, 100);
-
-  // 3. Relative Strength Weakening (25%): RS declining short-term vs long-term
-  let rsWeak = 50;
-  if (spyCloses.length >= 21 && closes.length >= 21) {
-    const stkR20 = (closes[closes.length - 1]! - closes[closes.length - 21]!) / closes[closes.length - 21]! * 100;
-    const stkR5  = closes.length >= 6
-      ? (closes[closes.length - 1]! - closes[closes.length - 6]!) / closes[closes.length - 6]! * 100
-      : 0;
-    const spyR20 = (spyCloses[spyCloses.length - 1]! - spyCloses[spyCloses.length - 21]!) / spyCloses[spyCloses.length - 21]! * 100;
-    const spyR5  = spyCloses.length >= 6
-      ? (spyCloses[spyCloses.length - 1]! - spyCloses[spyCloses.length - 6]!) / spyCloses[spyCloses.length - 6]! * 100
-      : 0;
-    const rs20 = stkR20 - spyR20;
-    const rs5  = stkR5  - spyR5;
-    rsWeak = clamp(50 + (rs20 - rs5) * 3, 0, 100);
+  // 1. Valuation Risk (30%)
+  // Very high PE = more vulnerable to correction when sentiment shifts.
+  const pe = ext.pe ?? quote?.pe ?? 0;
+  let peSig = 40; // neutral default
+  if (pe > 0) {
+    // PE 20 → 10, PE 50 → 33, PE 100 → 67, PE 200+ → 100
+    peSig = clamp((pe - 10) / 190 * 100, 0, 100);
   }
 
-  // 4. Extreme Volatility (20%): high recent std dev without sustained direction
-  const recRets = dailyRets(closes.slice(-6));
-  const extVol  = clamp(stddev(recRets) * 15, 0, 100);
+  // 2. 52W Overextension (25%)
+  // Price very near 52W high after a large run-up = false breakout risk.
+  let extRisk = 40;
+  if (high52 > low52 && price > 0) {
+    const pos   = (price - low52) / (high52 - low52);
+    const runUp = (high52 - low52) / Math.max(low52, 1) * 100;
+    // Only penalise when there was a meaningful run (>40%) AND price is extended
+    if (runUp > 40) {
+      extRisk = clamp(pos * 100, 0, 100);
+    } else {
+      extRisk = clamp(pos * 60, 0, 60); // smaller run-up = lower risk at same position
+    }
+  }
+
+  // 3. EPS Miss Risk (25%)
+  // Recent misses = fundamentals weakening, false breakout risk rises.
+  const eps = ext.epsSurprises ?? [];
+  let missSig = 50;
+  if (eps.length > 0) {
+    const avg = eps.reduce((a, b) => a + b, 0) / eps.length;
+    missSig = clamp(50 - avg * 0.8, 0, 100); // inverse of ACS eps signal
+  }
+
+  // 4. Revenue Deceleration (20%)
+  // YoY declining or QoQ well below YoY = momentum fading.
+  const yoy = ext.revenueGrowthYoy ?? 0;
+  const qoq = ext.revenueGrowthQoQ ?? 0;
+  const decel = clamp(50 + (yoy - qoq) * 1.5, 0, 100); // inverse of ACS rev signal
 
   return Math.round(clamp(
-    0.30 * spikeRisk +
-    0.25 * pvDiv     +
-    0.25 * rsWeak    +
-    0.20 * extVol,
+    0.30 * peSig   +
+    0.25 * extRisk +
+    0.25 * missSig +
+    0.20 * decel,
   ));
 }
 
 // ── Multi-Timeframe Trend Classification ──────────────────────────────────────
+// Uses 52W range position + revenue growth + intraday change.
+// Falls back to candle-based logic when closes are available.
 
-function computeTrendLabel(closes: number[]): string {
-  if (closes.length < 21) return "NEUTRAL";
-  const curr  = closes[closes.length - 1]!;
-  const c5    = closes.length >= 6  ? closes[closes.length - 6]!  : closes[0]!;
-  const c20   = closes[closes.length - 21]!;
-  const c60   = closes.length >= 61 ? closes[closes.length - 61]! : null;
-  const r5    = c5  ? (curr - c5)  / c5  * 100 : 0;
-  const r20   = c20 ? (curr - c20) / c20 * 100 : 0;
-  const r60   = c60 ? (curr - c60) / c60 * 100 : null;
-  if (r5 > 3 && r20 > 8 && r60 !== null && r60 > 20) return "LONG-TERM LEADER";
-  if (r5 > 3 && r20 > 8) return "MID-TERM BREAKOUT";
-  if (r5 > 3)            return "SHORT-TERM IGNITION";
+function computeTrendLabel(ext: ExtendedMetrics, quote: QuoteData | undefined): string {
+  const closes = ext.closes60d ?? [];
+
+  // Preferred: candle-based (when available)
+  if (closes.length >= 21) {
+    const curr  = closes[closes.length - 1]!;
+    const c5    = closes.length >= 6  ? closes[closes.length - 6]!  : closes[0]!;
+    const c20   = closes[closes.length - 21]!;
+    const c60   = closes.length >= 61 ? closes[closes.length - 61]! : null;
+    const r5    = c5  ? (curr - c5)  / c5  * 100 : 0;
+    const r20   = c20 ? (curr - c20) / c20 * 100 : 0;
+    const r60   = c60 ? (curr - c60) / c60 * 100 : null;
+    if (r5 > 3 && r20 > 8 && r60 !== null && r60 > 20) return "LONG-TERM LEADER";
+    if (r5 > 3 && r20 > 8) return "MID-TERM BREAKOUT";
+    if (r5 > 3)            return "SHORT-TERM IGNITION";
+    return "NEUTRAL";
+  }
+
+  // Fallback: fundamentals + quote signals
+  const price    = quote?.price         ?? 0;
+  const high52   = quote?.high52        ?? 0;
+  const low52    = quote?.low52         ?? 0;
+  const changePct = quote?.changePercent ?? 0;
+  const yoy      = ext.revenueGrowthYoy ?? 0;
+
+  if (high52 <= low52 || price <= 0) return "NEUTRAL";
+
+  const rangePos = (price - low52) / (high52 - low52); // 0–1
+
+  // Strong range position + meaningful revenue growth + not in freefall
+  if (rangePos >= 0.75 && yoy > 15 && changePct > -3) return "LONG-TERM LEADER";
+  // Good range position + any positive growth
+  if (rangePos >= 0.55 && yoy > 5)                     return "MID-TERM BREAKOUT";
+  // Recent strong intraday momentum regardless of range
+  if (changePct > 5)                                    return "SHORT-TERM IGNITION";
   return "NEUTRAL";
 }
 
@@ -243,7 +280,13 @@ export interface StockScore {
 
 // ── Master score computation ───────────────────────────────────────────────────
 
-export function computeScore(ticker: string, ext: ExtendedMetrics, currentPrice: number, changePercent = 0): StockScore {
+export function computeScore(
+  ticker: string,
+  ext: ExtendedMetrics,
+  currentPrice: number,
+  changePercent = 0,
+  quote?: QuoteData,
+): StockScore {
   const rg    = ext.revenueGrowthYoy ?? 0;
   const rgQ   = ext.revenueGrowthQoQ ?? 0;
   const gm    = ext.grossMargin      ?? 0;
@@ -302,13 +345,13 @@ export function computeScore(ticker: string, ext: ExtendedMetrics, currentPrice:
   const ins        = insResult.ins;
 
   // ── ACCUMULATION CONFIDENCE SCORE ─────────────────────────────────────────
-  const acs = computeACS(ext, spyCloses);
+  const acs = computeACS(ext, quote);
 
   // ── FALSE BREAKOUT RISK SCORE ─────────────────────────────────────────────
-  const fbrs = computeFBRS(ext, spyCloses);
+  const fbrs = computeFBRS(ext, quote);
 
   // ── MULTI-TIMEFRAME TREND ─────────────────────────────────────────────────
-  const trendLabel = computeTrendLabel(ext.closes60d ?? []);
+  const trendLabel = computeTrendLabel(ext, quote);
 
   // ── CONVICTION TIER + SUPERSTOCK ─────────────────────────────────────────
   const convictionTier = computeConvictionTier(ins, cos, acs, fbrs);

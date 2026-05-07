@@ -1,5 +1,5 @@
 import { finnhubGet, getSpyCloses60d, getAllExtendedMetrics, getQuote } from "./finnhub";
-import type { ExtendedMetrics } from "./finnhub";
+import type { ExtendedMetrics, QuoteData } from "./finnhub";
 import { computeScore } from "./scores";
 import { getInsLabel } from "./ins";
 import { TICKER_TO_COMPANY } from "./stocks-data";
@@ -222,8 +222,9 @@ function buildScanResult(
   price: number,
   changePercent: number,
   rank: number,
+  quote?: QuoteData,
 ): ScanResult {
-  const scored   = computeScore(ticker, ext, price, changePercent);
+  const scored   = computeScore(ticker, ext, price, changePercent, quote);
   const ins      = scored.ins ?? 0;
   const insMom   = computeInsMomentum7d(ext.closes60d ?? [], price);
   const volAccel = scored.insComponents?.volumeAccel ?? 50;
@@ -284,7 +285,7 @@ async function runScan(): Promise<void> {
     const q = getQuote(ext.ticker);
     if (!q || q.price === 0) continue;
     const company = TICKER_TO_COMPANY[ext.ticker] ?? ext.ticker;
-    all.push(buildScanResult(ext.ticker, company, "watchlist", ext, q.price, q.changePercent, 0));
+    all.push(buildScanResult(ext.ticker, company, "watchlist", ext, q.price, q.changePercent, 0, q));
   }
 
   for (const [ticker, company] of Object.entries(SCANNER_UNIVERSE)) {

@@ -34,7 +34,7 @@ router.get("/scores", (_req, res) => {
   const metrics = getAllExtendedMetrics();
   const scores = metrics.map(ext => {
     const q = getQuote(ext.ticker);
-    return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0);
+    return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0, q);
   });
   res.json(scores);
 });
@@ -76,7 +76,7 @@ router.get("/sectors", (_req, res) => {
   for (const ext of metrics) {
     const q = qMap.get(ext.ticker);
     if (!q || q.price === 0) continue;
-    const scored = computeScore(ext.ticker, ext, q.price, q.changePercent);
+    const scored = computeScore(ext.ticker, ext, q.price, q.changePercent, q);
     const cat    = CATEGORIES.find(c => c.stocks.some(s => s.ticker === ext.ticker));
     if (!cat) continue;
     const entry  = catMap.get(cat.name)!;
