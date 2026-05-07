@@ -14,7 +14,7 @@ from gspread_formatting import (
 
 # ── Shared data from the main script ─────────────────────────────────────────
 sys.path.insert(0, os.path.dirname(__file__))
-from generate_financial_tracker import CATEGORIES, fetch_prices
+from generate_financial_tracker import CATEGORIES, fetch_live_prices
 
 SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -409,7 +409,7 @@ def main():
 
     # ── Fetch live prices ─────────────────────────────────────────────────────
     print("Fetching live prices...")
-    fetched_at = fetch_prices(CATEGORIES)
+    fetch_live_prices(CATEGORIES)
     fetched_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # ── Create spreadsheet ────────────────────────────────────────────────────
