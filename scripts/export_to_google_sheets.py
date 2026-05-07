@@ -163,8 +163,10 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
     # News cols: Ticker | Company | Headline | Published (4 cols, fits in N_COLS)
     news_section_r0 = len(all_values)   # 0-based
     all_values.append(["📰  LATEST NEWS"] + [""] * (N_COLS - 1))
-    all_values.append(["Ticker", "Company", "Headline", "Published"]
-                      + [""] * (N_COLS - 4))
+    news_hdr = [""] * N_COLS
+    news_hdr[0] = "Ticker"; news_hdr[1] = "Company"
+    news_hdr[2] = "Headline"; news_hdr[16] = "Published"
+    all_values.append(news_hdr)
 
     news_row_info = []   # (0-based index, ticker) for formatting
     alt = 0
@@ -178,8 +180,10 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
             items = yf.Ticker(t).news or []
             if not items:
                 idx = len(all_values)
-                all_values.append([t, stock["company"], "(no recent news)", ""]
-                                  + [""] * (N_COLS - 4))
+                row = [""] * N_COLS
+                row[0] = t; row[1] = stock["company"]
+                row[2] = "(no recent news)"
+                all_values.append(row)
                 news_row_info.append((idx, t))
                 continue
             for item in items[:4]:
@@ -193,13 +197,17 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
                 else:
                     pub = ""
                 idx = len(all_values)
-                all_values.append([t, stock["company"], headline, pub]
-                                  + [""] * (N_COLS - 4))
+                row = [""] * N_COLS
+                row[0] = t; row[1] = stock["company"]
+                row[2] = headline; row[16] = pub
+                all_values.append(row)
                 news_row_info.append((idx, t))
         except Exception as e:
             idx = len(all_values)
-            all_values.append([t, stock["company"], f"(error fetching news: {e})", ""]
-                              + [""] * (N_COLS - 4))
+            row = [""] * N_COLS
+            row[0] = t; row[1] = stock["company"]
+            row[2] = f"(error fetching news: {e})"
+            all_values.append(row)
             news_row_info.append((idx, t))
         all_values.append([""] * N_COLS)   # gap between stocks
 
@@ -252,6 +260,8 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         r0 = first_data - 1 + i
         bg = "F2F2F2" if i % 2 == 0 else WHITE
         reqs.append(fmt_req(r0, r0+1, 0, N_COLS, bg=bg, size=10))
+        # Wrap + left-align Company (B=1) and Focus/Niche (C=2) so text shows fully
+        reqs.append(fmt_req(r0, r0+1, 1, 3, bg=bg, size=10, h="LEFT", wrap=True))
         # Yellow for user-input col Q (index 16)
         reqs.append(fmt_req(r0, r0+1, 16, 17, bg=YELLOW_IN, size=10))
         # % formatting for F, G, H, I, J, M, R (indices 5,6,7,8,9,12,17)
@@ -262,11 +272,11 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         for ci in [4,10,11,16]:
             reqs.append(fmt_req(r0, r0+1, ci, ci+1, bg=YELLOW_IN if ci==16 else bg,
                                 fmt={"type":"CURRENCY","pattern":'"$"#,##0.00'}, size=10))
-        # Row height
+        # Row height — 36px fits 2 lines of wrapped text comfortably
         reqs.append({"updateDimensionProperties": {
             "range": {"sheetId": sheet_id, "dimension": "ROWS",
                       "startIndex": r0, "endIndex": r0+1},
-            "properties": {"pixelSize": 22}, "fields": "pixelSize"}})
+            "properties": {"pixelSize": 36}, "fields": "pixelSize"}})
 
     # Notes header
     nh0 = notes_start - 1
@@ -313,13 +323,21 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
     for nr0, t in news_row_info:
         bg = "EBF3FB" if ticker_alt.get(t, 0) == 0 else "FFFFFF"
         reqs.append(fmt_req(nr0, nr0+1, 0, N_COLS, bg=bg, size=10))
+        # Ticker (A=0) bold blue
         reqs.append(fmt_req(nr0, nr0+1, 0, 1, bg=bg, bold=True, fg="0070C0", size=10))
-        # Headline col (C=2) — wrap text
-        reqs.append(fmt_req(nr0, nr0+1, 2, 3, bg=bg, size=10, wrap=True, h="LEFT"))
+        # Company (B=1) left-aligned
+        reqs.append(fmt_req(nr0, nr0+1, 1, 2, bg=bg, size=10, h="LEFT"))
+        # Headline: merge C through P (cols 2–15) so it has full width, then wrap
+        reqs.append(merge(nr0, nr0+1, 2, 16))
+        reqs.append(fmt_req(nr0, nr0+1, 2, 16, bg=bg, size=10, wrap=True, h="LEFT"))
+        # Date (Q=16) right-aligned, small
+        reqs.append(fmt_req(nr0, nr0+1, 16, 17, bg=bg, size=9, h="RIGHT",
+                            fg="888888", italic=True))
+        # Row height — 52px fits 2-line headlines
         reqs.append({"updateDimensionProperties": {
             "range": {"sheetId": sheet_id, "dimension": "ROWS",
                       "startIndex": nr0, "endIndex": nr0+1},
-            "properties": {"pixelSize": 42}, "fields": "pixelSize"}})
+            "properties": {"pixelSize": 52}, "fields": "pixelSize"}})
 
     # Conditional formatting — alert col S orange
     reqs.append({"addConditionalFormatRule": {"rule": {
