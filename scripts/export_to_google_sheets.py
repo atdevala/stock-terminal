@@ -248,26 +248,38 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
                 raw_news.append({"ticker": t, "company": stock["company"],
                                  "headline": "(no recent news)", "url": None, "est": ""})
                 continue
-            kept = 0
+            relevant = []
             for item in items:
                 content  = item.get("content", {})
                 headline = content.get("title") or item.get("title", "No title")
                 summary  = content.get("summary", "")
-                # Skip articles not meaningfully about this stock
                 if not _is_relevant(headline, summary, t, stock["company"]):
                     continue
                 pub_ts  = content.get("pubDate") or item.get("providerPublishTime")
                 url_obj = content.get("canonicalUrl")
                 url     = url_obj.get("url") if isinstance(url_obj, dict) else None
-                raw_news.append({"ticker": t, "company": stock["company"],
+                # Normalise timestamp for sorting
+                try:
+                    if isinstance(pub_ts, str):
+                        ts_sort = datetime.fromisoformat(
+                            pub_ts.replace("Z", "+00:00")).timestamp()
+                    elif isinstance(pub_ts, (int, float)):
+                        ts_sort = float(pub_ts)
+                    else:
+                        ts_sort = 0.0
+                except Exception:
+                    ts_sort = 0.0
+                relevant.append({"ticker": t, "company": stock["company"],
                                  "headline": headline, "url": url,
-                                 "est": _est_time(pub_ts)})
-                kept += 1
-                if kept >= 4:
-                    break
-            if kept == 0:
+                                 "est": _est_time(pub_ts), "ts_sort": ts_sort})
+            if not relevant:
                 raw_news.append({"ticker": t, "company": stock["company"],
                                  "headline": "(no relevant news found)", "url": None, "est": ""})
+            else:
+                # Most-recent first
+                relevant.sort(key=lambda x: x["ts_sort"], reverse=True)
+                for entry in relevant[:4]:
+                    raw_news.append(entry)
         except Exception as e:
             raw_news.append({"ticker": t, "company": stock["company"],
                              "headline": f"(error fetching news: {e})",
