@@ -7,3 +7,10 @@
  */
 
 export * from "./healthStatus";
+export * from "./marketStatus";
+export * from "./moverStock";
+export * from "./quote";
+export * from "./quotesResponse";
+export * from "./stockCategory";
+export * from "./stockInfo";
+export * from "./topMovers";

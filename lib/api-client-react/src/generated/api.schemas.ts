@@ -8,3 +8,59 @@
 export interface HealthStatus {
   status: string;
 }
+
+export interface StockInfo {
+  ticker: string;
+  company: string;
+  focus: string;
+  risk: string;
+}
+
+export interface StockCategory {
+  name: string;
+  color: string;
+  description: string;
+  stocks: StockInfo[];
+}
+
+export interface Quote {
+  ticker: string;
+  price: number;
+  change: number;
+  changePercent: number;
+  prevClose: number;
+  high: number;
+  low: number;
+  open: number;
+  high52?: number;
+  low52?: number;
+  marketCap?: string;
+  volume?: string;
+  pe?: number;
+  lastUpdated: number;
+}
+
+export interface QuotesResponse {
+  quotes: Quote[];
+  connected: boolean;
+  lastRefreshed: number;
+}
+
+export interface MarketStatus {
+  isOpen: boolean;
+  exchange: string;
+  timezone: string;
+  session: string;
+}
+
+export interface MoverStock {
+  ticker: string;
+  company: string;
+  price: number;
+  changePercent: number;
+}
+
+export interface TopMovers {
+  gainers: MoverStock[];
+  losers: MoverStock[];
+}

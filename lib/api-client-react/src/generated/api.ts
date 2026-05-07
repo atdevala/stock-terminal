@@ -13,7 +13,13 @@ import type {
   UseQueryResult,
 } from "@tanstack/react-query";
 
-import type { HealthStatus } from "./api.schemas";
+import type {
+  HealthStatus,
+  MarketStatus,
+  QuotesResponse,
+  StockCategory,
+  TopMovers,
+} from "./api.schemas";
 
 import { customFetch } from "../custom-fetch";
 import type { ErrorType } from "../custom-fetch";
@@ -25,7 +31,6 @@ type Awaited<O> = O extends AwaitedInput<infer T> ? T : never;
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const getHealthCheckUrl = () => {
@@ -92,6 +97,280 @@ export function useHealthCheck<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getHealthCheckQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get all stock categories and metadata
+ */
+export const getGetStocksUrl = () => {
+  return `/api/stocks`;
+};
+
+export const getStocks = async (
+  options?: RequestInit,
+): Promise<StockCategory[]> => {
+  return customFetch<StockCategory[]>(getGetStocksUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetStocksQueryKey = () => {
+  return [`/api/stocks`] as const;
+};
+
+export const getGetStocksQueryOptions = <
+  TData = Awaited<ReturnType<typeof getStocks>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getStocks>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetStocksQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getStocks>>> = ({
+    signal,
+  }) => getStocks({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getStocks>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetStocksQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getStocks>>
+>;
+export type GetStocksQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get all stock categories and metadata
+ */
+
+export function useGetStocks<
+  TData = Awaited<ReturnType<typeof getStocks>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getStocks>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetStocksQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get live quotes for all tracked tickers
+ */
+export const getGetQuotesUrl = () => {
+  return `/api/quotes`;
+};
+
+export const getQuotes = async (
+  options?: RequestInit,
+): Promise<QuotesResponse> => {
+  return customFetch<QuotesResponse>(getGetQuotesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetQuotesQueryKey = () => {
+  return [`/api/quotes`] as const;
+};
+
+export const getGetQuotesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getQuotes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getQuotes>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetQuotesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getQuotes>>> = ({
+    signal,
+  }) => getQuotes({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getQuotes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetQuotesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getQuotes>>
+>;
+export type GetQuotesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get live quotes for all tracked tickers
+ */
+
+export function useGetQuotes<
+  TData = Awaited<ReturnType<typeof getQuotes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getQuotes>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetQuotesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get current market open/close status
+ */
+export const getGetMarketStatusUrl = () => {
+  return `/api/market-status`;
+};
+
+export const getMarketStatus = async (
+  options?: RequestInit,
+): Promise<MarketStatus> => {
+  return customFetch<MarketStatus>(getGetMarketStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMarketStatusQueryKey = () => {
+  return [`/api/market-status`] as const;
+};
+
+export const getGetMarketStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMarketStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMarketStatusQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMarketStatus>>> = ({
+    signal,
+  }) => getMarketStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMarketStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMarketStatus>>
+>;
+export type GetMarketStatusQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get current market open/close status
+ */
+
+export function useGetMarketStatus<
+  TData = Awaited<ReturnType<typeof getMarketStatus>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getMarketStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMarketStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get top gainers and losers from the watchlist today
+ */
+export const getGetMoversUrl = () => {
+  return `/api/movers`;
+};
+
+export const getMovers = async (options?: RequestInit): Promise<TopMovers> => {
+  return customFetch<TopMovers>(getGetMoversUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetMoversQueryKey = () => {
+  return [`/api/movers`] as const;
+};
+
+export const getGetMoversQueryOptions = <
+  TData = Awaited<ReturnType<typeof getMovers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getMovers>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetMoversQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getMovers>>> = ({
+    signal,
+  }) => getMovers({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getMovers>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetMoversQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getMovers>>
+>;
+export type GetMoversQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get top gainers and losers from the watchlist today
+ */
+
+export function useGetMovers<
+  TData = Awaited<ReturnType<typeof getMovers>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getMovers>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetMoversQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -10,13 +10,14 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: stocks
+    description: Stock watchlist operations
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +25,61 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /stocks:
+    get:
+      operationId: getStocks
+      tags: [stocks]
+      summary: Get all stock categories and metadata
+      responses:
+        "200":
+          description: List of stock categories with metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockCategory"
+
+  /quotes:
+    get:
+      operationId: getQuotes
+      tags: [stocks]
+      summary: Get live quotes for all tracked tickers
+      responses:
+        "200":
+          description: Live quote data keyed by ticker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotesResponse"
+
+  /market-status:
+    get:
+      operationId: getMarketStatus
+      tags: [stocks]
+      summary: Get current market open/close status
+      responses:
+        "200":
+          description: Market status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketStatus"
+
+  /movers:
+    get:
+      operationId: getMovers
+      tags: [stocks]
+      summary: Get top gainers and losers from the watchlist today
+      responses:
+        "200":
+          description: Top movers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopMovers"
+
 components:
   schemas:
     HealthStatus:
@@ -31,6 +87,117 @@ components:
       properties:
         status:
           type: string
-      required:
-        - status
+      required: [status]
 
+    StockInfo:
+      type: object
+      properties:
+        ticker:
+          type: string
+        company:
+          type: string
+        focus:
+          type: string
+        risk:
+          type: string
+      required: [ticker, company, focus, risk]
+
+    StockCategory:
+      type: object
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+        description:
+          type: string
+        stocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockInfo"
+      required: [name, color, description, stocks]
+
+    Quote:
+      type: object
+      properties:
+        ticker:
+          type: string
+        price:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        prevClose:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        open:
+          type: number
+        high52:
+          type: number
+        low52:
+          type: number
+        marketCap:
+          type: string
+        volume:
+          type: string
+        pe:
+          type: number
+        lastUpdated:
+          type: number
+      required: [ticker, price, change, changePercent, prevClose, high, low, open, lastUpdated]
+
+    QuotesResponse:
+      type: object
+      properties:
+        quotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Quote"
+        connected:
+          type: boolean
+        lastRefreshed:
+          type: number
+      required: [quotes, connected, lastRefreshed]
+
+    MarketStatus:
+      type: object
+      properties:
+        isOpen:
+          type: boolean
+        exchange:
+          type: string
+        timezone:
+          type: string
+        session:
+          type: string
+      required: [isOpen, exchange, timezone, session]
+
+    MoverStock:
+      type: object
+      properties:
+        ticker:
+          type: string
+        company:
+          type: string
+        price:
+          type: number
+        changePercent:
+          type: number
+      required: [ticker, company, price, changePercent]
+
+    TopMovers:
+      type: object
+      properties:
+        gainers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MoverStock"
+        losers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MoverStock"
+      required: [gainers, losers]

@@ -8,9 +8,84 @@
 import * as zod from "zod";
 
 /**
- * Returns server health status
  * @summary Health check
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
+});
+
+/**
+ * @summary Get all stock categories and metadata
+ */
+export const GetStocksResponseItem = zod.object({
+  name: zod.string(),
+  color: zod.string(),
+  description: zod.string(),
+  stocks: zod.array(
+    zod.object({
+      ticker: zod.string(),
+      company: zod.string(),
+      focus: zod.string(),
+      risk: zod.string(),
+    }),
+  ),
+});
+export const GetStocksResponse = zod.array(GetStocksResponseItem);
+
+/**
+ * @summary Get live quotes for all tracked tickers
+ */
+export const GetQuotesResponse = zod.object({
+  quotes: zod.array(
+    zod.object({
+      ticker: zod.string(),
+      price: zod.number(),
+      change: zod.number(),
+      changePercent: zod.number(),
+      prevClose: zod.number(),
+      high: zod.number(),
+      low: zod.number(),
+      open: zod.number(),
+      high52: zod.number().optional(),
+      low52: zod.number().optional(),
+      marketCap: zod.string().optional(),
+      volume: zod.string().optional(),
+      pe: zod.number().optional(),
+      lastUpdated: zod.number(),
+    }),
+  ),
+  connected: zod.boolean(),
+  lastRefreshed: zod.number(),
+});
+
+/**
+ * @summary Get current market open/close status
+ */
+export const GetMarketStatusResponse = zod.object({
+  isOpen: zod.boolean(),
+  exchange: zod.string(),
+  timezone: zod.string(),
+  session: zod.string(),
+});
+
+/**
+ * @summary Get top gainers and losers from the watchlist today
+ */
+export const GetMoversResponse = zod.object({
+  gainers: zod.array(
+    zod.object({
+      ticker: zod.string(),
+      company: zod.string(),
+      price: zod.number(),
+      changePercent: zod.number(),
+    }),
+  ),
+  losers: zod.array(
+    zod.object({
+      ticker: zod.string(),
+      company: zod.string(),
+      price: zod.number(),
+      changePercent: zod.number(),
+    }),
+  ),
 });
