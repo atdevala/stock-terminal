@@ -51,7 +51,7 @@ export function Watchlist() {
                   <th className="py-3 px-4 font-medium text-right">Day H/L</th>
                   <th className="py-3 px-4 font-medium text-right hidden md:table-cell">52W H/L</th>
                   <th className="py-3 px-4 font-medium text-right hidden sm:table-cell">P/E</th>
-                  <th className="py-3 px-4 font-medium text-right hidden lg:table-cell">Focus</th>
+                  <th className="py-3 px-4 font-medium text-left hidden lg:table-cell">Focus</th>
                 </tr>
               </thead>
               <tbody>
