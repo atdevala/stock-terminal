@@ -8,6 +8,11 @@ import {
 import { StockRow } from "./StockRow";
 import { stripEmoji } from "@/lib/formatters";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 export function Watchlist() {
   const { data: categories, isLoading: isLoadingStocks } = useGetStocks();
@@ -57,14 +62,42 @@ export function Watchlist() {
                 <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   <th className="py-3 px-4 font-medium">Symbol/Company</th>
                   <th className="py-3 px-4 font-medium text-right">Price</th>
+                  <th className="py-3 px-4 font-medium text-right">CHG $</th>
                   <th className="py-3 px-4 font-medium text-right">Day Chg %</th>
                   <th className="py-3 px-4 font-medium text-right">Ext Chg %</th>
                   <th className="py-3 px-4 font-medium text-right">Day H/L</th>
                   <th className="py-3 px-4 font-medium text-right hidden md:table-cell">52W H/L</th>
                   <th className="py-3 px-4 font-medium text-right hidden sm:table-cell">P/E</th>
-                  <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">VQS</th>
-                  <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">GVS</th>
-                  <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">COS</th>
+                  <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help underline decoration-dotted underline-offset-2">VQS</span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-center">
+                        Look for VQS &gt; 55 — This filters out hype stocks with no real business, companies burning cash with no path forward
+                      </TooltipContent>
+                    </Tooltip>
+                  </th>
+                  <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help underline decoration-dotted underline-offset-2">GVS</span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-center">
+                        Look for GVS &gt; 70 — These are potential break out stocks / early momentum names
+                      </TooltipContent>
+                    </Tooltip>
+                  </th>
+                  <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="cursor-help underline decoration-dotted underline-offset-2">COS</span>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" className="max-w-xs text-center">
+                        Look for COS &gt; 70 — These are your best setups. Good business, Strong Momentum, Aligned Fundamentals + Trend. This tells you what is actually worth risking money on
+                      </TooltipContent>
+                    </Tooltip>
+                  </th>
                   <th className="py-3 px-4 font-medium text-center hidden lg:table-cell">Focus</th>
                 </tr>
               </thead>

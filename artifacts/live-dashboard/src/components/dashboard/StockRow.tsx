@@ -143,6 +143,11 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
         />
       </td>
       <td className="py-2.5 px-4 text-right align-top">
+        <div className={cn("font-mono text-sm", changeColor)} data-testid={`stock-change-dollar-${stock.ticker}`}>
+          {isUp ? "+" : ""}{formatCurrency(quote.change)}
+        </div>
+      </td>
+      <td className="py-2.5 px-4 text-right align-top">
         <div className={cn("font-mono text-sm", changeColor)} data-testid={`stock-change-${stock.ticker}`}>
           {formatPercent(quote.changePercent)}
         </div>
