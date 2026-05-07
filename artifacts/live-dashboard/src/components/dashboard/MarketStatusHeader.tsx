@@ -2,36 +2,44 @@ import { useGetMarketStatus } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
 
-const NY_TZ = "America/New_York";
-
-function useNYClock() {
-  const [display, setDisplay] = useState(() => getNYTimeString());
-
-  useEffect(() => {
-    const tick = () => setDisplay(getNYTimeString());
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  return display;
+// Returns the 2nd Sunday of March or 1st Sunday of November (UTC ms)
+function nthSunday(year: number, month: number, n: number): number {
+  const firstOfMonth = new Date(Date.UTC(year, month, 1));
+  const dow = firstOfMonth.getUTCDay(); // 0 = Sunday
+  const firstSunday = dow === 0 ? 1 : 8 - dow;
+  return Date.UTC(year, month, firstSunday + (n - 1) * 7);
 }
 
-function getNYTimeString(): string {
-  const now = new Date();
-  const datePart = now.toLocaleDateString("en-US", {
-    timeZone: NY_TZ,
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-  const timePart = now.toLocaleTimeString("en-US", {
-    timeZone: NY_TZ,
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: true,
-  });
-  return `${datePart} ${timePart}`;
+// Compute Eastern time string directly from UTC arithmetic — no browser locale APIs
+function getEasternTimeString(): string {
+  const utcMs = Date.now();
+  const year = new Date(utcMs).getUTCFullYear();
+
+  // EDT starts: 2nd Sunday in March at 2am EST (= 7am UTC)
+  const dstStart = nthSunday(year, 2, 2) + 7 * 3600_000;
+  // EDT ends: 1st Sunday in November at 2am EDT (= 6am UTC)
+  const dstEnd = nthSunday(year, 10, 1) + 6 * 3600_000;
+
+  const offsetMs = (utcMs >= dstStart && utcMs < dstEnd ? -4 : -5) * 3600_000;
+  const et = new Date(utcMs + offsetMs);
+
+  const hh = et.getUTCHours();
+  const mm = String(et.getUTCMinutes()).padStart(2, "0");
+  const ss = String(et.getUTCSeconds()).padStart(2, "0");
+  const ampm = hh >= 12 ? "PM" : "AM";
+  const h12 = hh % 12 || 12;
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  return `${MONTHS[et.getUTCMonth()]} ${et.getUTCDate()}, ${et.getUTCFullYear()} ${h12}:${mm}:${ss} ${ampm} ET`;
+}
+
+function useEasternClock() {
+  const [display, setDisplay] = useState(getEasternTimeString);
+  useEffect(() => {
+    const timer = setInterval(() => setDisplay(getEasternTimeString()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return display;
 }
 
 export function MarketStatusHeader() {
@@ -39,7 +47,7 @@ export function MarketStatusHeader() {
     query: { refetchInterval: 30000 }
   });
 
-  const clockDisplay = useNYClock();
+  const clockDisplay = useEasternClock();
 
   if (isLoading) {
     return (
