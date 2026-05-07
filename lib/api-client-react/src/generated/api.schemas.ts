@@ -200,6 +200,41 @@ export interface MarketRegime {
   spyVolatility: number;
 }
 
+export interface SignalValues {
+  vqs: number;
+  gvs: number;
+  cos: number;
+  ins: number;
+  acs: number;
+}
+
+export interface SignalTrends {
+  vqs: string;
+  gvs: string;
+  cos: string;
+  ins: string;
+  acs: string;
+}
+
+export interface SignalHistoryPoint {
+  ts: number;
+  ins: number;
+  cos: number;
+  acs: number;
+}
+
+export interface SignalDelta {
+  ticker: string;
+  current: SignalValues;
+  delta1D?: SignalValues | null;
+  delta7D?: SignalValues | null;
+  accel?: SignalValues | null;
+  trends: SignalTrends;
+  /** EARLY IGNITION SETUP | SPECULATIVE MOMENTUM (UNCONFIRMED) | LATE CYCLE / EXHAUSTION RISK | INSTITUTIONAL ACCUMULATION BEFORE REPRICING | empty string */
+  divergence: string;
+  history: SignalHistoryPoint[];
+}
+
 export type RefreshScanner200 = {
   message: string;
 };

@@ -1,0 +1,249 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { logger } from "./logger";
+import type { StockScore } from "./scores";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+export interface SignalSnapshot {
+  ts:  number;
+  vqs: number;
+  gvs: number;
+  cos: number;
+  ins: number;
+  acs: number;
+}
+
+export interface SignalValues {
+  vqs: number;
+  gvs: number;
+  cos: number;
+  ins: number;
+  acs: number;
+}
+
+export type SignalTrend =
+  | "STRONGLY_RISING"
+  | "RISING"
+  | "FLAT"
+  | "FALLING"
+  | "STRONGLY_FALLING";
+
+export interface SignalTrends {
+  vqs: SignalTrend;
+  gvs: SignalTrend;
+  cos: SignalTrend;
+  ins: SignalTrend;
+  acs: SignalTrend;
+}
+
+export interface SignalDelta {
+  ticker:    string;
+  current:   SignalValues;
+  delta1D:   SignalValues | null;
+  delta7D:   SignalValues | null;
+  accel:     SignalValues | null;
+  trends:    SignalTrends;
+  divergence: string;
+  history:   { ts: number; ins: number; cos: number; acs: number }[];
+}
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const MAX_SNAPSHOTS    = 500;
+const MIN_INTERVAL_MS  = 30 * 60 * 1000; // 30 min minimum between snapshots
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DATA_FILE = path.resolve(__dirname, "../../data/signal-history.json");
+
+// ── In-memory store ───────────────────────────────────────────────────────────
+
+const store = new Map<string, SignalSnapshot[]>();
+let lastSnapshotTs = 0;
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+
+function loadFromDisk(): void {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const raw  = fs.readFileSync(DATA_FILE, "utf-8");
+      const data = JSON.parse(raw) as Record<string, SignalSnapshot[]>;
+      for (const [ticker, snaps] of Object.entries(data)) {
+        store.set(ticker, snaps);
+      }
+      logger.info(`Signal history loaded from disk: ${store.size} tickers`);
+    }
+  } catch (err) {
+    logger.warn({ err }, "Could not load signal history from disk — starting fresh");
+  }
+}
+
+function saveToDisk(): void {
+  try {
+    const data: Record<string, SignalSnapshot[]> = {};
+    for (const [ticker, snaps] of store.entries()) {
+      data[ticker] = snaps;
+    }
+    fs.mkdirSync(path.dirname(DATA_FILE), { recursive: true });
+    fs.writeFileSync(DATA_FILE, JSON.stringify(data), "utf-8");
+  } catch (err) {
+    logger.warn({ err }, "Could not save signal history to disk");
+  }
+}
+
+// ── Snapshot capture ──────────────────────────────────────────────────────────
+
+export function takeSnapshotIfDue(scores: StockScore[]): void {
+  const now = Date.now();
+  if (now - lastSnapshotTs < MIN_INTERVAL_MS) return; // debounce
+  lastSnapshotTs = now;
+
+  for (const s of scores) {
+    const snap: SignalSnapshot = {
+      ts:  now,
+      vqs: s.vqs,
+      gvs: s.gvs,
+      cos: s.cos,
+      ins: s.ins ?? 50,
+      acs: s.acs,
+    };
+
+    const existing = store.get(s.ticker) ?? [];
+    existing.push(snap);
+    if (existing.length > MAX_SNAPSHOTS) {
+      existing.splice(0, existing.length - MAX_SNAPSHOTS);
+    }
+    store.set(s.ticker, existing);
+  }
+
+  saveToDisk();
+  logger.info(`Signal snapshot captured: ${scores.length} tickers`);
+}
+
+// ── Delta helpers ─────────────────────────────────────────────────────────────
+
+function findSnapshotNear(snaps: SignalSnapshot[], targetTs: number): SignalSnapshot | null {
+  let best: SignalSnapshot | null = null;
+  for (const s of snaps) {
+    if (s.ts <= targetTs) {
+      if (!best || s.ts > best.ts) best = s;
+    }
+  }
+  return best;
+}
+
+function diff(a: SignalSnapshot, b: SignalSnapshot): SignalValues {
+  return {
+    vqs: Math.round(a.vqs - b.vqs),
+    gvs: Math.round(a.gvs - b.gvs),
+    cos: Math.round(a.cos - b.cos),
+    ins: Math.round(a.ins - b.ins),
+    acs: Math.round(a.acs - b.acs),
+  };
+}
+
+function classifyTrend(delta: number): SignalTrend {
+  if (delta >= 6)  return "STRONGLY_RISING";
+  if (delta >= 2)  return "RISING";
+  if (delta <= -6) return "STRONGLY_FALLING";
+  if (delta <= -2) return "FALLING";
+  return "FLAT";
+}
+
+function computeTrends(delta1D: SignalValues | null): SignalTrends {
+  const d = delta1D ?? { vqs: 0, gvs: 0, cos: 0, ins: 0, acs: 0 };
+  return {
+    vqs: classifyTrend(d.vqs),
+    gvs: classifyTrend(d.gvs),
+    cos: classifyTrend(d.cos),
+    ins: classifyTrend(d.ins),
+    acs: classifyTrend(d.acs),
+  };
+}
+
+function detectDivergence(
+  current: SignalValues,
+  trends:  SignalTrends,
+): string {
+  const rising  = (t: SignalTrend) => t === "RISING" || t === "STRONGLY_RISING";
+  const falling = (t: SignalTrend) => t === "FALLING" || t === "STRONGLY_FALLING";
+
+  if (rising(trends.ins) && rising(trends.acs) && current.cos < 65) {
+    return "EARLY IGNITION SETUP";
+  }
+  if (rising(trends.ins) && falling(trends.cos)) {
+    return "SPECULATIVE MOMENTUM (UNCONFIRMED)";
+  }
+  if (rising(trends.cos) && falling(trends.ins)) {
+    return "LATE CYCLE / EXHAUSTION RISK";
+  }
+  if (rising(trends.acs) && rising(trends.ins) && trends.cos === "FLAT") {
+    return "INSTITUTIONAL ACCUMULATION BEFORE REPRICING";
+  }
+  return "";
+}
+
+// ── Public query API ──────────────────────────────────────────────────────────
+
+export function getAllSignalDeltas(): SignalDelta[] {
+  const now     = Date.now();
+  const results: SignalDelta[] = [];
+
+  for (const [ticker, snaps] of store.entries()) {
+    if (snaps.length === 0) continue;
+    const latest = snaps[snaps.length - 1]!;
+
+    const current: SignalValues = {
+      vqs: latest.vqs,
+      gvs: latest.gvs,
+      cos: latest.cos,
+      ins: latest.ins,
+      acs: latest.acs,
+    };
+
+    const snap1D  = findSnapshotNear(snaps, now - 24 * 3600_000);
+    const snap7D  = findSnapshotNear(snaps, now - 7  * 86400_000);
+    const snap48h = findSnapshotNear(snaps, now - 48 * 3600_000);
+
+    const delta1D = snap1D ? diff(latest, snap1D) : null;
+    const delta7D = snap7D ? diff(latest, snap7D) : null;
+
+    let accel: SignalValues | null = null;
+    if (delta1D && snap1D && snap48h) {
+      const prev1D = diff(snap1D, snap48h);
+      accel = {
+        vqs: delta1D.vqs - prev1D.vqs,
+        gvs: delta1D.gvs - prev1D.gvs,
+        cos: delta1D.cos - prev1D.cos,
+        ins: delta1D.ins - prev1D.ins,
+        acs: delta1D.acs - prev1D.acs,
+      };
+    }
+
+    const trends     = computeTrends(delta1D);
+    const divergence = detectDivergence(current, trends);
+
+    // Last 30 snapshots for sparklines
+    const history = snaps.slice(-30).map(s => ({
+      ts:  s.ts,
+      ins: s.ins,
+      cos: s.cos,
+      acs: s.acs,
+    }));
+
+    results.push({ ticker, current, delta1D, delta7D, accel, trends, divergence, history });
+  }
+
+  results.sort((a, b) => b.current.ins - a.current.ins);
+  return results;
+}
+
+export function getSnapshotCount(): number {
+  let total = 0;
+  for (const snaps of store.values()) total += snaps.length;
+  return total;
+}
+
+// Load history from disk when module is first imported
+loadFromDisk();

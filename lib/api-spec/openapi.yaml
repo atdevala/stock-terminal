@@ -153,6 +153,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketRegime"
 
+  /signal-deltas:
+    get:
+      operationId: getSignalDeltas
+      tags: [stocks]
+      summary: Signal movement tracker — per-ticker deltas, trends, and divergence flags
+      responses:
+        "200":
+          description: Signal deltas and sparkline history for all tracked tickers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SignalDelta"
+
 components:
   schemas:
     HealthStatus:
@@ -476,3 +491,59 @@ components:
           type: number
           description: SPY 20-day daily return standard deviation
       required: [regime, spyRet5d, spyRet20d, spyVolatility]
+
+    SignalValues:
+      type: object
+      properties:
+        vqs: { type: number }
+        gvs: { type: number }
+        cos: { type: number }
+        ins: { type: number }
+        acs: { type: number }
+      required: [vqs, gvs, cos, ins, acs]
+
+    SignalTrends:
+      type: object
+      properties:
+        vqs: { type: string }
+        gvs: { type: string }
+        cos: { type: string }
+        ins: { type: string }
+        acs: { type: string }
+      required: [vqs, gvs, cos, ins, acs]
+
+    SignalHistoryPoint:
+      type: object
+      properties:
+        ts:  { type: number }
+        ins: { type: number }
+        cos: { type: number }
+        acs: { type: number }
+      required: [ts, ins, cos, acs]
+
+    SignalDelta:
+      type: object
+      properties:
+        ticker:
+          type: string
+        current:
+          $ref: "#/components/schemas/SignalValues"
+        delta1D:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+        delta7D:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+        accel:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+        trends:
+          $ref: "#/components/schemas/SignalTrends"
+        divergence:
+          type: string
+          description: "EARLY IGNITION SETUP | SPECULATIVE MOMENTUM (UNCONFIRMED) | LATE CYCLE / EXHAUSTION RISK | INSTITUTIONAL ACCUMULATION BEFORE REPRICING | empty string"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/SignalHistoryPoint"
+      required: [ticker, current, trends, divergence, history]

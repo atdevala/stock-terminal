@@ -242,3 +242,65 @@ export const GetMarketRegimeResponse = zod.object({
     .number()
     .describe("SPY 20-day daily return standard deviation"),
 });
+
+/**
+ * @summary Signal movement tracker — per-ticker deltas, trends, and divergence flags
+ */
+export const GetSignalDeltasResponseItem = zod.object({
+  ticker: zod.string(),
+  current: zod.object({
+    vqs: zod.number(),
+    gvs: zod.number(),
+    cos: zod.number(),
+    ins: zod.number(),
+    acs: zod.number(),
+  }),
+  delta1D: zod
+    .object({
+      vqs: zod.number(),
+      gvs: zod.number(),
+      cos: zod.number(),
+      ins: zod.number(),
+      acs: zod.number(),
+    })
+    .nullish(),
+  delta7D: zod
+    .object({
+      vqs: zod.number(),
+      gvs: zod.number(),
+      cos: zod.number(),
+      ins: zod.number(),
+      acs: zod.number(),
+    })
+    .nullish(),
+  accel: zod
+    .object({
+      vqs: zod.number(),
+      gvs: zod.number(),
+      cos: zod.number(),
+      ins: zod.number(),
+      acs: zod.number(),
+    })
+    .nullish(),
+  trends: zod.object({
+    vqs: zod.string(),
+    gvs: zod.string(),
+    cos: zod.string(),
+    ins: zod.string(),
+    acs: zod.string(),
+  }),
+  divergence: zod
+    .string()
+    .describe(
+      "EARLY IGNITION SETUP | SPECULATIVE MOMENTUM (UNCONFIRMED) | LATE CYCLE \/ EXHAUSTION RISK | INSTITUTIONAL ACCUMULATION BEFORE REPRICING | empty string",
+    ),
+  history: zod.array(
+    zod.object({
+      ts: zod.number(),
+      ins: zod.number(),
+      cos: zod.number(),
+      acs: zod.number(),
+    }),
+  ),
+});
+export const GetSignalDeltasResponse = zod.array(GetSignalDeltasResponseItem);

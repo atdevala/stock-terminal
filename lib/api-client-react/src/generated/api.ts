@@ -24,6 +24,7 @@ import type {
   RefreshScanner200,
   ScannerResponse,
   SectorData,
+  SignalDelta,
   StockCategory,
   StockScore,
   TopMovers,
@@ -752,6 +753,81 @@ export function useGetMarketRegime<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMarketRegimeQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Signal movement tracker — per-ticker deltas, trends, and divergence flags
+ */
+export const getGetSignalDeltasUrl = () => {
+  return `/api/signal-deltas`;
+};
+
+export const getSignalDeltas = async (
+  options?: RequestInit,
+): Promise<SignalDelta[]> => {
+  return customFetch<SignalDelta[]>(getGetSignalDeltasUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetSignalDeltasQueryKey = () => {
+  return [`/api/signal-deltas`] as const;
+};
+
+export const getGetSignalDeltasQueryOptions = <
+  TData = Awaited<ReturnType<typeof getSignalDeltas>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSignalDeltas>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetSignalDeltasQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getSignalDeltas>>> = ({
+    signal,
+  }) => getSignalDeltas({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getSignalDeltas>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetSignalDeltasQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getSignalDeltas>>
+>;
+export type GetSignalDeltasQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Signal movement tracker — per-ticker deltas, trends, and divergence flags
+ */
+
+export function useGetSignalDeltas<
+  TData = Awaited<ReturnType<typeof getSignalDeltas>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getSignalDeltas>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetSignalDeltasQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

@@ -10,6 +10,7 @@ import {
 } from "../lib/finnhub";
 import { computeScore, mean } from "../lib/scores";
 import { getScannerState, triggerScan } from "../lib/scanner";
+import { takeSnapshotIfDue, getAllSignalDeltas } from "../lib/signal-history";
 
 const router = Router();
 
@@ -36,6 +37,8 @@ router.get("/scores", (_req, res) => {
     const q = getQuote(ext.ticker);
     return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0, q);
   });
+  // Take a snapshot of current scores for the signal history tracker (debounced to 30 min)
+  takeSnapshotIfDue(scores);
   res.json(scores);
 });
 
@@ -61,7 +64,6 @@ router.post("/scanner/refresh", (_req, res) => {
 });
 
 // ── Sector Rotation Engine ─────────────────────────────────────────────────────
-// Aggregates avg INS / COS / ACS per watchlist category, ranked by momentum.
 
 router.get("/sectors", (_req, res) => {
   const metrics = getAllExtendedMetrics();
@@ -106,6 +108,14 @@ router.get("/sectors", (_req, res) => {
 
 router.get("/market-regime", (_req, res) => {
   res.json(getMarketRegime());
+});
+
+// ── Signal Movement Tracker ────────────────────────────────────────────────────
+// Returns per-ticker signal deltas, trend classifications, divergence flags,
+// and sparkline history points. Populated from the rolling snapshot store.
+
+router.get("/signal-deltas", (_req, res) => {
+  res.json(getAllSignalDeltas());
 });
 
 export default router;
