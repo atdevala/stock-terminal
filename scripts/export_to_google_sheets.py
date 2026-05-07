@@ -378,10 +378,11 @@ DASH_COLS = [
     ("Company",         155),   # B — static text
     ("Live Price",       82),   # C — GOOGLEFINANCE
     ("Today %",          72),   # D — GOOGLEFINANCE
-    ("vs 52W High",      98),   # E — GOOGLEFINANCE formula
-    ("Analyst Rating",  148),   # F — static from yfinance
-    ("Price Target",     90),   # G — static from yfinance
-    ("Technical Signal",170),   # H — static from yfinance
+    ("Ext Hrs %",        78),   # E — static from yfinance (pre/post market)
+    ("vs 52W High",      98),   # F — GOOGLEFINANCE formula
+    ("Analyst Rating",  148),   # G — static from yfinance
+    ("Price Target",     90),   # H — static from yfinance
+    ("Technical Signal",170),   # I — static from yfinance
 ]
 N_DASH = len(DASH_COLS)
 
@@ -433,13 +434,24 @@ def fetch_analyst_data():
             elif price and ma50:
                 tech = ("↑ Above 50MA" if price > ma50 else "↓ Below 50MA")
 
+            # Extended hours % — prefer post-market, fall back to pre-market
+            # yfinance returns these as plain % numbers (e.g. -1.23 means -1.23%)
+            ext_pct = None
+            post = info.get("postMarketChangePercent")
+            pre  = info.get("preMarketChangePercent")
+            if post is not None:
+                ext_pct = post / 100      # → decimal for % cell format
+            elif pre is not None:
+                ext_pct = pre / 100
+
             result[t] = {
                 "rating":    rating,
                 "target":    f"${target:,.2f}" if target else "—",
                 "technical": tech,
+                "ext_pct":   ext_pct,     # None → "—" when writing
             }
         except Exception:
-            result[t] = {"rating": "—", "target": "—", "technical": "—"}
+            result[t] = {"rating": "—", "target": "—", "technical": "—", "ext_pct": None}
 
     found = sum(1 for v in result.values() if v["rating"] != "—")
     print(f"  ✓  Analyst data: {found}/{len(result)} tickers")
@@ -499,15 +511,17 @@ def build_dashboard_sheet(spreadsheet, analyst_data):
             gf_52w   = f'=IFERROR(GOOGLEFINANCE("{t}","price")/GOOGLEFINANCE("{t}","high52")-1,"")'
             ad       = analyst_data.get(t, {})
 
+            ext_val = ad.get("ext_pct")   # decimal or None
             rows.append([
-                t,                        # A ticker
-                s["company"],             # B company
-                gf_price,                 # C live price
-                gf_pct,                   # D today %
-                gf_52w,                   # E vs 52W high
-                ad.get("rating", "—"),    # F analyst rating
-                ad.get("target", "—"),    # G price target
-                ad.get("technical", "—"), # H technical signal
+                t,                                          # A ticker
+                s["company"],                               # B company
+                gf_price,                                   # C live price
+                gf_pct,                                     # D today %
+                ext_val if ext_val is not None else "—",    # E ext hrs %
+                gf_52w,                                     # F vs 52W high
+                ad.get("rating", "—"),                      # G analyst rating
+                ad.get("target", "—"),                      # H price target
+                ad.get("technical", "—"),                   # I technical signal
             ])
             stock_row_info.append((current_row, t))
             current_row += 1
@@ -573,8 +587,8 @@ def build_dashboard_sheet(spreadsheet, analyst_data):
             # Ticker bold blue
             reqs.append(fmt_req(sr0, sr0+1, 0, 1, bg=bg, bold=True,
                                 fg="0070C0", size=10))
-            # % format for Today % (col D=3) and vs 52W High (col E=4)
-            for ci in [3, 4]:
+            # % format for Today % (D=3), Ext Hrs % (E=4), vs 52W High (F=5)
+            for ci in [3, 4, 5]:
                 reqs.append(fmt_req(sr0, sr0+1, ci, ci+1, bg=bg,
                                     fmt={"type":"PERCENT","pattern":"0.00%"}, size=10))
             reqs.append(dim("ROWS", sr0, sr0+1, 22))
@@ -583,7 +597,7 @@ def build_dashboard_sheet(spreadsheet, analyst_data):
     if stock_row_info:
         stock_rows_r0 = stock_row_info[0][0]
         stock_rows_r1 = stock_row_info[-1][0] + 1
-        # Today % green
+        # Today % (D=3) — green
         reqs.append({"addConditionalFormatRule": {"rule": {
             "ranges": [rng(stock_rows_r0, stock_rows_r1, 3, 4)],
             "booleanRule": {
@@ -591,7 +605,7 @@ def build_dashboard_sheet(spreadsheet, analyst_data):
                 "format": {"backgroundColor": color("375623"),
                            "textFormat": {"bold": True, "foregroundColor": color(WHITE)}},
             }}, "index": 0}})
-        # Today % red
+        # Today % (D=3) — red
         reqs.append({"addConditionalFormatRule": {"rule": {
             "ranges": [rng(stock_rows_r0, stock_rows_r1, 3, 4)],
             "booleanRule": {
@@ -599,15 +613,31 @@ def build_dashboard_sheet(spreadsheet, analyst_data):
                 "format": {"backgroundColor": color("9C0006"),
                            "textFormat": {"bold": True, "foregroundColor": color(WHITE)}},
             }}, "index": 1}})
-        # vs 52W High orange when ≤ -20%
+        # Ext Hrs % (E=4) — green
         reqs.append({"addConditionalFormatRule": {"rule": {
             "ranges": [rng(stock_rows_r0, stock_rows_r1, 4, 5)],
+            "booleanRule": {
+                "condition": {"type": "NUMBER_GREATER", "values": [{"userEnteredValue": "0"}]},
+                "format": {"backgroundColor": color("375623"),
+                           "textFormat": {"bold": True, "foregroundColor": color(WHITE)}},
+            }}, "index": 2}})
+        # Ext Hrs % (E=4) — red
+        reqs.append({"addConditionalFormatRule": {"rule": {
+            "ranges": [rng(stock_rows_r0, stock_rows_r1, 4, 5)],
+            "booleanRule": {
+                "condition": {"type": "NUMBER_LESS", "values": [{"userEnteredValue": "0"}]},
+                "format": {"backgroundColor": color("9C0006"),
+                           "textFormat": {"bold": True, "foregroundColor": color(WHITE)}},
+            }}, "index": 3}})
+        # vs 52W High (F=5) — orange when ≤ -20%
+        reqs.append({"addConditionalFormatRule": {"rule": {
+            "ranges": [rng(stock_rows_r0, stock_rows_r1, 5, 6)],
             "booleanRule": {
                 "condition": {"type": "NUMBER_LESS_THAN_EQ",
                               "values": [{"userEnteredValue": "-0.2"}]},
                 "format": {"backgroundColor": color(ALERT_ORG),
                            "textFormat": {"bold": True, "foregroundColor": color(WHITE)}},
-            }}, "index": 2}})
+            }}, "index": 4}})
 
     # Column widths (dashboard cols)
     for ci, (_, px) in enumerate(DASH_COLS):
