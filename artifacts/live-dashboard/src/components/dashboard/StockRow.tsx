@@ -62,7 +62,7 @@ export function StockRow({ stock, quote }: StockRowProps) {
       <td className="py-2.5 px-4 text-right text-muted-foreground font-mono text-sm align-top hidden sm:table-cell">
         {quote.pe ? quote.pe.toFixed(2) : "—"}
       </td>
-      <td className="py-2.5 px-4 text-left text-muted-foreground text-xs align-top hidden lg:table-cell">
+      <td className="py-2.5 px-4 text-center text-muted-foreground text-xs align-top hidden lg:table-cell">
         <div>{stock.focus}</div>
       </td>
     </tr>
