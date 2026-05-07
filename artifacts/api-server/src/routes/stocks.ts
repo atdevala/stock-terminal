@@ -3,7 +3,7 @@ import { CATEGORIES } from "../lib/stocks-data";
 import {
   getAllQuotes,
   getAllExtendedMetrics,
-  getCurrentPrice,
+  getQuote,
   getMarketStatus,
   isWsConnected,
 } from "../lib/finnhub";
@@ -30,9 +30,10 @@ router.get("/market-status", (_req, res) => {
 
 router.get("/scores", (_req, res) => {
   const metrics = getAllExtendedMetrics();
-  const scores = metrics.map(ext =>
-    computeScore(ext.ticker, ext, getCurrentPrice(ext.ticker))
-  );
+  const scores = metrics.map(ext => {
+    const q = getQuote(ext.ticker);
+    return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0);
+  });
   res.json(scores);
 });
 

@@ -419,6 +419,10 @@ export function getCurrentPrice(ticker: string): number {
   return quoteCache.get(ticker)?.price ?? 0;
 }
 
+export function getQuote(ticker: string): QuoteData | undefined {
+  return quoteCache.get(ticker);
+}
+
 export async function startFinnhubService(): Promise<void> {
   if (!FINNHUB_KEY) {
     logger.warn("FINNHUB_API_KEY missing — set it to enable live prices");

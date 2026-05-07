@@ -49,7 +49,7 @@ export interface StockScore {
   earningsRevisionsUp?: boolean;
 }
 
-export function computeScore(ticker: string, ext: ExtendedMetrics, currentPrice: number): StockScore {
+export function computeScore(ticker: string, ext: ExtendedMetrics, currentPrice: number, changePercent = 0): StockScore {
   const rg    = ext.revenueGrowthYoy ?? 0;
   const rgQ   = ext.revenueGrowthQoQ ?? 0;
   const gm    = ext.grossMargin      ?? 0;
@@ -99,12 +99,14 @@ export function computeScore(ticker: string, ext: ExtendedMetrics, currentPrice:
   // Growth Acceleration Score (0-25)
   const growthAccelScore = clamp((rg * 0.3) + (rgQ * 0.5), 0, 25);
 
-  // Momentum Score (0-25): revisions + price vs MAs
+  // Momentum Score (0-25): revisions + price vs MAs + intraday move
+  // Intraday component: ±5 pts scaled to ±10% day change, so live price movement shifts GVS visibly
+  const intradayPts = clamp(changePercent * 0.5, -5, 5);
   let momentumScore = 0;
   if (revisionsUp)      momentumScore += 15;
   if (priceAbove50MA)   momentumScore += 5;
   if (priceAbove200MA)  momentumScore += 5;
-  momentumScore = clamp(momentumScore, 0, 25);
+  momentumScore = clamp(momentumScore + intradayPts, 0, 25);
 
   // Valuation Efficiency Score (0-25): 25 / (PE / max(rgYoY, 1))
   let gvsValScore = 0;

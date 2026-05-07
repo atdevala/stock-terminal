@@ -22,7 +22,7 @@ export function Watchlist() {
   });
 
   const { data: scoresData } = useGetScores({
-    query: { refetchInterval: 30_000, queryKey: getGetScoresQueryKey() },
+    query: { refetchInterval: 5_000, queryKey: getGetScoresQueryKey() },
   });
 
   if (isLoadingStocks || !categories) {
