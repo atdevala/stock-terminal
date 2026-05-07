@@ -45,25 +45,25 @@ def col_letter(n):
 # Yellow = user input | Everything else = live GOOGLEFINANCE formula
 WATCH_COLS = [
     # (header,               width_px, user_input)
-    ("Ticker",               70,  False),   # A — static text
-    ("Company",              160, False),   # B — static text
-    ("Focus / Niche",        160, False),   # C — static text
-    ("Risk",                 75,  False),   # D — static text
-    ("Live Price",           80,  False),   # E — GOOGLEFINANCE
-    ("Today's %",            75,  False),   # F — GOOGLEFINANCE
-    ("1-Week %",             75,  False),   # G — GOOGLEFINANCE
-    ("1-Month %",            80,  False),   # H — GOOGLEFINANCE
-    ("3-Month %",            80,  False),   # I — GOOGLEFINANCE
-    ("YTD %",                75,  False),   # J — GOOGLEFINANCE
-    ("52W High",             80,  False),   # K — GOOGLEFINANCE
-    ("52W Low",              80,  False),   # L — GOOGLEFINANCE
-    ("% from 52W High",      100, False),   # M — formula
-    ("P/E Ratio",            75,  False),   # N — GOOGLEFINANCE
-    ("Market Cap",           100, False),   # O — GOOGLEFINANCE
-    ("Volume",               90,  False),   # P — GOOGLEFINANCE
-    ("Analyst Target",       90,  True),    # Q — user input (yellow)
-    ("Upside to Target",     90,  False),   # R — formula
-    ("Price Alert",          130, False),   # S — formula (buy zone flag)
+    ("Ticker",               72,  False),   # A — static text
+    ("Company",              165, False),   # B — static text
+    ("Focus / Niche",        165, False),   # C — static text
+    ("Risk",                 78,  False),   # D — static text
+    ("Live Price",           88,  False),   # E — GOOGLEFINANCE
+    ("Today's %",            82,  False),   # F — GOOGLEFINANCE
+    ("1-Week %",             82,  False),   # G — GOOGLEFINANCE (QUERY)
+    ("1-Month %",            88,  False),   # H — GOOGLEFINANCE (QUERY)
+    ("3-Month %",            88,  False),   # I — GOOGLEFINANCE (QUERY)
+    ("YTD %",                82,  False),   # J — GOOGLEFINANCE (QUERY)
+    ("52W High",             88,  False),   # K — GOOGLEFINANCE
+    ("52W Low",              88,  False),   # L — GOOGLEFINANCE
+    ("% from 52W High",      108, False),   # M — formula
+    ("P/E Ratio",            78,  False),   # N — GOOGLEFINANCE
+    ("Market Cap",           108, False),   # O — GOOGLEFINANCE
+    ("Volume",               98,  False),   # P — GOOGLEFINANCE
+    ("Analyst Target",       98,  True),    # Q — user input (yellow)
+    ("Upside to Target",     98,  False),   # R — formula
+    ("Price Alert",          195, False),   # S — formula (buy zone flag — needs room)
 ]
 N_COLS = len(WATCH_COLS)
 
@@ -114,14 +114,15 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
             stock["risk"],                              # D risk
             gf(t, "price"),                             # E live price
             f'=IFERROR(GOOGLEFINANCE("{t}","changepct")/100,"")',  # F today %
-            # G 1-Week: price vs first trading day in the past ~10 calendar days
-            f'=IFERROR(GOOGLEFINANCE("{t}","price")/INDEX(GOOGLEFINANCE("{t}","price",TODAY()-10,TODAY()-1),2,2)-1,"")',
-            # H 1-Month: price vs first trading day ~35 calendar days ago
-            f'=IFERROR(GOOGLEFINANCE("{t}","price")/INDEX(GOOGLEFINANCE("{t}","price",TODAY()-35,TODAY()-1),2,2)-1,"")',
-            # I 3-Month: price vs first trading day ~95 calendar days ago
-            f'=IFERROR(GOOGLEFINANCE("{t}","price")/INDEX(GOOGLEFINANCE("{t}","price",TODAY()-95,TODAY()-1),2,2)-1,"")',
-            # J YTD: price vs first trading day of this year
-            f'=IFERROR(GOOGLEFINANCE("{t}","price")/INDEX(GOOGLEFINANCE("{t}","price",DATE(YEAR(TODAY()),1,2),TODAY()-1),2,2)-1,"")',
+            # G–J: QUERY forces a single scalar — prevents array spillover during GOOGLEFINANCE load
+            # G 1-Week: price vs closest trading day ~7 days ago
+            f'=IFERROR(GOOGLEFINANCE("{t}","price")/QUERY(GOOGLEFINANCE("{t}","price",TODAY()-10,TODAY()-1),"SELECT Col2 LIMIT 1",1)-1,"")',
+            # H 1-Month: price vs closest trading day ~30 days ago
+            f'=IFERROR(GOOGLEFINANCE("{t}","price")/QUERY(GOOGLEFINANCE("{t}","price",TODAY()-35,TODAY()-1),"SELECT Col2 LIMIT 1",1)-1,"")',
+            # I 3-Month: price vs closest trading day ~90 days ago
+            f'=IFERROR(GOOGLEFINANCE("{t}","price")/QUERY(GOOGLEFINANCE("{t}","price",TODAY()-95,TODAY()-1),"SELECT Col2 LIMIT 1",1)-1,"")',
+            # J YTD: price vs first trading day of this calendar year
+            f'=IFERROR(GOOGLEFINANCE("{t}","price")/QUERY(GOOGLEFINANCE("{t}","price",DATE(YEAR(TODAY()),1,2),TODAY()-1),"SELECT Col2 LIMIT 1",1)-1,"")',
             gf(t, "high52"),                            # K 52W High
             gf(t, "low52"),                             # L 52W Low
             f'=IFERROR(E{first_data + len(all_values) - 4}/K{first_data + len(all_values) - 4}-1,"")',  # M % from 52W Hi
@@ -318,7 +319,7 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         reqs.append({"updateDimensionProperties": {
             "range": {"sheetId": sheet_id, "dimension": "ROWS",
                       "startIndex": nr0, "endIndex": nr0+1},
-            "properties": {"pixelSize": 34}, "fields": "pixelSize"}})
+            "properties": {"pixelSize": 42}, "fields": "pixelSize"}})
 
     # Conditional formatting — alert col S orange
     reqs.append({"addConditionalFormatRule": {"rule": {
