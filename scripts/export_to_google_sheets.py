@@ -114,10 +114,14 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
             stock["risk"],                              # D risk
             gf(t, "price"),                             # E live price
             f'=IFERROR(GOOGLEFINANCE("{t}","changepct")/100,"")',  # F today %
-            f'=IFERROR((GOOGLEFINANCE("{t}","price")/GOOGLEFINANCE("{t}","closeyest")^5)-1,"")',  # G 1W approx
-            f'=IFERROR(GOOGLEFINANCE("{t}","returnytd"),"")',  # H (use ytd as proxy)
-            f'=IFERROR(GOOGLEFINANCE("{t}","returnytd"),"")',  # I 3M (limited by GF)
-            f'=IFERROR(GOOGLEFINANCE("{t}","returnytd"),"")',  # J YTD
+            # G 1-Week: price vs first trading day in the past ~10 calendar days
+            f'=IFERROR(GOOGLEFINANCE("{t}","price")/INDEX(GOOGLEFINANCE("{t}","price",TODAY()-10,TODAY()-1),2,2)-1,"")',
+            # H 1-Month: price vs first trading day ~35 calendar days ago
+            f'=IFERROR(GOOGLEFINANCE("{t}","price")/INDEX(GOOGLEFINANCE("{t}","price",TODAY()-35,TODAY()-1),2,2)-1,"")',
+            # I 3-Month: price vs first trading day ~95 calendar days ago
+            f'=IFERROR(GOOGLEFINANCE("{t}","price")/INDEX(GOOGLEFINANCE("{t}","price",TODAY()-95,TODAY()-1),2,2)-1,"")',
+            # J YTD: price vs first trading day of this year
+            f'=IFERROR(GOOGLEFINANCE("{t}","price")/INDEX(GOOGLEFINANCE("{t}","price",DATE(YEAR(TODAY()),1,2),TODAY()-1),2,2)-1,"")',
             gf(t, "high52"),                            # K 52W High
             gf(t, "low52"),                             # L 52W Low
             f'=IFERROR(E{first_data + len(all_values) - 4}/K{first_data + len(all_values) - 4}-1,"")',  # M % from 52W Hi
