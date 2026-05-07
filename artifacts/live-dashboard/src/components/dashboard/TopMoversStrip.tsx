@@ -4,7 +4,7 @@ import { formatPercent } from "@/lib/formatters";
 
 export function TopMoversStrip() {
   const { data: movers, isLoading } = useGetMovers({
-    query: { refetchInterval: 5000 }
+    query: { refetchInterval: 5000, queryKey: ["movers"] }
   });
 
   if (isLoading || !movers) {

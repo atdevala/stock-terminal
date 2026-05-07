@@ -34,6 +34,9 @@ export interface ExtendedMetrics {
   ma50?: number;
   ma200?: number;
   earningsRevisionsUp?: boolean;
+  closes60d?: number[];
+  volumes60d?: number[];
+  epsSurprises?: number[];
 }
 
 export interface MarketStatusData {
@@ -46,6 +49,7 @@ export interface MarketStatusData {
 // In-memory state
 const quoteCache = new Map<string, QuoteData>();
 const extMetricsCache = new Map<string, ExtendedMetrics>();
+let spyCloses60d: number[] = [];
 let wsConnected = false;
 let marketStatus: MarketStatusData = {
   isOpen: false,
@@ -212,7 +216,8 @@ async function fetchCandlesAndMAs(ticker: string): Promise<void> {
     ) as Record<string, unknown>;
 
     if (data["s"] !== "ok") return;
-    const closes = data["c"] as number[];
+    const closes  = data["c"] as number[];
+    const volumes = data["v"] as number[] | undefined;
     if (!closes || closes.length < 10) return;
 
     const ma50  = closes.length >= 50
@@ -224,7 +229,14 @@ async function fetchCandlesAndMAs(ticker: string): Promise<void> {
       : closes.reduce((a, b) => a + b, 0) / closes.length;
 
     const ext = extMetricsCache.get(ticker) ?? { ticker };
-    extMetricsCache.set(ticker, { ...ext, ticker, ma50, ma200 });
+    extMetricsCache.set(ticker, {
+      ...ext,
+      ticker,
+      ma50,
+      ma200,
+      closes60d:  closes.slice(-60),
+      volumes60d: volumes ? volumes.slice(-60) : ext.volumes60d,
+    });
   } catch (err) {
     logger.warn({ ticker, err }, "Candles/MA fetch failed");
   }
@@ -243,6 +255,41 @@ async function fetchRecommendations(ticker: string): Promise<void> {
     extMetricsCache.set(ticker, { ...ext, ticker, earningsRevisionsUp: bullish >= bearish });
   } catch (err) {
     logger.warn({ ticker, err }, "Recommendations fetch failed");
+  }
+}
+
+/** Fetch last 4 quarters of EPS surprises for INS earnings slope component */
+async function fetchEarnings(ticker: string): Promise<void> {
+  try {
+    const data = await finnhubGet(`/stock/earnings?symbol=${ticker}&limit=4`) as Array<Record<string, unknown>>;
+    if (!Array.isArray(data) || data.length === 0) return;
+
+    const surprises = data
+      .filter(e => e["actual"] != null && e["estimate"] != null && (e["estimate"] as number) !== 0)
+      .map(e => ((e["actual"] as number) - (e["estimate"] as number)) / Math.abs(e["estimate"] as number) * 100)
+      .slice(0, 4);
+
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, { ...ext, ticker, epsSurprises: surprises });
+  } catch (err) {
+    logger.warn({ ticker, err }, "Earnings fetch failed");
+  }
+}
+
+/** Fetch SPY daily candles for 60-day relative strength calculations */
+async function fetchSpyCandles(): Promise<void> {
+  try {
+    const to   = Math.floor(Date.now() / 1000);
+    const from = to - 90 * 86400;
+    const data = await finnhubGet(
+      `/stock/candle?symbol=SPY&resolution=D&from=${from}&to=${to}`
+    ) as Record<string, unknown>;
+    if (data["s"] !== "ok") return;
+    const closes = data["c"] as number[];
+    if (closes && closes.length > 0) spyCloses60d = closes.slice(-60);
+    logger.info("  ✓ SPY candles loaded");
+  } catch (err) {
+    logger.warn({ err }, "SPY candles fetch failed");
   }
 }
 
@@ -290,6 +337,17 @@ async function loadInitialData(): Promise<void> {
     await fetchRecommendations(ticker);
   }
   logger.info("  ✓ Recommendations loaded");
+
+  // Phase 6: EPS surprises (for INS earnings slope)
+  logger.info("Phase 6: Fetching earnings surprises...");
+  for (const ticker of ALL_TICKERS) {
+    await fetchEarnings(ticker);
+  }
+  logger.info("  ✓ Earnings surprises loaded");
+
+  // Phase 7: SPY candles (for INS relative strength)
+  logger.info("Phase 7: Fetching SPY candles...");
+  await fetchSpyCandles();
 }
 
 // ── Market status ─────────────────────────────────────────────────────────────
@@ -331,6 +389,10 @@ async function periodicMetricsRefresh(): Promise<void> {
     for (const ticker of ALL_TICKERS) {
       await fetchRecommendations(ticker);
     }
+    for (const ticker of ALL_TICKERS) {
+      await fetchEarnings(ticker);
+    }
+    await fetchSpyCandles();
     logger.info("  ✓ Periodic metrics refresh complete");
   }
 }
@@ -421,6 +483,10 @@ export function getCurrentPrice(ticker: string): number {
 
 export function getQuote(ticker: string): QuoteData | undefined {
   return quoteCache.get(ticker);
+}
+
+export function getSpyCloses60d(): number[] {
+  return spyCloses60d;
 }
 
 export async function startFinnhubService(): Promise<void> {

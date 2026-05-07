@@ -21,6 +21,20 @@ function scoreColor(s: number): string {
   return "text-red-400 border-red-500/40 bg-red-500/10";
 }
 
+function insColor(s: number): string {
+  if (s >= 75) return "text-violet-300 border-violet-500/50 bg-violet-500/10";
+  if (s >= 55) return "text-violet-400 border-violet-600/40 bg-violet-600/10";
+  if (s >= 35) return "text-violet-500/80 border-violet-700/40 bg-violet-700/10";
+  return "text-zinc-500 border-zinc-700/40 bg-zinc-800/30";
+}
+
+function divergenceStyle(tag: string): string {
+  if (tag === "EARLY OPPORTUNITY")  return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
+  if (tag === "LATE STAGE RISK")    return "bg-red-500/15 text-red-300 border-red-500/30";
+  if (tag === "HIGH CONVICTION")    return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+  return "";
+}
+
 function fmt(v: number | undefined, suffix = "%", decimals = 1): string {
   if (v === undefined || v === null) return "—";
   return `${v >= 0 ? "+" : ""}${v.toFixed(decimals)}${suffix}`;
@@ -29,19 +43,22 @@ function fmt(v: number | undefined, suffix = "%", decimals = 1): string {
 function ScoreBadge({
   label,
   score,
+  colorFn,
   tooltip,
 }: {
   label: string;
   score: number;
+  colorFn?: (s: number) => string;
   tooltip: React.ReactNode;
 }) {
+  const color = (colorFn ?? scoreColor)(score);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <div
           className={cn(
             "inline-flex flex-col items-center cursor-help rounded border px-1.5 py-0.5 w-14 select-none",
-            scoreColor(score)
+            color
           )}
           data-testid={`score-badge-${label}`}
         >
@@ -76,7 +93,6 @@ function ScoreTooltipContent({ score }: { score: StockScore }) {
 
   return (
     <div className="text-xs" style={{ backgroundColor: "#000000", color: "#ffffff" }}>
-      {/* Score summary header */}
       <div className="grid grid-cols-3 border-b px-3 py-2.5" style={{ borderColor: "#27272a", backgroundColor: "#111111" }}>
         {[
           { label: "VQS", score: score.vqs, sublabel: score.vqsLabel },
@@ -90,8 +106,6 @@ function ScoreTooltipContent({ score }: { score: StockScore }) {
           </div>
         ))}
       </div>
-
-      {/* Stats breakdown */}
       <div className="px-3 py-2 space-y-1.5">
         {rows.map(([k, v]) => (
           <div key={k} className="flex justify-between items-center gap-6">
@@ -99,6 +113,57 @@ function ScoreTooltipContent({ score }: { score: StockScore }) {
             <span className="font-mono font-medium" style={{ color: v === "—" ? "#52525b" : "#ffffff" }}>{v}</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function InsTooltipContent({ score }: { score: StockScore }) {
+  const ins = score.ins ?? 0;
+  const c = score.insComponents;
+
+  const subRows: [string, number | undefined, string][] = [
+    ["Delta GVS",          c?.deltaGvs,          "25%"],
+    ["Volume Accel",       c?.volumeAccel,        "20%"],
+    ["Narrative Momentum", c?.narrativeMomentum,  "20%"],
+    ["EPS Slope",          c?.epsSlope,           "20%"],
+    ["Delta VQS",          c?.deltaVqs,           "15%"],
+  ];
+
+  const divTag = score.divergenceTag;
+
+  return (
+    <div className="text-xs" style={{ backgroundColor: "#000000", color: "#ffffff" }}>
+      {/* Header */}
+      <div className="px-3 py-2.5 border-b" style={{ borderColor: "#27272a", backgroundColor: "#0d0d14" }}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="uppercase tracking-widest text-[9px]" style={{ color: "#7c6fcd" }}>INS — Inflection Signal</span>
+          <span className={cn("text-lg font-bold leading-none", insColor(ins).split(" ")[0])}>{ins}</span>
+        </div>
+        <div className="text-[9px] leading-tight" style={{ color: "#a1a1aa" }}>{score.insLabel}</div>
+        {divTag && (
+          <div className={cn("mt-2 text-[9px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded border inline-block", divergenceStyle(divTag))}>
+            {divTag}
+          </div>
+        )}
+      </div>
+      {/* Sub-component breakdown */}
+      <div className="px-3 py-2 space-y-1.5">
+        <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "#52525b" }}>Score Breakdown</div>
+        {subRows.map(([k, v, w]) => (
+          <div key={k} className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-1.5">
+              <span style={{ color: "#52525b" }} className="font-mono text-[9px]">{w}</span>
+              <span style={{ color: "#71717a" }}>{k}</span>
+            </div>
+            <span className="font-mono font-medium" style={{ color: v !== undefined ? "#ffffff" : "#52525b" }}>
+              {v !== undefined ? v : "—"}
+            </span>
+          </div>
+        ))}
+      </div>
+      <div className="px-3 pb-2 text-[9px] italic" style={{ color: "#52525b" }}>
+        INS leads COS by 2–6 weeks in early breakouts.
       </div>
     </div>
   );
@@ -112,7 +177,7 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
           <div className="font-bold text-sm">{stock.ticker}</div>
           <div className="text-xs text-muted-foreground truncate max-w-[150px]">{stock.company}</div>
         </td>
-        <td colSpan={10} className="py-2.5 px-4 text-center text-muted-foreground text-sm">
+        <td colSpan={11} className="py-2.5 px-4 text-center text-muted-foreground text-sm">
           Loading...
         </td>
       </tr>
@@ -122,16 +187,23 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
   const isUp = quote.change >= 0;
   const changeColor = isUp ? "text-green-500" : "text-red-500";
 
-  // EXT CHG %: intraday move from today's open (distinct from DAY CHG % which is vs prev close)
   const extChangePct = quote.open > 0 ? ((quote.price - quote.open) / quote.open) * 100 : 0;
   const extIsUp = extChangePct >= 0;
   const extColor = extIsUp ? "text-green-500" : "text-red-500";
+
+  const divTag = score?.divergenceTag;
+  const hasDivTag = divTag && divTag.length > 0;
 
   return (
     <tr className="border-b border-border/50 hover:bg-muted/50 transition-colors group" data-testid={`stock-row-${stock.ticker}`}>
       <td className="py-2.5 px-4 align-top">
         <div className="font-bold text-sm" data-testid={`stock-ticker-${stock.ticker}`}>{stock.ticker}</div>
         <div className="text-xs text-muted-foreground truncate max-w-[200px]" title={stock.company}>{stock.company}</div>
+        {hasDivTag && (
+          <div className={cn("mt-1 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border inline-block", divergenceStyle(divTag))}>
+            {divTag}
+          </div>
+        )}
       </td>
       <td className="py-2.5 px-4 text-right align-top">
         <PriceCell
@@ -169,7 +241,7 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
         {quote.pe ? quote.pe.toFixed(2) : "—"}
       </td>
 
-      {/* Score columns */}
+      {/* VQS */}
       <td className="py-2.5 px-3 text-center align-middle hidden xl:table-cell">
         {score ? (
           <ScoreBadge
@@ -177,10 +249,10 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
             score={score.vqs}
             tooltip={<ScoreTooltipContent score={score} />}
           />
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        )}
+        ) : <span className="text-muted-foreground text-xs">—</span>}
       </td>
+
+      {/* GVS */}
       <td className="py-2.5 px-3 text-center align-middle hidden xl:table-cell">
         {score ? (
           <ScoreBadge
@@ -188,10 +260,10 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
             score={score.gvs}
             tooltip={<ScoreTooltipContent score={score} />}
           />
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        )}
+        ) : <span className="text-muted-foreground text-xs">—</span>}
       </td>
+
+      {/* COS */}
       <td className="py-2.5 px-3 text-center align-middle hidden xl:table-cell">
         {score ? (
           <ScoreBadge
@@ -199,9 +271,19 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
             score={score.cos}
             tooltip={<ScoreTooltipContent score={score} />}
           />
-        ) : (
-          <span className="text-muted-foreground text-xs">—</span>
-        )}
+        ) : <span className="text-muted-foreground text-xs">—</span>}
+      </td>
+
+      {/* INS */}
+      <td className="py-2.5 px-3 text-center align-middle hidden xl:table-cell">
+        {score?.ins !== undefined ? (
+          <ScoreBadge
+            label={`ins-${stock.ticker}`}
+            score={score.ins}
+            colorFn={insColor}
+            tooltip={<InsTooltipContent score={score} />}
+          />
+        ) : <span className="text-muted-foreground text-xs">—</span>}
       </td>
 
       <td className="py-2.5 px-4 text-center text-muted-foreground text-xs align-top hidden lg:table-cell">

@@ -22,7 +22,7 @@ export function PriceCell({ price, lastUpdated, className, testId, prefix = "", 
       } else if (price < prevPriceRef.current) {
         setFlashClass("animate-flash-red text-red-500");
       }
-      
+
       prevPriceRef.current = price;
       prevLastUpdatedRef.current = lastUpdated;
 
@@ -32,6 +32,7 @@ export function PriceCell({ price, lastUpdated, className, testId, prefix = "", 
 
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [price, lastUpdated]);
 
   return (

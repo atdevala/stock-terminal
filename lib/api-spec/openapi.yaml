@@ -233,6 +233,27 @@ components:
           type: boolean
         earningsRevisionsUp:
           type: boolean
+        ins:
+          type: number
+          description: Inflection Signal Score (0-100) — leading breakout indicator
+        insLabel:
+          type: string
+        divergenceTag:
+          type: string
+        insComponents:
+          type: object
+          properties:
+            deltaGvs:
+              type: number
+            deltaVqs:
+              type: number
+            volumeAccel:
+              type: number
+            epsSlope:
+              type: number
+            narrativeMomentum:
+              type: number
+          required: [deltaGvs, deltaVqs, volumeAccel, epsSlope, narrativeMomentum]
       required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel]
 
     MoverStock:

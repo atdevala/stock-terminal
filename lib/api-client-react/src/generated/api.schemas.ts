@@ -53,6 +53,14 @@ export interface MarketStatus {
   session: string;
 }
 
+export type StockScoreInsComponents = {
+  deltaGvs: number;
+  deltaVqs: number;
+  volumeAccel: number;
+  epsSlope: number;
+  narrativeMomentum: number;
+};
+
 export interface StockScore {
   ticker: string;
   /** Valuation Quality Score (0-100) */
@@ -75,6 +83,11 @@ export interface StockScore {
   priceAbove50MA?: boolean;
   priceAbove200MA?: boolean;
   earningsRevisionsUp?: boolean;
+  /** Inflection Signal Score (0-100) — leading breakout indicator */
+  ins?: number;
+  insLabel?: string;
+  divergenceTag?: string;
+  insComponents?: StockScoreInsComponents;
 }
 
 export interface MoverStock {

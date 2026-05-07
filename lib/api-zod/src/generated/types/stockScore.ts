@@ -5,6 +5,7 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { StockScoreInsComponents } from "./stockScoreInsComponents";
 
 export interface StockScore {
   ticker: string;
@@ -28,4 +29,9 @@ export interface StockScore {
   priceAbove50MA?: boolean;
   priceAbove200MA?: boolean;
   earningsRevisionsUp?: boolean;
+  /** Inflection Signal Score (0-100) — leading breakout indicator */
+  ins?: number;
+  insLabel?: string;
+  divergenceTag?: string;
+  insComponents?: StockScoreInsComponents;
 }

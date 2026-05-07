@@ -90,6 +90,21 @@ export const GetScoresResponseItem = zod.object({
   priceAbove50MA: zod.boolean().optional(),
   priceAbove200MA: zod.boolean().optional(),
   earningsRevisionsUp: zod.boolean().optional(),
+  ins: zod
+    .number()
+    .optional()
+    .describe("Inflection Signal Score (0-100) — leading breakout indicator"),
+  insLabel: zod.string().optional(),
+  divergenceTag: zod.string().optional(),
+  insComponents: zod
+    .object({
+      deltaGvs: zod.number(),
+      deltaVqs: zod.number(),
+      volumeAccel: zod.number(),
+      epsSlope: zod.number(),
+      narrativeMomentum: zod.number(),
+    })
+    .optional(),
 });
 export const GetScoresResponse = zod.array(GetScoresResponseItem);
 

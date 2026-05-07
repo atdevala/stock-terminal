@@ -44,7 +44,7 @@ function useEasternClock() {
 
 export function MarketStatusHeader() {
   const { data: status, isLoading, isError } = useGetMarketStatus({
-    query: { refetchInterval: 30000 }
+    query: { refetchInterval: 30000, queryKey: ["market-status"] }
   });
 
   const clockDisplay = useEasternClock();

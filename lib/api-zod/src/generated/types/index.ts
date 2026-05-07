@@ -14,4 +14,5 @@ export * from "./quotesResponse";
 export * from "./stockCategory";
 export * from "./stockInfo";
 export * from "./stockScore";
+export * from "./stockScoreInsComponents";
 export * from "./topMovers";
