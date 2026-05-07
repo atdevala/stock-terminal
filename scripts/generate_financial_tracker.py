@@ -130,6 +130,7 @@ CATEGORIES = [
         "stocks": [
             {"ticker": "NBIS",  "company": "Nebius Group",           "focus": "Neocloud + Clickhouse + AV Ride",       "risk": "High",      "notes": "The leading Neocloud and one of the most interesting companies in this portfolio. Nebius is a modern Amazon/Google-style company: it has a primary product (GPU cloud computing for AI companies that can't get capacity from AWS/Azure/GCP) AND multiple other revenue streams that could each become massive independently — Clickhouse (high-performance analytics database used by thousands of companies), AV Ride (autonomous vehicle tech), and others. The neocloud thesis: hyperscalers are capacity-constrained and have long waitlists for GPU compute, creating a massive opening for alternative cloud providers. NBIS is the best-positioned name to fill that gap. I believe this company could become a future Hyperscaler in the same way Amazon AWS or Google Cloud became defining infrastructure businesses. High conviction, long-term hold — this is the kind of company you look back on in 10 years and wish you owned more of."},
             {"ticker": "PLTR",  "company": "Palantir Technologies",  "focus": "AI software, government AI stack",      "risk": "Med-High",  "notes": "So integral to the entire US government AI stack that it is effectively a national security asset. Palantir's software (Gotham for government, Foundry for enterprise, AIP for AI) is deeply embedded in the Department of Defense, intelligence agencies, and dozens of federal programs. You don't rip out Palantir — agencies build entire workflows on top of it. The AI Platform (AIP) is now being adopted by commercial enterprises as well, opening a second growth vector. The $1.5T defense budget and accelerating government AI spending is a direct tailwind. Yes, the valuation is demanding, but for a company this strategically embedded, the premium is arguably justified. An outlier name outside the data center trade that belongs in a long-term AI portfolio."},
+            {"ticker": "RBRK",  "company": "Rubrik Inc",             "focus": "Cybersecurity, data management",        "risk": "Med-High",  "notes": "Rubrik is a cybersecurity and data management company focused on data resilience — protecting enterprise data from ransomware, ensuring recoverability, and managing data across hybrid cloud environments. As AI adoption accelerates, the volume and value of enterprise data explodes, making data protection and recovery increasingly critical. Rubrik has a subscription-based revenue model (good for predictability) and is growing fast. The risk: the cybersecurity market is crowded and competitive, and the valuation already prices in significant growth. Watch for: revenue acceleration, margin improvement, and any signs of customer concentration. Add on weakness."},
         ],
     },
     {
@@ -148,16 +149,6 @@ CATEGORIES = [
         "description": "Space infrastructure — long-duration compounder with SpaceX IPO catalyst",
         "stocks": [
             {"ticker": "RKLB",  "company": "Rocket Lab USA",  "focus": "Space economy & launch infrastructure",  "risk": "High", "notes": "Space economy and space infrastructure — huge future TAM over the next decade and beyond. Rocket Lab is the second most active launch company in the world (after SpaceX) and is the only credible alternative for small and medium satellite launches. Their Electron rocket has an exceptional launch record, and the larger Neutron rocket (in development) is designed to compete with SpaceX's Falcon 9 for medium payloads. The CEO (Peter Beck) is brilliant and has consistently delivered on technical milestones. Near-term catalyst: the SpaceX IPO (expected June 2026) will drive massive media attention to the space economy, and RKLB will benefit as the most investable public proxy. Longer term, Rocket Lab is building a vertically integrated space company (satellites, components, software, launch) which gives them multiple revenue streams. Speculative but with massive compounding upside if they execute over the next 5-10 years."},
-        ],
-    },
-    {
-        "name": "🔭 Long Term Watchlist",
-        "tab_color": "2E75B6",
-        "color": "2E75B6",
-        "description": "Long-term investment research candidates under active evaluation",
-        "stocks": [
-            {"ticker": "RBRK",  "company": "Rubrik Inc",       "focus": "Cybersecurity, data management",   "risk": "Med-High",  "notes": "Under active long-term evaluation. Rubrik is a cybersecurity and data management company focused on data resilience — protecting enterprise data from ransomware, ensuring recoverability, and managing data across hybrid cloud environments. As AI adoption accelerates, the volume and value of enterprise data explodes, making data protection and recovery increasingly critical. Rubrik has a subscription-based revenue model (good for predictability) and is growing fast. The risk: the cybersecurity market is crowded and competitive, and the valuation already prices in significant growth. Watch for: revenue acceleration, margin improvement, and any signs of customer concentration. Add on weakness."},
-            {"ticker": "NVO",   "company": "Novo Nordisk",     "focus": "GLP-1 drugs, diabetes & obesity",  "risk": "Medium",    "notes": "Under active long-term evaluation. Novo Nordisk is the global leader in GLP-1 drugs (Ozempic, Wegovy) for diabetes and obesity. The obesity drug market is potentially the largest pharmaceutical market ever — hundreds of millions of people globally are candidates for GLP-1 treatment, and early data suggests these drugs also reduce cardiovascular events, sleep apnea, and other conditions beyond weight loss. Novo has the manufacturing scale, the brand recognition, and the clinical data to dominate this market for years. The stock has pulled back significantly from its highs as competition from Eli Lilly (Mounjaro/Zepbound) has intensified — which creates a potentially attractive entry point. A long-term compounder in healthcare, completely uncorrelated to the AI trade."},
         ],
     },
     {
@@ -532,7 +523,6 @@ def build_dashboard(wb, categories, fetched_at=""):
         "☁️ Neoclouds & AI Software":  "Next-gen cloud & government AI software",
         "🛡️ Defense & Drones":         "$1.5T defense budget — drone & defense tech",
         "🚀 Space Economy":            "Space infrastructure — SpaceX IPO catalyst",
-        "🔭 Long Term Watchlist":      "Research candidates under active evaluation",
     }
     risk_profiles = {
         "⚛️ Quantum Computing":      "Very High",
@@ -544,7 +534,6 @@ def build_dashboard(wb, categories, fetched_at=""):
         "☁️ Neoclouds & AI Software":  "Medium-High",
         "🛡️ Defense & Drones":         "Very High",
         "🚀 Space Economy":            "High",
-        "🔭 Long Term Watchlist":      "Mixed",
     }
 
     data_cats = [c for c in categories if c["stocks"]]
