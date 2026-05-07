@@ -54,6 +54,38 @@ let marketStatus: MarketStatusData = {
   session: "closed",
 };
 
+// ── Rate-limit queue ──────────────────────────────────────────────────────────
+// Finnhub free tier: 60 calls/minute. We target 40/min (one per 1500ms) to stay
+// safely under the limit even when multiple phases are running.
+const RATE_INTERVAL_MS = 1500;
+const pendingQueue: Array<() => void> = [];
+let queueProcessing = false;
+let lastCallTime = 0;
+
+function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    pendingQueue.push(async () => {
+      try { resolve(await fn()); } catch (e) { reject(e); }
+    });
+    if (!queueProcessing) void processQueue();
+  });
+}
+
+async function processQueue(): Promise<void> {
+  queueProcessing = true;
+  while (pendingQueue.length > 0) {
+    const now = Date.now();
+    const wait = RATE_INTERVAL_MS - (now - lastCallTime);
+    if (wait > 0) await sleep(wait);
+    const task = pendingQueue.shift();
+    lastCallTime = Date.now();
+    if (task) await task();
+  }
+  queueProcessing = false;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function fmtMcap(v: number | null | undefined): string {
   if (!v) return "—";
   if (v >= 1e12) return `$${(v / 1e12).toFixed(2)}T`;
@@ -70,14 +102,7 @@ function fmtVol(v: number | null | undefined): string {
   return String(Math.round(v));
 }
 
-async function finnhubGet(path: string): Promise<unknown> {
-  const url = `https://finnhub.io/api/v1${path}&token=${FINNHUB_KEY}`;
-  const resp = await fetch(url, { signal: AbortSignal.timeout(8000) });
-  if (!resp.ok) throw new Error(`Finnhub ${path} → ${resp.status}`);
-  return resp.json();
-}
-
-async function sleep(ms: number) {
+async function sleep(ms: number): Promise<void> {
   return new Promise<void>(r => setTimeout(r, ms));
 }
 
@@ -85,7 +110,27 @@ function n(v: number | null | undefined): number | undefined {
   return (v === null || v === undefined || isNaN(v as number)) ? undefined : (v as number);
 }
 
-/** Fetch REST quote for a single ticker */
+// ── Rate-limited Finnhub fetch with 429 retry ─────────────────────────────────
+async function finnhubGet(path: string): Promise<unknown> {
+  return enqueue(async () => {
+    const url = `https://finnhub.io/api/v1${path}&token=${FINNHUB_KEY}`;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const resp = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+      if (resp.status === 429) {
+        const backoff = Math.pow(2, attempt) * 5_000; // 5s, 10s, 20s, 40s
+        logger.warn({ path, attempt: attempt + 1, backoff }, "Rate limited (429) — backing off");
+        await sleep(backoff);
+        continue;
+      }
+      if (!resp.ok) throw new Error(`Finnhub ${path} → ${resp.status}`);
+      return resp.json();
+    }
+    throw new Error(`Finnhub ${path} → 429 after 4 retries`);
+  });
+}
+
+// ── Per-ticker fetch functions ────────────────────────────────────────────────
+
 async function fetchQuoteRest(ticker: string): Promise<void> {
   try {
     const data = await finnhubGet(`/quote?symbol=${ticker}`) as Record<string, number>;
@@ -112,13 +157,11 @@ async function fetchQuoteRest(ticker: string): Promise<void> {
   }
 }
 
-/** Fetch 52W hi/lo, PE, and extended fundamental metrics */
 async function fetchFundamentals(ticker: string): Promise<void> {
   try {
     const data = await finnhubGet(`/stock/metric?symbol=${ticker}&metric=all`) as Record<string, unknown>;
     const m = (data["metric"] ?? {}) as Record<string, number | null>;
 
-    // Update quote cache
     const existing = quoteCache.get(ticker);
     if (existing) {
       quoteCache.set(ticker, {
@@ -129,7 +172,6 @@ async function fetchFundamentals(ticker: string): Promise<void> {
       });
     }
 
-    // Populate extended metrics cache
     const ext = extMetricsCache.get(ticker) ?? { ticker };
     extMetricsCache.set(ticker, {
       ...ext,
@@ -148,7 +190,6 @@ async function fetchFundamentals(ticker: string): Promise<void> {
   }
 }
 
-/** Fetch market cap from stock profile */
 async function fetchProfile(ticker: string): Promise<void> {
   try {
     const data = await finnhubGet(`/stock/profile2?symbol=${ticker}`) as Record<string, unknown>;
@@ -162,7 +203,6 @@ async function fetchProfile(ticker: string): Promise<void> {
   }
 }
 
-/** Fetch 220 days of daily candles and compute 50-day / 200-day MAs */
 async function fetchCandlesAndMAs(ticker: string): Promise<void> {
   try {
     const to   = Math.floor(Date.now() / 1000);
@@ -190,7 +230,6 @@ async function fetchCandlesAndMAs(ticker: string): Promise<void> {
   }
 }
 
-/** Fetch analyst recommendations — proxy for earnings revisions direction */
 async function fetchRecommendations(ticker: string): Promise<void> {
   try {
     const data = await finnhubGet(`/stock/recommendation?symbol=${ticker}`) as Array<Record<string, number>>;
@@ -207,62 +246,54 @@ async function fetchRecommendations(ticker: string): Promise<void> {
   }
 }
 
-/** Load all initial data in sequenced background phases */
+// ── Sequential startup phases ─────────────────────────────────────────────────
+// All phases run one after the other — no concurrent bursts.
+// All calls go through the rate-limit queue so 429s can't accumulate.
+
 async function loadInitialData(): Promise<void> {
   if (!FINNHUB_KEY) {
     logger.warn("FINNHUB_API_KEY not set — live prices unavailable");
     return;
   }
 
-  // Phase 1: REST quotes (foreground)
-  logger.info("Fetching initial quotes for all tickers...");
+  // Phase 1: REST quotes
+  logger.info("Phase 1: Fetching quotes...");
   for (const ticker of ALL_TICKERS) {
     await fetchQuoteRest(ticker);
-    await sleep(100);
   }
   logger.info(`  ✓ Quotes loaded: ${quoteCache.size}/${ALL_TICKERS.length}`);
 
-  // Phase 2: Fundamentals + extended metrics (background)
-  void (async () => {
-    for (const ticker of ALL_TICKERS) {
-      await fetchFundamentals(ticker);
-      await sleep(200);
-    }
-    logger.info("  ✓ Fundamentals loaded");
-  })();
+  // Phase 2: Fundamentals (52W H/L, PE, margins, etc.)
+  logger.info("Phase 2: Fetching fundamentals...");
+  for (const ticker of ALL_TICKERS) {
+    await fetchFundamentals(ticker);
+  }
+  logger.info("  ✓ Fundamentals loaded");
 
-  // Phase 3: Market cap profiles (background, after fundamentals settle)
-  void (async () => {
-    await sleep(8_000);
-    for (const ticker of ALL_TICKERS) {
-      await fetchProfile(ticker);
-      await sleep(200);
-    }
-    logger.info("  ✓ Profiles loaded");
-  })();
+  // Phase 3: Market cap profiles
+  logger.info("Phase 3: Fetching profiles...");
+  for (const ticker of ALL_TICKERS) {
+    await fetchProfile(ticker);
+  }
+  logger.info("  ✓ Profiles loaded");
 
-  // Phase 4: Candles for 50/200-day MAs (background, staggered after profiles)
-  void (async () => {
-    await sleep(20_000);
-    for (const ticker of ALL_TICKERS) {
-      await fetchCandlesAndMAs(ticker);
-      await sleep(250);
-    }
-    logger.info("  ✓ Moving averages loaded");
-  })();
+  // Phase 4: Candles for 50/200-day MAs
+  logger.info("Phase 4: Fetching candles/MAs...");
+  for (const ticker of ALL_TICKERS) {
+    await fetchCandlesAndMAs(ticker);
+  }
+  logger.info("  ✓ Moving averages loaded");
 
-  // Phase 5: Analyst recommendations (background, after candles)
-  void (async () => {
-    await sleep(40_000);
-    for (const ticker of ALL_TICKERS) {
-      await fetchRecommendations(ticker);
-      await sleep(250);
-    }
-    logger.info("  ✓ Recommendations loaded");
-  })();
+  // Phase 5: Analyst recommendations
+  logger.info("Phase 5: Fetching recommendations...");
+  for (const ticker of ALL_TICKERS) {
+    await fetchRecommendations(ticker);
+  }
+  logger.info("  ✓ Recommendations loaded");
 }
 
-/** Refresh market status every 30 seconds */
+// ── Market status ─────────────────────────────────────────────────────────────
+
 async function refreshMarketStatus(): Promise<void> {
   if (!FINNHUB_KEY) return;
   try {
@@ -276,38 +307,36 @@ async function refreshMarketStatus(): Promise<void> {
   } catch { /* keep previous value */ }
 }
 
-/** Periodic REST refresh every 30 seconds (WebSocket is primary) */
+// ── Periodic refreshes ────────────────────────────────────────────────────────
+
 async function periodicRestRefresh(): Promise<void> {
   while (true) {
-    await sleep(30_000);
+    // WebSocket handles real-time; this is a 60s safety-net fallback
+    await sleep(60_000);
     for (const ticker of ALL_TICKERS) {
       await fetchQuoteRest(ticker);
-      await sleep(150);
     }
   }
 }
 
-/** Refresh extended metrics (fundamentals + MAs) every 6 hours */
 async function periodicMetricsRefresh(): Promise<void> {
   while (true) {
     await sleep(6 * 60 * 60 * 1000);
     for (const ticker of ALL_TICKERS) {
       await fetchFundamentals(ticker);
-      await sleep(300);
     }
     for (const ticker of ALL_TICKERS) {
       await fetchCandlesAndMAs(ticker);
-      await sleep(300);
     }
     for (const ticker of ALL_TICKERS) {
       await fetchRecommendations(ticker);
-      await sleep(300);
     }
     logger.info("  ✓ Periodic metrics refresh complete");
   }
 }
 
-/** Connect to Finnhub WebSocket for real-time trade events */
+// ── WebSocket ─────────────────────────────────────────────────────────────────
+
 function connectWebSocket(): void {
   if (!FINNHUB_KEY) return;
 
@@ -364,7 +393,8 @@ function connectWebSocket(): void {
   });
 }
 
-/** Exported API */
+// ── Exported API ──────────────────────────────────────────────────────────────
+
 export function getAllQuotes(): QuoteData[] {
   return ALL_TICKERS.map(t => quoteCache.get(t)).filter(Boolean) as QuoteData[];
 }
@@ -389,7 +419,6 @@ export function getCurrentPrice(ticker: string): number {
   return quoteCache.get(ticker)?.price ?? 0;
 }
 
-/** Call once at server startup */
 export async function startFinnhubService(): Promise<void> {
   if (!FINNHUB_KEY) {
     logger.warn("FINNHUB_API_KEY missing — set it to enable live prices");
