@@ -603,14 +603,26 @@ def fetch_analyst_data():
             elif pre is not None:
                 ext_pct = pre / 100
 
+            high52     = info.get("fiftyTwoWeekHigh")
+            chg_pct    = info.get("regularMarketChangePercent")  # e.g. 5.68 for +5.68%
+
+            # vs 52W High as decimal (e.g. -0.04 for -4%)
+            vs52 = None
+            if price and high52 and high52 > 0:
+                vs52 = (price / high52) - 1
+
             result[t] = {
                 "rating":    rating,
                 "target":    f"${target:,.2f}" if target else "—",
                 "technical": tech,
-                "ext_pct":   ext_pct,     # None → "—" when writing
+                "ext_pct":   ext_pct,       # None → "—" when writing
+                "price":     price,          # numeric, None if unavailable
+                "chg_pct":   chg_pct / 100 if chg_pct is not None else None,  # decimal
+                "vs52":      vs52,           # decimal, None if unavailable
             }
         except Exception:
-            result[t] = {"rating": "—", "target": "—", "technical": "—", "ext_pct": None}
+            result[t] = {"rating": "—", "target": "—", "technical": "—",
+                         "ext_pct": None, "price": None, "chg_pct": None, "vs52": None}
 
     found = sum(1 for v in result.values() if v["rating"] != "—")
     print(f"  ✓  Analyst data: {found}/{len(result)} tickers")
@@ -639,7 +651,7 @@ def build_dashboard_sheet(spreadsheet, analyst_data, cat_sheet_ids):
     # Title block
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
     rows.append([f"📊  STOCK WATCHLIST DASHBOARD"] + [""] * (N_DASH - 1))
-    rows.append([f"Prices auto-refresh every ~20 min via Google Finance  |  Analyst data last updated: {now_str}"]
+    rows.append([f"Prices & % change as of last script run: {now_str}  |  Re-run script to refresh  |  Category tabs have live GOOGLEFINANCE auto-refresh"]
                 + [""] * (N_DASH - 1))
     rows.append([c[0] for c in DASH_COLS])   # row 3 = column headers
     HEADER_ROWS = 3   # rows before first stock (0-indexed: 0,1,2)
@@ -667,23 +679,25 @@ def build_dashboard_sheet(spreadsheet, analyst_data, cat_sheet_ids):
 
         for s in cat["stocks"]:
             t  = s["ticker"]
-            gf_price = f'=IFERROR(GOOGLEFINANCE("{t}","price"),"")'
-            gf_pct   = f'=IFERROR(GOOGLEFINANCE("{t}","changepct")/100,"")'
-            # % from 52W high: (price/high52)-1
-            gf_52w   = f'=IFERROR(GOOGLEFINANCE("{t}","price")/GOOGLEFINANCE("{t}","high52")-1,"")'
-            ad       = analyst_data.get(t, {})
+            ad = analyst_data.get(t, {})
 
-            ext_val = ad.get("ext_pct")   # decimal or None
+            # Use direct yfinance values — no GOOGLEFINANCE formulas on Dashboard
+            # so prices always show instantly without "Loading..." delays.
+            price_val = ad.get("price")
+            chg_val   = ad.get("chg_pct")
+            vs52_val  = ad.get("vs52")
+            ext_val   = ad.get("ext_pct")
+
             rows.append([
-                t,                                          # A ticker
-                s["company"],                               # B company
-                gf_price,                                   # C live price
-                gf_pct,                                     # D today %
-                ext_val if ext_val is not None else "—",    # E ext hrs %
-                gf_52w,                                     # F vs 52W high
-                ad.get("rating", "—"),                      # G analyst rating
-                ad.get("target", "—"),                      # H price target
-                ad.get("technical", "—"),                   # I technical signal
+                t,                                                   # A ticker
+                s["company"],                                        # B company
+                price_val if price_val is not None else "—",         # C live price
+                chg_val   if chg_val   is not None else "—",         # D today %
+                ext_val   if ext_val   is not None else "—",         # E ext hrs %
+                vs52_val  if vs52_val  is not None else "—",         # F vs 52W high
+                ad.get("rating", "—"),                               # G analyst rating
+                ad.get("target", "—"),                               # H price target
+                ad.get("technical", "—"),                            # I technical signal
             ])
             stock_row_info.append((current_row, t))
             current_row += 1
