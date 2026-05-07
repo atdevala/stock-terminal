@@ -2,8 +2,9 @@
 """
 Watchlist export to Google Sheets.
 
+- Dashboard tab: compact stock list by category + news feed below
 - All price/metric columns use =GOOGLEFINANCE() → auto-updates every ~20 min
-- News Feed sheet pulls latest headlines from Yahoo Finance (refresh by re-running)
+- Analyst ratings + technical signals fetched from yfinance on export
 - No TradingView API needed — GOOGLEFINANCE covers all the same data
 """
 
@@ -297,123 +298,343 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
     print(f"  ✓  {name}")
 
 
-# ── News Feed sheet ───────────────────────────────────────────────────────────
-def build_news_sheet(spreadsheet):
-    """Fetch latest headlines from Yahoo Finance and write to a News Feed tab."""
-    print("  Fetching news headlines from Yahoo Finance...")
+# ── Dashboard columns (compact watchlist) ─────────────────────────────────────
+DASH_COLS = [
+    ("Ticker",           58),   # A — static text
+    ("Company",         155),   # B — static text
+    ("Live Price",       82),   # C — GOOGLEFINANCE
+    ("Today %",          72),   # D — GOOGLEFINANCE
+    ("vs 52W High",      98),   # E — GOOGLEFINANCE formula
+    ("Analyst Rating",  148),   # F — static from yfinance
+    ("Price Target",     90),   # G — static from yfinance
+    ("Technical Signal",170),   # H — static from yfinance
+]
+N_DASH = len(DASH_COLS)
 
+RATING_MAP = {
+    "strong_buy":  "⭐ Strong Buy",
+    "buy":         "✓ Buy",
+    "hold":        "◯ Hold",
+    "underperform":"↓ Underperform",
+    "sell":        "✗ Sell",
+    "strong_sell": "✗ Strong Sell",
+}
+
+
+def fetch_analyst_data():
+    """Pull analyst ratings + technical signals for all tickers via yfinance."""
+    print("  Fetching analyst data & technical signals from Yahoo Finance...")
+    all_stocks = []
+    for cat in CATEGORIES:
+        for s in cat["stocks"]:
+            all_stocks.append(s)
+
+    result = {}
+    for s in all_stocks:
+        t = s["ticker"]
+        try:
+            info = yf.Ticker(t).info
+            rec        = info.get("recommendationKey", "") or ""
+            n_analysts = info.get("numberOfAnalystOpinions") or 0
+            target     = info.get("targetMeanPrice")
+            ma50       = info.get("fiftyDayAverage")
+            ma200      = info.get("twoHundredDayAverage")
+            price      = info.get("currentPrice") or info.get("regularMarketPrice")
+
+            rating = RATING_MAP.get(rec.lower(), "—")
+            if n_analysts and rating != "—":
+                rating += f"  ({int(n_analysts)})"
+
+            tech = "—"
+            if price and ma50 and ma200:
+                a50, a200 = price > ma50, price > ma200
+                if a50 and a200:
+                    tech = "↑ Bullish (>50 & 200MA)"
+                elif a50:
+                    tech = "→ Mixed  (>50MA, <200MA)"
+                elif a200:
+                    tech = "→ Mixed  (<50MA, >200MA)"
+                else:
+                    tech = "↓ Bearish (<50 & 200MA)"
+            elif price and ma50:
+                tech = ("↑ Above 50MA" if price > ma50 else "↓ Below 50MA")
+
+            result[t] = {
+                "rating":    rating,
+                "target":    f"${target:,.2f}" if target else "—",
+                "technical": tech,
+            }
+        except Exception:
+            result[t] = {"rating": "—", "target": "—", "technical": "—"}
+
+    found = sum(1 for v in result.values() if v["rating"] != "—")
+    print(f"  ✓  Analyst data: {found}/{len(result)} tickers")
+    return result
+
+
+# ── Dashboard sheet ────────────────────────────────────────────────────────────
+def build_dashboard_sheet(spreadsheet, analyst_data):
+    """
+    Single Dashboard tab:
+      • Top — compact watchlist grouped by category
+      • Bottom — news feed (all tickers, 3 headlines each)
+    """
     try:
-        ws = spreadsheet.add_worksheet(title="📰 News Feed", rows=2000, cols=5)
+        ws = spreadsheet.add_worksheet(title="📊 Dashboard", rows=3000, cols=N_DASH + 1)
     except Exception:
-        ws = spreadsheet.worksheet("📰 News Feed")
+        ws = spreadsheet.worksheet("📊 Dashboard")
 
     sheet_id = ws._properties["sheetId"]
 
-    # Collect all tickers
+    # ── Build row data ─────────────────────────────────────────────────────────
+    rows = []
+
+    def blank(): return [""] * N_DASH
+
+    # Title block
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+    rows.append([f"📊  STOCK WATCHLIST DASHBOARD"] + [""] * (N_DASH - 1))
+    rows.append([f"Prices auto-refresh every ~20 min via Google Finance  |  Analyst data last updated: {now_str}"]
+                + [""] * (N_DASH - 1))
+    rows.append([c[0] for c in DASH_COLS])   # row 3 = column headers
+    HEADER_ROWS = 3   # rows before first stock (0-indexed: 0,1,2)
+
+    # Track row index (0-based) for GOOGLEFINANCE formula references
+    current_row = HEADER_ROWS  # 0-based index of next row to write
+
+    # Per-category compact watchlist
+    cat_row_ranges = []   # (cat_hex, cat_r0, cat_r1) for colour formatting
+    stock_row_info = []   # (0-based row, ticker) for conditional formats
+
+    for cat in CATEGORIES:
+        if not cat["stocks"]:
+            continue
+
+        cat_hex = cat["color"]
+        cat_r0  = current_row
+
+        # Category header
+        rows.append([cat["name"]] + [""] * (N_DASH - 1))
+        current_row += 1
+
+        for s in cat["stocks"]:
+            t  = s["ticker"]
+            gf_price = f'=IFERROR(GOOGLEFINANCE("{t}","price"),"")'
+            gf_pct   = f'=IFERROR(GOOGLEFINANCE("{t}","changepct")/100,"")'
+            # % from 52W high: (price/high52)-1
+            gf_52w   = f'=IFERROR(GOOGLEFINANCE("{t}","price")/GOOGLEFINANCE("{t}","high52")-1,"")'
+            ad       = analyst_data.get(t, {})
+
+            rows.append([
+                t,                        # A ticker
+                s["company"],             # B company
+                gf_price,                 # C live price
+                gf_pct,                   # D today %
+                gf_52w,                   # E vs 52W high
+                ad.get("rating", "—"),    # F analyst rating
+                ad.get("target", "—"),    # G price target
+                ad.get("technical", "—"), # H technical signal
+            ])
+            stock_row_info.append((current_row, t))
+            current_row += 1
+
+        cat_row_ranges.append((cat_hex, cat_r0, current_row))
+        rows.append(blank())   # gap between categories
+        current_row += 1
+
+    watchlist_end_row = current_row   # 0-based, first row after watchlist
+
+    # ── News section ──────────────────────────────────────────────────────────
+    print("  Fetching news headlines from Yahoo Finance...")
     all_stocks = []
     for cat in CATEGORIES:
         for s in cat["stocks"]:
             s["_cat"] = cat["name"]
             all_stocks.append(s)
 
-    rows = [["📰  STOCK NEWS FEED", "", "", "", ""]]
-    rows.append([f"Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M')}", "", "", "", ""])
-    rows.append([""])
-    rows.append(["Ticker", "Company", "Category", "Headline", "Published"])
+    news_header_r = current_row
+    rows.append(["📰  STOCK NEWS FEED"] + [""] * (N_DASH - 1))
+    current_row += 1
+    rows.append(["Ticker", "Company", "Category", "Headline", "Published"]
+                + [""] * (N_DASH - 5))
+    current_row += 1
+    news_data_r0 = current_row
 
-    news_rows_start = 5  # 1-based
+    news_ticker_rows = []   # (0-based row, ticker) for alternating bg
 
+    alt = 0
+    ticker_alt = {}
     for stock in all_stocks:
+        t = stock["ticker"]
+        if t not in ticker_alt:
+            ticker_alt[t] = alt
+            alt = 1 - alt
         try:
-            ticker_obj = yf.Ticker(stock["ticker"])
-            news_items = ticker_obj.news or []
-            if not news_items:
-                rows.append([stock["ticker"], stock["company"], stock["_cat"],
-                             "(no recent news found)", ""])
+            items = yf.Ticker(t).news or []
+            if not items:
+                rows.append([t, stock["company"], stock["_cat"], "(no recent news)", ""]
+                            + [""] * (N_DASH - 5))
+                news_ticker_rows.append((current_row, t))
+                current_row += 1
                 continue
-            for item in news_items[:4]:   # max 4 headlines per stock
+            for item in items[:3]:
                 content = item.get("content", {})
-                title   = content.get("title") or item.get("title", "No title")
-                # Published time
-                pub_ts  = content.get("pubDate") or item.get("providerPublishTime")
+                headline = content.get("title") or item.get("title", "No title")
+                pub_ts   = content.get("pubDate") or item.get("providerPublishTime")
                 if isinstance(pub_ts, (int, float)):
                     pub = datetime.fromtimestamp(pub_ts).strftime("%Y-%m-%d %H:%M")
                 elif isinstance(pub_ts, str):
                     pub = pub_ts[:16]
                 else:
                     pub = ""
-                rows.append([stock["ticker"], stock["company"], stock["_cat"], title, pub])
+                rows.append([t, stock["company"], stock["_cat"], headline, pub]
+                            + [""] * (N_DASH - 5))
+                news_ticker_rows.append((current_row, t))
+                current_row += 1
         except Exception as e:
-            rows.append([stock["ticker"], stock["company"], stock.get("_cat",""),
-                         f"(error fetching news: {e})", ""])
+            rows.append([t, stock["company"], stock.get("_cat", ""),
+                         f"(error: {e})", ""] + [""] * (N_DASH - 5))
+            news_ticker_rows.append((current_row, t))
+            current_row += 1
 
-        rows.append(["", "", "", "", ""])   # blank row between stocks
+        rows.append(blank())   # gap between tickers
+        current_row += 1
 
+    # ── Write to sheet ────────────────────────────────────────────────────────
     ws.update(rows, "A1", value_input_option="USER_ENTERED")
 
-    # ── Format ────────────────────────────────────────────────────────────────
+    # ── Batch formatting ──────────────────────────────────────────────────────
     reqs = []
 
-    def rng(r0,r1,c0,c1):
-        return {"sheetId": sheet_id,"startRowIndex":r0,"endRowIndex":r1,
-                "startColumnIndex":c0,"endColumnIndex":c1}
-    def fmt_req(r0,r1,c0,c1,bg=None,bold=False,fg="000000",size=10,h="LEFT",wrap=False):
-        obj = {"textFormat":{"bold":bold,"fontSize":size,"foregroundColor":color(fg)},
-               "horizontalAlignment":h,"verticalAlignment":"MIDDLE"}
-        if bg: obj["backgroundColor"] = color(bg)
+    def rng(r0, r1, c0, c1):
+        return {"sheetId": sheet_id, "startRowIndex": r0, "endRowIndex": r1,
+                "startColumnIndex": c0, "endColumnIndex": c1}
+
+    def fmt_req(r0, r1, c0, c1, bg=None, bold=False, fg="000000",
+                italic=False, size=10, h="LEFT", wrap=False, fmt=None):
+        obj = {
+            "textFormat": {"bold": bold, "italic": italic, "fontSize": size,
+                           "foregroundColor": color(fg)},
+            "horizontalAlignment": h,
+            "verticalAlignment": "MIDDLE",
+        }
+        if bg:   obj["backgroundColor"] = color(bg)
         if wrap: obj["wrapStrategy"] = "WRAP"
-        return {"repeatCell":{"range":rng(r0,r1,c0,c1),
-                              "cell":{"userEnteredFormat":obj},
-                              "fields":"userEnteredFormat"}}
-    def merge(r0,r1,c0,c1):
-        return {"mergeCells":{"range":rng(r0,r1,c0,c1),"mergeType":"MERGE_ALL"}}
+        if fmt:  obj["numberFormat"] = fmt
+        return {"repeatCell": {"range": rng(r0, r1, c0, c1),
+                               "cell": {"userEnteredFormat": obj},
+                               "fields": "userEnteredFormat"}}
 
-    # Title
-    reqs += [merge(0,1,0,5), fmt_req(0,1,0,5,bg=DARK_BLUE,bold=True,fg=WHITE,size=14,h="CENTER")]
-    reqs += [merge(1,2,0,5), fmt_req(1,2,0,5,bg="D9E1F2",fg=DARK_BLUE,size=10,h="CENTER")]
-    # Header row
-    reqs.append(fmt_req(3,4,0,5,bg=DARK_BLUE,bold=True,fg=WHITE,size=10,h="CENTER"))
+    def merge(r0, r1, c0, c1):
+        return {"mergeCells": {"range": rng(r0, r1, c0, c1), "mergeType": "MERGE_ALL"}}
 
-    # Column widths
-    col_widths = [70, 150, 180, 450, 130]
-    for ci, px in enumerate(col_widths):
-        reqs.append({"updateDimensionProperties":{
-            "range":{"sheetId":sheet_id,"dimension":"COLUMNS",
-                     "startIndex":ci,"endIndex":ci+1},
-            "properties":{"pixelSize":px},"fields":"pixelSize"}})
+    def dim(dimension, i0, i1, px):
+        return {"updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": dimension,
+                      "startIndex": i0, "endIndex": i1},
+            "properties": {"pixelSize": px}, "fields": "pixelSize"}}
 
-    # Row heights for news rows — tall enough for headline text
-    for ri in range(news_rows_start - 1, len(rows)):
-        reqs.append({"updateDimensionProperties":{
-            "range":{"sheetId":sheet_id,"dimension":"ROWS",
-                     "startIndex":ri,"endIndex":ri+1},
-            "properties":{"pixelSize":30},"fields":"pixelSize"}})
+    # Dashboard title rows
+    reqs += [merge(0,1,0,N_DASH), fmt_req(0,1,0,N_DASH, bg=DARK_BLUE, bold=True,
+                                          fg=WHITE, size=14, h="CENTER")]
+    reqs += [merge(1,2,0,N_DASH), fmt_req(1,2,0,N_DASH, bg="D9E1F2", italic=True,
+                                          fg=DARK_BLUE, size=9, h="CENTER")]
+    reqs.append(fmt_req(2,3,0,N_DASH, bg=DARK_BLUE, bold=True, fg=WHITE, size=10, h="CENTER"))
+    reqs += [dim("ROWS",0,1,32), dim("ROWS",1,2,18), dim("ROWS",2,3,28)]
 
-    # Alternating colours + headline wrap for data rows
-    ticker_seen = {}
-    alt = 0
-    for ri, row_data in enumerate(rows[news_rows_start - 1:], start=news_rows_start - 1):
-        if not any(row_data):
-            continue
-        t = row_data[0] if row_data[0] else None
-        if t and t not in ticker_seen:
-            ticker_seen[t] = alt
-            alt = 1 - alt
-        bg = "EBF3FB" if ticker_seen.get(t, 0) == 0 else "FFFFFF"
-        reqs.append(fmt_req(ri, ri+1, 0, 5, bg=bg, size=10))
-        reqs.append(fmt_req(ri, ri+1, 3, 4, bg=bg, size=10, wrap=True))   # headline col
-        reqs.append(fmt_req(ri, ri+1, 0, 1, bg=bg, bold=True, fg="000070C0", size=10))  # ticker bold blue
+    # Category header rows & stock rows
+    for cat_hex, cr0, cr1 in cat_row_ranges:
+        # Category name row
+        reqs += [merge(cr0, cr0+1, 0, N_DASH),
+                 fmt_req(cr0, cr0+1, 0, N_DASH, bg=cat_hex, bold=True,
+                         fg=WHITE, size=11, h="LEFT")]
+        reqs.append(dim("ROWS", cr0, cr0+1, 26))
+        # Stock rows in this category
+        for i, (sr0, _) in enumerate(
+                [(r, t) for r, t in stock_row_info if cr0 < r < cr1]):
+            bg = "F2F2F2" if i % 2 == 0 else "FFFFFF"
+            reqs.append(fmt_req(sr0, sr0+1, 0, N_DASH, bg=bg, size=10))
+            # Ticker bold blue
+            reqs.append(fmt_req(sr0, sr0+1, 0, 1, bg=bg, bold=True,
+                                fg="0070C0", size=10))
+            # % format for Today % (col D=3) and vs 52W High (col E=4)
+            for ci in [3, 4]:
+                reqs.append(fmt_req(sr0, sr0+1, ci, ci+1, bg=bg,
+                                    fmt={"type":"PERCENT","pattern":"0.00%"}, size=10))
+            reqs.append(dim("ROWS", sr0, sr0+1, 22))
 
-    reqs.append({"updateSheetProperties":{
-        "properties":{"sheetId":sheet_id,"tabColor":color("1B2A4A")},
-        "fields":"tabColor"}})
-    reqs.append({"updateSheetProperties":{
-        "properties":{"sheetId":sheet_id,
-                      "gridProperties":{"frozenRowCount":4}},
-        "fields":"gridProperties.frozenRowCount"}})
+    # ── Conditional formats on compact stock rows ──────────────────────────────
+    if stock_row_info:
+        stock_rows_r0 = stock_row_info[0][0]
+        stock_rows_r1 = stock_row_info[-1][0] + 1
+        # Today % green
+        reqs.append({"addConditionalFormatRule": {"rule": {
+            "ranges": [rng(stock_rows_r0, stock_rows_r1, 3, 4)],
+            "booleanRule": {
+                "condition": {"type": "NUMBER_GREATER", "values": [{"userEnteredValue": "0"}]},
+                "format": {"backgroundColor": color("375623"),
+                           "textFormat": {"bold": True, "foregroundColor": color(WHITE)}},
+            }}, "index": 0}})
+        # Today % red
+        reqs.append({"addConditionalFormatRule": {"rule": {
+            "ranges": [rng(stock_rows_r0, stock_rows_r1, 3, 4)],
+            "booleanRule": {
+                "condition": {"type": "NUMBER_LESS", "values": [{"userEnteredValue": "0"}]},
+                "format": {"backgroundColor": color("9C0006"),
+                           "textFormat": {"bold": True, "foregroundColor": color(WHITE)}},
+            }}, "index": 1}})
+        # vs 52W High orange when ≤ -20%
+        reqs.append({"addConditionalFormatRule": {"rule": {
+            "ranges": [rng(stock_rows_r0, stock_rows_r1, 4, 5)],
+            "booleanRule": {
+                "condition": {"type": "NUMBER_LESS_THAN_EQ",
+                              "values": [{"userEnteredValue": "-0.2"}]},
+                "format": {"backgroundColor": color(ALERT_ORG),
+                           "textFormat": {"bold": True, "foregroundColor": color(WHITE)}},
+            }}, "index": 2}})
+
+    # News section title & header
+    reqs += [merge(news_header_r, news_header_r+1, 0, N_DASH),
+             fmt_req(news_header_r, news_header_r+1, 0, N_DASH,
+                     bg=DARK_BLUE, bold=True, fg=WHITE, size=13, h="LEFT")]
+    reqs.append(dim("ROWS", news_header_r, news_header_r+1, 30))
+    reqs.append(fmt_req(news_header_r+1, news_header_r+2, 0, N_DASH,
+                        bg=DARK_BLUE, bold=True, fg=WHITE, size=10, h="CENTER"))
+    reqs.append(dim("ROWS", news_header_r+1, news_header_r+2, 26))
+
+    # News data rows — alternating colour, wrap headline (col D=3)
+    for nr0, t in news_ticker_rows:
+        bg = "EBF3FB" if ticker_alt.get(t, 0) == 0 else "FFFFFF"
+        reqs.append(fmt_req(nr0, nr0+1, 0, N_DASH, bg=bg, size=10))
+        reqs.append(fmt_req(nr0, nr0+1, 0, 1, bg=bg, bold=True, fg="0070C0", size=10))
+        reqs.append(fmt_req(nr0, nr0+1, 3, 4, bg=bg, size=10, wrap=True))
+        reqs.append(dim("ROWS", nr0, nr0+1, 32))
+
+    # Column widths (dashboard cols)
+    for ci, (_, px) in enumerate(DASH_COLS):
+        reqs.append(dim("COLUMNS", ci, ci+1, px))
+
+    # Freeze first 3 rows (title + header)
+    reqs.append({"updateSheetProperties": {
+        "properties": {"sheetId": sheet_id,
+                       "gridProperties": {"frozenRowCount": 3}},
+        "fields": "gridProperties.frozenRowCount"}})
+
+    # Tab colour — dark blue
+    reqs.append({"updateSheetProperties": {
+        "properties": {"sheetId": sheet_id, "tabColor": color(DARK_BLUE)},
+        "fields": "tabColor"}})
 
     spreadsheet.batch_update({"requests": reqs})
-    print(f"  ✓  📰 News Feed ({len(rows)-4} rows)")
+
+    # Move dashboard to first position
+    spreadsheet.batch_update({"requests": [{"updateSheetProperties": {
+        "properties": {"sheetId": sheet_id, "index": 0},
+        "fields": "index"}}]})
+
+    n_stocks  = len(stock_row_info)
+    n_news    = len(news_ticker_rows)
+    print(f"  ✓  📊 Dashboard ({n_stocks} stocks, {n_news} news rows)")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -452,29 +673,34 @@ def main():
     except Exception:
         pass
 
-    print("\nBuilding watchlist tabs...")
+    print("\nFetching analyst & technical data...")
+    analyst_data = fetch_analyst_data()
+
+    print("\nBuilding Dashboard tab...")
+    build_dashboard_sheet(sh, analyst_data)
+
+    print("\nBuilding detail watchlist tabs...")
     for cat in CATEGORIES:
         if not cat["stocks"]:
             continue
         build_watchlist_sheet(sh, cat, {})
 
-    print("\nBuilding news feed...")
-    build_news_sheet(sh)
-
-    # Remove default blank sheet
-    try:
-        sh.del_worksheet(sh.worksheet("Sheet1"))
-    except Exception:
-        pass
+    # Remove leftover default blank sheet
+    for name in ("Sheet1", "_temp_"):
+        try:
+            sh.del_worksheet(sh.worksheet(name))
+        except Exception:
+            pass
 
     print()
     print("=" * 62)
-    print("✅  Stock Watchlist created in Google Sheets!")
+    print("✅  Stock Watchlist updated in Google Sheets!")
     print(f"🔗  {sh.url}")
     print("=" * 62)
-    print("• All prices & metrics update automatically every ~20 min")
-    print("• Yellow cells = your inputs (analyst targets)")
-    print("• Re-run this script anytime to refresh the news feed")
+    print("• Dashboard: compact view + news feed (first tab)")
+    print("• Detail tabs: full metrics, notes, buy-zone alerts")
+    print("• Prices auto-refresh every ~20 min via Google Finance")
+    print("• Re-run this script anytime to refresh analyst data & news")
     print()
 
 
