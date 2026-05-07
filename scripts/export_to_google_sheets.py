@@ -749,11 +749,14 @@ def build_dashboard_sheet(spreadsheet, analyst_data, cat_sheet_ids):
             # Ticker bold blue
             reqs.append(fmt_req(sr0, sr0+1, 0, 1, bg=bg, bold=True,
                                 fg="0070C0", size=10))
+            # Currency for Live Price (C=2)
+            reqs.append(fmt_req(sr0, sr0+1, 2, 3, bg=bg,
+                                fmt={"type":"CURRENCY","pattern":'"$"#,##0.00'}, size=10))
             # % format for Today % (D=3), Ext Hrs % (E=4), vs 52W High (F=5)
             for ci in [3, 4, 5]:
                 reqs.append(fmt_req(sr0, sr0+1, ci, ci+1, bg=bg,
                                     fmt={"type":"PERCENT","pattern":"0.00%"}, size=10))
-            reqs.append(dim("ROWS", sr0, sr0+1, 22))
+            reqs.append(dim("ROWS", sr0, sr0+1, 24))
 
     # ── Conditional formats on compact stock rows ──────────────────────────────
     if stock_row_info:
