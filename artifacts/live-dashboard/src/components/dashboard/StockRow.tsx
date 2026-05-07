@@ -48,7 +48,11 @@ function ScoreBadge({
           <span className="font-bold text-sm leading-tight">{score}</span>
         </div>
       </TooltipTrigger>
-      <TooltipContent side="left" className="max-w-[260px] p-0 overflow-hidden">
+      <TooltipContent
+        side="left"
+        className="max-w-[290px] p-0 overflow-hidden !bg-black border border-zinc-700 shadow-2xl rounded-lg"
+        style={{ backgroundColor: "#000000" }}
+      >
         {tooltip}
       </TooltipContent>
     </Tooltip>
@@ -65,35 +69,34 @@ function ScoreTooltipContent({ score }: { score: StockScore }) {
     ["Debt / Equity",  score.debtToEquity !== undefined ? score.debtToEquity.toFixed(2) : "—"],
     ["P/E (TTM)",      score.pe !== undefined ? score.pe.toFixed(1) : "—"],
     ["EV / Sales",     score.evSales !== undefined ? score.evSales.toFixed(1) + "×" : "—"],
-    ["Price > 50MA",   score.priceAbove50MA !== undefined ? (score.priceAbove50MA ? "Yes" : "No") : "—"],
-    ["Price > 200MA",  score.priceAbove200MA !== undefined ? (score.priceAbove200MA ? "Yes" : "No") : "—"],
-    ["Analyst Trend",  score.earningsRevisionsUp !== undefined ? (score.earningsRevisionsUp ? "Bullish" : "Bearish") : "—"],
+    ["Price > 50-day MA",  score.priceAbove50MA !== undefined ? (score.priceAbove50MA ? "✓ Yes" : "✗ No") : "—"],
+    ["Price > 200-day MA", score.priceAbove200MA !== undefined ? (score.priceAbove200MA ? "✓ Yes" : "✗ No") : "—"],
+    ["Analyst Trend",  score.earningsRevisionsUp !== undefined ? (score.earningsRevisionsUp ? "↑ Bullish" : "↓ Bearish") : "—"],
   ];
 
   return (
-    <div className="text-xs">
-      <div className="grid grid-cols-3 gap-0 border-b border-border px-3 py-2 font-semibold text-foreground bg-muted/30">
-        <div className="text-center">
-          <div className="text-muted-foreground uppercase tracking-wide text-[10px]">VQS</div>
-          <div className={cn("text-base font-bold", scoreColor(score.vqs).split(" ")[0])}>{score.vqs}</div>
-          <div className="text-[10px] text-muted-foreground leading-tight">{score.vqsLabel}</div>
-        </div>
-        <div className="text-center border-x border-border">
-          <div className="text-muted-foreground uppercase tracking-wide text-[10px]">GVS</div>
-          <div className={cn("text-base font-bold", scoreColor(score.gvs).split(" ")[0])}>{score.gvs}</div>
-          <div className="text-[10px] text-muted-foreground leading-tight">{score.gvsLabel}</div>
-        </div>
-        <div className="text-center">
-          <div className="text-muted-foreground uppercase tracking-wide text-[10px]">COS</div>
-          <div className={cn("text-base font-bold", scoreColor(score.cos).split(" ")[0])}>{score.cos}</div>
-          <div className="text-[10px] text-muted-foreground leading-tight">{score.cosLabel}</div>
-        </div>
+    <div className="text-xs" style={{ backgroundColor: "#000000", color: "#ffffff" }}>
+      {/* Score summary header */}
+      <div className="grid grid-cols-3 border-b px-3 py-2.5" style={{ borderColor: "#27272a", backgroundColor: "#111111" }}>
+        {[
+          { label: "VQS", score: score.vqs, sublabel: score.vqsLabel },
+          { label: "GVS", score: score.gvs, sublabel: score.gvsLabel },
+          { label: "COS", score: score.cos, sublabel: score.cosLabel },
+        ].map((col, i) => (
+          <div key={col.label} className={cn("text-center px-2", i === 1 && "border-x")} style={{ borderColor: "#27272a" }}>
+            <div className="uppercase tracking-widest text-[9px] mb-0.5" style={{ color: "#71717a" }}>{col.label}</div>
+            <div className={cn("text-lg font-bold leading-none mb-1", scoreColor(col.score).split(" ")[0])}>{col.score}</div>
+            <div className="text-[9px] leading-tight" style={{ color: "#a1a1aa" }}>{col.sublabel}</div>
+          </div>
+        ))}
       </div>
-      <div className="px-3 py-2 space-y-1">
+
+      {/* Stats breakdown */}
+      <div className="px-3 py-2 space-y-1.5">
         {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-4">
-            <span className="text-muted-foreground">{k}</span>
-            <span className="font-mono text-foreground">{v}</span>
+          <div key={k} className="flex justify-between items-center gap-6">
+            <span style={{ color: "#71717a" }}>{k}</span>
+            <span className="font-mono font-medium" style={{ color: v === "—" ? "#52525b" : "#ffffff" }}>{v}</span>
           </div>
         ))}
       </div>
