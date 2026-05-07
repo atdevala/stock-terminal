@@ -188,7 +188,7 @@ def fetch_historical_returns():
     return result
 
 
-def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None):
+def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None, analyst_data=None):
     """Create one watchlist tab for a category."""
     stocks  = cat["stocks"]
     cat_hex = cat["color"]
@@ -220,32 +220,45 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map, hist_data=None):
     all_values.append(headers)
 
     first_data = 5   # 1-based row index of first stock
-    hist_data = hist_data or {}
+    hist_data    = hist_data    or {}
+    analyst_data = analyst_data or {}
     for stock in stocks:
-        t = stock["ticker"]
-        h = hist_data.get(t, {})
-        # Historical % returns from yfinance — reliable, always visible (no GOOGLEFINANCE flakiness)
+        t  = stock["ticker"]
+        h  = hist_data.get(t, {})
+        ad = analyst_data.get(t, {})
+        # Historical % returns — yfinance direct (no GOOGLEFINANCE flakiness)
         w1  = h.get("w1");  m1 = h.get("m1");  m3 = h.get("m3");  ytd = h.get("ytd")
+        # Fundamental & market data — yfinance direct
+        high52    = ad.get("high52")
+        low52     = ad.get("low52")
+        vs52      = ad.get("vs52")
+        pe        = ad.get("pe")
+        marketcap = ad.get("marketcap")
+        volume    = ad.get("volume")
+        # BUY ZONE computed directly — no formula dependency
+        buy_zone = ("▼  BUY ZONE  (-20%+ off 52W high)"
+                    if vs52 is not None and vs52 < -0.2 else "—")
+        r_row = first_data + len(all_values) - 4   # 1-based row for upside formula (Q/E)
         row = [
-            t,                                          # A ticker
-            stock["company"],                           # B company
-            stock["focus"],                             # C focus
-            stock["risk"],                              # D risk
-            gf(t, "price"),                             # E live price (single GOOGLEFINANCE call — reliable)
+            t,                                              # A ticker
+            stock["company"],                               # B company
+            stock["focus"],                                 # C focus
+            stock["risk"],                                  # D risk
+            gf(t, "price"),                                 # E live price (single reliable GOOGLEFINANCE call)
             f'=IFERROR(GOOGLEFINANCE("{t}","changepct")/100,"")',  # F today %
-            w1  if w1  is not None else "—",            # G 1-Week  (yfinance direct)
-            m1  if m1  is not None else "—",            # H 1-Month (yfinance direct)
-            m3  if m3  is not None else "—",            # I 3-Month (yfinance direct)
-            ytd if ytd is not None else "—",            # J YTD    (yfinance direct)
-            gf(t, "high52"),                            # K 52W High
-            gf(t, "low52"),                             # L 52W Low
-            f'=IFERROR(E{first_data + len(all_values) - 4}/K{first_data + len(all_values) - 4}-1,"")',  # M % from 52W Hi
-            gf(t, "pe"),                                # N P/E
-            gf(t, "marketcap"),                         # O market cap
-            gf(t, "volume"),                            # P volume
-            "",                                         # Q analyst target (user fills)
-            f'=IFERROR(Q{first_data + len(all_values) - 4}/E{first_data + len(all_values) - 4}-1,"")',  # R upside
-            f'=IF(AND(K{first_data + len(all_values) - 4}>0,E{first_data + len(all_values) - 4}>0,M{first_data + len(all_values) - 4}<-0.2),"▼  BUY ZONE  (-20%+ off 52W high)","—")',  # S alert
+            w1  if w1  is not None else "—",                # G 1-Week  (yfinance)
+            m1  if m1  is not None else "—",                # H 1-Month (yfinance)
+            m3  if m3  is not None else "—",                # I 3-Month (yfinance)
+            ytd if ytd is not None else "—",                # J YTD    (yfinance)
+            high52    if high52    is not None else "—",    # K 52W High  (yfinance)
+            low52     if low52     is not None else "—",    # L 52W Low   (yfinance)
+            vs52      if vs52      is not None else "—",    # M % from 52W Hi (yfinance)
+            pe        if pe        is not None else "—",    # N P/E       (yfinance)
+            marketcap if marketcap is not None else "—",    # O Market Cap (yfinance)
+            volume    if volume    is not None else "—",    # P Volume    (yfinance)
+            "",                                             # Q analyst target (user fills)
+            f'=IFERROR(Q{r_row}/E{r_row}-1,"")',            # R upside vs user target
+            buy_zone,                                       # S BUY ZONE alert (yfinance)
         ]
         all_values.append(row)
 
@@ -647,12 +660,16 @@ def fetch_analyst_data():
                 ext_pct = pre / 100
 
             high52     = info.get("fiftyTwoWeekHigh")
+            low52      = info.get("fiftyTwoWeekLow")
             chg_pct    = info.get("regularMarketChangePercent")  # e.g. 5.68 for +5.68%
+            pe         = info.get("trailingPE")
+            marketcap  = info.get("marketCap")
+            volume     = info.get("volume") or info.get("averageVolume")
 
             # vs 52W High as decimal (e.g. -0.04 for -4%)
             vs52 = None
             if price and high52 and high52 > 0:
-                vs52 = (price / high52) - 1
+                vs52 = round((price / high52) - 1, 6)
 
             result[t] = {
                 "rating":    rating,
@@ -662,10 +679,17 @@ def fetch_analyst_data():
                 "price":     price,          # numeric, None if unavailable
                 "chg_pct":   chg_pct / 100 if chg_pct is not None else None,  # decimal
                 "vs52":      vs52,           # decimal, None if unavailable
+                "high52":    high52,         # raw number, None if unavailable
+                "low52":     low52,
+                "pe":        round(pe, 2) if pe else None,
+                "marketcap": marketcap,
+                "volume":    volume,
             }
         except Exception:
             result[t] = {"rating": "—", "target": "—", "technical": "—",
-                         "ext_pct": None, "price": None, "chg_pct": None, "vs52": None}
+                         "ext_pct": None, "price": None, "chg_pct": None, "vs52": None,
+                         "high52": None, "low52": None, "pe": None,
+                         "marketcap": None, "volume": None}
 
     found = sum(1 for v in result.values() if v["rating"] != "—")
     print(f"  ✓  Analyst data: {found}/{len(result)} tickers")
@@ -935,7 +959,7 @@ def main():
     for cat in CATEGORIES:
         if not cat["stocks"]:
             continue
-        gid = build_watchlist_sheet(sh, cat, {}, hist_data=hist_data)
+        gid = build_watchlist_sheet(sh, cat, {}, hist_data=hist_data, analyst_data=analyst_data)
         cat_sheet_ids[cat["name"]] = gid
 
     print("\nBuilding Dashboard tab...")
