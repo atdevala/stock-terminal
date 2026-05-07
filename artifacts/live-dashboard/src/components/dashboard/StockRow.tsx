@@ -122,6 +122,11 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
   const isUp = quote.change >= 0;
   const changeColor = isUp ? "text-green-500" : "text-red-500";
 
+  // EXT CHG %: intraday move from today's open (distinct from DAY CHG % which is vs prev close)
+  const extChangePct = quote.open > 0 ? ((quote.price - quote.open) / quote.open) * 100 : 0;
+  const extIsUp = extChangePct >= 0;
+  const extColor = extIsUp ? "text-green-500" : "text-red-500";
+
   return (
     <tr className="border-b border-border/50 hover:bg-muted/50 transition-colors group" data-testid={`stock-row-${stock.ticker}`}>
       <td className="py-2.5 px-4 align-top">
@@ -139,12 +144,12 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
       </td>
       <td className="py-2.5 px-4 text-right align-top">
         <div className={cn("font-mono text-sm", changeColor)} data-testid={`stock-change-${stock.ticker}`}>
-          {isUp ? "+" : ""}{formatCurrency(quote.change)}
+          {formatPercent(quote.changePercent)}
         </div>
       </td>
       <td className="py-2.5 px-4 text-right align-top">
-        <div className={cn("font-mono text-sm", changeColor)} data-testid={`stock-change-percent-${stock.ticker}`}>
-          {formatPercent(quote.changePercent)}
+        <div className={cn("font-mono text-sm", extColor)} data-testid={`stock-change-percent-${stock.ticker}`}>
+          {quote.open > 0 ? formatPercent(extChangePct) : "—"}
         </div>
       </td>
       <td className="py-2.5 px-4 text-right text-muted-foreground font-mono text-xs align-top">

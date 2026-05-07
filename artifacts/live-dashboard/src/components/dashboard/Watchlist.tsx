@@ -57,8 +57,8 @@ export function Watchlist() {
                 <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   <th className="py-3 px-4 font-medium">Symbol/Company</th>
                   <th className="py-3 px-4 font-medium text-right">Price</th>
-                  <th className="py-3 px-4 font-medium text-right">Chg $</th>
-                  <th className="py-3 px-4 font-medium text-right">Chg %</th>
+                  <th className="py-3 px-4 font-medium text-right">Day Chg %</th>
+                  <th className="py-3 px-4 font-medium text-right">Ext Chg %</th>
                   <th className="py-3 px-4 font-medium text-right">Day H/L</th>
                   <th className="py-3 px-4 font-medium text-right hidden md:table-cell">52W H/L</th>
                   <th className="py-3 px-4 font-medium text-right hidden sm:table-cell">P/E</th>
