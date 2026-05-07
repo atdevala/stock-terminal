@@ -3,9 +3,12 @@ import {
   useGetStocks,
   useGetQuotes,
   useGetScores,
+  useGetSignalDeltas,
   getGetQuotesQueryKey,
   getGetScoresQueryKey,
+  getGetSignalDeltasQueryKey,
   type StockScore,
+  type SignalDelta,
 } from "@workspace/api-client-react";
 import { StockRow } from "./StockRow";
 import { stripEmoji } from "@/lib/formatters";
@@ -60,6 +63,10 @@ export function Watchlist() {
     query: { refetchInterval: 5_000, queryKey: getGetScoresQueryKey() },
   });
 
+  const { data: deltasData } = useGetSignalDeltas({
+    query: { refetchInterval: 60_000, queryKey: getGetSignalDeltasQueryKey() },
+  });
+
   if (isLoadingStocks || !categories) {
     return (
       <div className="p-6 space-y-8">
@@ -73,8 +80,9 @@ export function Watchlist() {
     );
   }
 
-  const quotesMap = new Map(quotesData?.quotes?.map(q => [q.ticker, q]) ?? []);
-  const scoresMap = new Map(scoresData?.map(s => [s.ticker, s]) ?? []);
+  const quotesMap  = new Map(quotesData?.quotes?.map(q => [q.ticker, q]) ?? []);
+  const scoresMap  = new Map(scoresData?.map(s => [s.ticker, s]) ?? []);
+  const deltasMap  = new Map<string, SignalDelta>(deltasData?.map(d => [d.ticker, d]) ?? []);
 
   return (
     <div className="flex-1 overflow-auto p-6 space-y-6">
@@ -242,6 +250,7 @@ export function Watchlist() {
                         stock={stock}
                         quote={quotesMap.get(stock.ticker)}
                         score={scoresMap.get(stock.ticker)}
+                        signalDelta={deltasMap.get(stock.ticker)}
                       />
                     ))}
                   </tbody>

@@ -1,4 +1,4 @@
-import type { Quote, StockInfo, StockScore } from "@workspace/api-client-react";
+import type { Quote, StockInfo, StockScore, SignalDelta } from "@workspace/api-client-react";
 import { PriceCell } from "./PriceCell";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
@@ -12,6 +12,7 @@ interface StockRowProps {
   stock: StockInfo;
   quote?: Quote;
   score?: StockScore;
+  signalDelta?: SignalDelta;
 }
 
 function scoreColor(s: number): string {
@@ -61,15 +62,63 @@ function fmt(v: number | undefined, suffix = "%", decimals = 1): string {
   return `${v >= 0 ? "+" : ""}${v.toFixed(decimals)}${suffix}`;
 }
 
+// ── Delta helpers ──────────────────────────────────────────────────────────────
+
+type SignalKey = "vqs" | "gvs" | "cos" | "ins" | "acs";
+
+/** Returns the best available delta: 1D preferred, falls back to 7D */
+function getBestDelta(sd: SignalDelta | undefined, key: SignalKey): number | null {
+  if (!sd) return null;
+  const v1D = sd.delta1D?.[key];
+  if (v1D !== undefined && v1D !== null) return v1D;
+  const v7D = sd.delta7D?.[key];
+  if (v7D !== undefined && v7D !== null) return v7D;
+  return null;
+}
+
+/** Returns which period we're showing ("1D" | "7D" | null) */
+function getDeltaPeriod(sd: SignalDelta | undefined, key: SignalKey): "1D" | "7D" | null {
+  if (!sd) return null;
+  const v1D = sd.delta1D?.[key];
+  if (v1D !== undefined && v1D !== null) return "1D";
+  const v7D = sd.delta7D?.[key];
+  if (v7D !== undefined && v7D !== null) return "7D";
+  return null;
+}
+
+// ── Delta chip inside badge ────────────────────────────────────────────────────
+
+function DeltaLine({ delta, period }: { delta: number | null; period: "1D" | "7D" | null }) {
+  if (delta === null || period === null) return null;
+  if (delta === 0) return (
+    <span className="text-[9px] leading-none text-zinc-600 font-medium tabular-nums">±0</span>
+  );
+  const pos = delta > 0;
+  return (
+    <span className={cn(
+      "text-[9px] leading-none font-semibold tabular-nums",
+      pos ? "text-emerald-400" : "text-red-400"
+    )}>
+      {pos ? "+" : ""}{delta}
+    </span>
+  );
+}
+
+// ── Score badge ────────────────────────────────────────────────────────────────
+
 function ScoreBadge({
   label,
   score,
   colorFn,
+  delta,
+  period,
   tooltip,
 }: {
   label: string;
   score: number;
   colorFn?: (s: number) => string;
+  delta: number | null;
+  period: "1D" | "7D" | null;
   tooltip: React.ReactNode;
 }) {
   const color = (colorFn ?? scoreColor)(score);
@@ -84,6 +133,7 @@ function ScoreBadge({
           data-testid={`score-badge-${label}`}
         >
           <span className="font-bold text-sm leading-tight">{score}</span>
+          <DeltaLine delta={delta} period={period} />
         </div>
       </TooltipTrigger>
       <TooltipContent
@@ -96,6 +146,8 @@ function ScoreBadge({
     </Tooltip>
   );
 }
+
+// ── Tooltip contents ───────────────────────────────────────────────────────────
 
 function ScoreTooltipContent({ score }: { score: StockScore }) {
   const rows: [string, string][] = [
@@ -230,7 +282,9 @@ function AcsTooltipContent({ score }: { score: StockScore }) {
   );
 }
 
-export function StockRow({ stock, quote, score }: StockRowProps) {
+// ── Row ────────────────────────────────────────────────────────────────────────
+
+export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
   if (!quote) {
     return (
       <tr className="border-b border-border/50 hover:bg-muted/50 transition-colors">
@@ -336,6 +390,8 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
           <ScoreBadge
             label={`vqs-${stock.ticker}`}
             score={score.vqs}
+            delta={getBestDelta(signalDelta, "vqs")}
+            period={getDeltaPeriod(signalDelta, "vqs")}
             tooltip={<ScoreTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -347,6 +403,8 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
           <ScoreBadge
             label={`gvs-${stock.ticker}`}
             score={score.gvs}
+            delta={getBestDelta(signalDelta, "gvs")}
+            period={getDeltaPeriod(signalDelta, "gvs")}
             tooltip={<ScoreTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -358,6 +416,8 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
           <ScoreBadge
             label={`cos-${stock.ticker}`}
             score={score.cos}
+            delta={getBestDelta(signalDelta, "cos")}
+            period={getDeltaPeriod(signalDelta, "cos")}
             tooltip={<ScoreTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -370,6 +430,8 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
             label={`ins-${stock.ticker}`}
             score={score.ins}
             colorFn={insColor}
+            delta={getBestDelta(signalDelta, "ins")}
+            period={getDeltaPeriod(signalDelta, "ins")}
             tooltip={<InsTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -382,6 +444,8 @@ export function StockRow({ stock, quote, score }: StockRowProps) {
             label={`acs-${stock.ticker}`}
             score={score.acs}
             colorFn={acsColor}
+            delta={getBestDelta(signalDelta, "acs")}
+            period={getDeltaPeriod(signalDelta, "acs")}
             tooltip={<AcsTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
