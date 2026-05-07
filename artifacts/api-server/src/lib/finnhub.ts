@@ -489,6 +489,9 @@ export function getSpyCloses60d(): number[] {
   return spyCloses60d;
 }
 
+// Expose rate-limited fetch so scanner.ts can share the same queue
+export { finnhubGet };
+
 export async function startFinnhubService(): Promise<void> {
   if (!FINNHUB_KEY) {
     logger.warn("FINNHUB_API_KEY missing — set it to enable live prices");

@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startFinnhubService } from "./lib/finnhub";
+import { startScannerService } from "./lib/scanner";
 
 const rawPort = process.env["PORT"];
 
@@ -26,4 +27,6 @@ app.listen(port, (err) => {
 
   // Start Finnhub WebSocket + REST data service
   void startFinnhubService();
+  // Start INS market scanner (delayed 10s, then every 15 min)
+  void startScannerService();
 });

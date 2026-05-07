@@ -5,10 +5,13 @@
  * API specification
  * OpenAPI spec version: 0.1.0
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import type {
+  MutationFunction,
   QueryFunction,
   QueryKey,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult,
 } from "@tanstack/react-query";
@@ -17,6 +20,8 @@ import type {
   HealthStatus,
   MarketStatus,
   QuotesResponse,
+  RefreshScanner200,
+  ScannerResponse,
   StockCategory,
   StockScore,
   TopMovers,
@@ -446,3 +451,159 @@ export function useGetMovers<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Get INS market scanner results (80-stock universe)
+ */
+export const getGetScannerUrl = () => {
+  return `/api/scanner`;
+};
+
+export const getScanner = async (
+  options?: RequestInit,
+): Promise<ScannerResponse> => {
+  return customFetch<ScannerResponse>(getGetScannerUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetScannerQueryKey = () => {
+  return [`/api/scanner`] as const;
+};
+
+export const getGetScannerQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScanner>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScanner>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetScannerQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getScanner>>> = ({
+    signal,
+  }) => getScanner({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScanner>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScannerQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScanner>>
+>;
+export type GetScannerQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get INS market scanner results (80-stock universe)
+ */
+
+export function useGetScanner<
+  TData = Awaited<ReturnType<typeof getScanner>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getScanner>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScannerQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Trigger a new scanner scan (manual refresh)
+ */
+export const getRefreshScannerUrl = () => {
+  return `/api/scanner/refresh`;
+};
+
+export const refreshScanner = async (
+  options?: RequestInit,
+): Promise<RefreshScanner200> => {
+  return customFetch<RefreshScanner200>(getRefreshScannerUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getRefreshScannerMutationOptions = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshScanner>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof refreshScanner>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["refreshScanner"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof refreshScanner>>,
+    void
+  > = () => {
+    return refreshScanner(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RefreshScannerMutationResult = NonNullable<
+  Awaited<ReturnType<typeof refreshScanner>>
+>;
+
+export type RefreshScannerMutationError = ErrorType<unknown>;
+
+/**
+ * @summary Trigger a new scanner scan (manual refresh)
+ */
+export const useRefreshScanner = <
+  TError = ErrorType<unknown>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof refreshScanner>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof refreshScanner>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getRefreshScannerMutationOptions(options));
+};

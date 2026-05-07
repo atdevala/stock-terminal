@@ -8,6 +8,7 @@ import {
   isWsConnected,
 } from "../lib/finnhub";
 import { computeScore } from "../lib/scores";
+import { getScannerState, triggerScan } from "../lib/scanner";
 
 const router = Router();
 
@@ -47,6 +48,15 @@ router.get("/movers", (_req, res) => {
     ticker: q.ticker, company: q.ticker, price: q.price, changePercent: q.changePercent,
   }));
   res.json({ gainers, losers });
+});
+
+router.get("/scanner", (_req, res) => {
+  res.json(getScannerState());
+});
+
+router.post("/scanner/refresh", (_req, res) => {
+  triggerScan();
+  res.json({ message: "Scan triggered" });
 });
 
 export default router;

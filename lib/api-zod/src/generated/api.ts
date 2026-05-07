@@ -129,3 +129,56 @@ export const GetMoversResponse = zod.object({
     }),
   ),
 });
+
+/**
+ * @summary Get INS market scanner results (80-stock universe)
+ */
+export const GetScannerResponse = zod.object({
+  status: zod.enum(["idle", "loading", "complete"]),
+  lastScanTime: zod.number(),
+  progress: zod.object({
+    done: zod.number(),
+    total: zod.number(),
+  }),
+  results: zod.array(
+    zod.object({
+      rank: zod.number(),
+      ticker: zod.string(),
+      company: zod.string(),
+      source: zod.enum(["watchlist", "scanner"]),
+      ins: zod.number(),
+      insLabel: zod.string(),
+      cos: zod.number(),
+      gvs: zod.number(),
+      vqs: zod.number(),
+      breakoutScore: zod
+        .number()
+        .describe(
+          "Breakout Probability: 50% INS + 30% 7D Momentum + 20% Volume Accel",
+        ),
+      insMomentum: zod
+        .number()
+        .describe(
+          "7-day INS momentum proxy (0-100): compares 7d vs prior 7d return",
+        ),
+      divergenceTag: zod.string(),
+      alert: zod.string(),
+      insComponents: zod
+        .object({
+          deltaGvs: zod.number(),
+          deltaVqs: zod.number(),
+          volumeAccel: zod.number(),
+          epsSlope: zod.number(),
+          narrativeMomentum: zod.number(),
+        })
+        .optional(),
+    }),
+  ),
+});
+
+/**
+ * @summary Trigger a new scanner scan (manual refresh)
+ */
+export const RefreshScannerResponse = zod.object({
+  message: zod.string(),
+});

@@ -101,3 +101,63 @@ export interface TopMovers {
   gainers: MoverStock[];
   losers: MoverStock[];
 }
+
+export type ScanResultSource =
+  (typeof ScanResultSource)[keyof typeof ScanResultSource];
+
+export const ScanResultSource = {
+  watchlist: "watchlist",
+  scanner: "scanner",
+} as const;
+
+export type ScanResultInsComponents = {
+  deltaGvs: number;
+  deltaVqs: number;
+  volumeAccel: number;
+  epsSlope: number;
+  narrativeMomentum: number;
+};
+
+export interface ScanResult {
+  rank: number;
+  ticker: string;
+  company: string;
+  source: ScanResultSource;
+  ins: number;
+  insLabel: string;
+  cos: number;
+  gvs: number;
+  vqs: number;
+  /** Breakout Probability: 50% INS + 30% 7D Momentum + 20% Volume Accel */
+  breakoutScore: number;
+  /** 7-day INS momentum proxy (0-100): compares 7d vs prior 7d return */
+  insMomentum: number;
+  divergenceTag: string;
+  alert: string;
+  insComponents?: ScanResultInsComponents;
+}
+
+export type ScannerResponseStatus =
+  (typeof ScannerResponseStatus)[keyof typeof ScannerResponseStatus];
+
+export const ScannerResponseStatus = {
+  idle: "idle",
+  loading: "loading",
+  complete: "complete",
+} as const;
+
+export type ScannerResponseProgress = {
+  done: number;
+  total: number;
+};
+
+export interface ScannerResponse {
+  status: ScannerResponseStatus;
+  lastScanTime: number;
+  progress: ScannerResponseProgress;
+  results: ScanResult[];
+}
+
+export type RefreshScanner200 = {
+  message: string;
+};
