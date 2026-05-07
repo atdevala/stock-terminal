@@ -46,16 +46,26 @@ def _est_time(pub_ts):
     except Exception:
         return ""
 
-def _ai_analysis(ticker, headline):
-    """Return a 1-sentence bullish/bearish/neutral assessment via OpenAI."""
+def _strip_html(html):
+    """Remove HTML tags and collapse whitespace."""
+    import re
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html or "")).strip()
+
+def _ai_analysis(ticker, headline, summary=""):
+    """Return a 1-2 sentence bullish/bearish/neutral assessment via OpenAI.
+    Uses the full article summary for richer context when available."""
     try:
+        body = f'Headline: "{headline}"'
+        if summary:
+            body += f"\nArticle content: {summary}"
         resp = _openai_client.chat.completions.create(
             model="gpt-4o-mini",
-            max_completion_tokens=90,
+            max_completion_tokens=130,
             messages=[{"role": "user", "content": (
-                f"In one sentence, state whether this news is Bullish, Bearish, or Neutral "
-                f"for ${ticker} stock and briefly explain why.\n"
-                f"Headline: \"{headline}\"\n"
+                f"You are a stock analyst. Analyze this news article about ${ticker}.\n"
+                f"{body}\n\n"
+                f"In 1-2 sentences, state whether this is Bullish, Bearish, or Neutral "
+                f"for ${ticker} and explain the specific reason based on the article content.\n"
                 f"Start with 🟢 Bullish, 🔴 Bearish, or 🟡 Neutral —"
             )}],
         )
@@ -258,6 +268,8 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
                 pub_ts  = content.get("pubDate") or item.get("providerPublishTime")
                 url_obj = content.get("canonicalUrl")
                 url     = url_obj.get("url") if isinstance(url_obj, dict) else None
+                # Prefer plain summary; fall back to HTML description stripped of tags
+                article_text = summary or _strip_html(content.get("description", ""))
                 # Normalise timestamp for sorting
                 try:
                     if isinstance(pub_ts, str):
@@ -271,6 +283,7 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
                     ts_sort = 0.0
                 relevant.append({"ticker": t, "company": stock["company"],
                                  "headline": headline, "url": url,
+                                 "summary": article_text,
                                  "est": _est_time(pub_ts), "ts_sort": ts_sort})
             if not relevant:
                 raw_news.append({"ticker": t, "company": stock["company"],
@@ -294,7 +307,7 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
     analyses = {}
     def _analyse(args):
         i, n = args
-        return i, _ai_analysis(n["ticker"], n["headline"])
+        return i, _ai_analysis(n["ticker"], n["headline"], n.get("summary", ""))
 
     with ThreadPoolExecutor(max_workers=10) as ex:
         for i, result in ex.map(_analyse, analysable):
