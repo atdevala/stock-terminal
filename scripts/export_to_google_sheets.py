@@ -370,6 +370,7 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
 
     spreadsheet.batch_update({"requests": reqs})
     print(f"  ✓  {name}")
+    return sheet_id
 
 
 # ── Dashboard columns (compact watchlist) ─────────────────────────────────────
@@ -459,7 +460,7 @@ def fetch_analyst_data():
 
 
 # ── Dashboard sheet ────────────────────────────────────────────────────────────
-def build_dashboard_sheet(spreadsheet, analyst_data):
+def build_dashboard_sheet(spreadsheet, analyst_data, cat_sheet_ids):
     """
     Single Dashboard tab:
       • Top — compact watchlist grouped by category
@@ -499,8 +500,11 @@ def build_dashboard_sheet(spreadsheet, analyst_data):
         cat_hex = cat["color"]
         cat_r0  = current_row
 
-        # Category header
-        rows.append([cat["name"]] + [""] * (N_DASH - 1))
+        # Category header — hyperlink to the category tab
+        gid = cat_sheet_ids.get(cat["name"])
+        cat_link = (f'=HYPERLINK("#gid={gid}","{cat["name"]}")'
+                    if gid else cat["name"])
+        rows.append([cat_link] + [""] * (N_DASH - 1))
         current_row += 1
 
         for s in cat["stocks"]:
@@ -704,14 +708,16 @@ def main():
     print("\nFetching analyst & technical data...")
     analyst_data = fetch_analyst_data()
 
-    print("\nBuilding Dashboard tab...")
-    build_dashboard_sheet(sh, analyst_data)
-
     print("\nBuilding detail watchlist tabs...")
+    cat_sheet_ids = {}   # cat name → gid, used for dashboard hyperlinks
     for cat in CATEGORIES:
         if not cat["stocks"]:
             continue
-        build_watchlist_sheet(sh, cat, {})
+        gid = build_watchlist_sheet(sh, cat, {})
+        cat_sheet_ids[cat["name"]] = gid
+
+    print("\nBuilding Dashboard tab...")
+    build_dashboard_sheet(sh, analyst_data, cat_sheet_ids)
 
     # Remove leftover default blank sheet
     for name in ("Sheet1", "_temp_"):
