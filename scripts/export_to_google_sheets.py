@@ -50,7 +50,7 @@ def _ai_analysis(ticker, headline):
     """Return a 1-sentence bullish/bearish/neutral assessment via OpenAI."""
     try:
         resp = _openai_client.chat.completions.create(
-            model="gpt-5-nano",
+            model="gpt-4o-mini",
             max_completion_tokens=90,
             messages=[{"role": "user", "content": (
                 f"In one sentence, state whether this news is Bullish, Bearish, or Neutral "
@@ -94,7 +94,7 @@ WATCH_COLS = [
     ("1-Week %",             82,  False),   # G — GOOGLEFINANCE (QUERY)
     ("1-Month %",            88,  False),   # H — GOOGLEFINANCE (QUERY)
     ("3-Month %",            88,  False),   # I — GOOGLEFINANCE (QUERY)
-    ("YTD %",                82,  False),   # J — GOOGLEFINANCE (QUERY)
+    ("YTD %",                130, False),   # J — GOOGLEFINANCE (QUERY)
     ("52W High",             88,  False),   # K — GOOGLEFINANCE
     ("52W Low",              88,  False),   # L — GOOGLEFINANCE
     ("% from 52W High",      108, False),   # M — formula
@@ -380,10 +380,17 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         "properties": {"pixelSize": 28}, "fields": "pixelSize"}})
     reqs.append(fmt_req(news_col_h, news_col_h+1, 0, N_COLS,
                         bg=DARK_BLUE, bold=True, fg=WHITE, size=10, h="CENTER"))
+    # Merge header cells to match data row layout
+    reqs.append(merge(news_col_h, news_col_h+1, 2, 9))   # Headline header C-I
+    reqs.append(fmt_req(news_col_h, news_col_h+1, 2, 9,
+                        bg=DARK_BLUE, bold=True, fg=WHITE, size=10, h="CENTER"))
+    reqs.append(merge(news_col_h, news_col_h+1, 10, N_COLS))  # AI header K-S
+    reqs.append(fmt_req(news_col_h, news_col_h+1, 10, N_COLS,
+                        bg=DARK_BLUE, bold=True, fg=WHITE, size=10, h="CENTER"))
     reqs.append({"updateDimensionProperties": {
         "range": {"sheetId": sheet_id, "dimension": "ROWS",
                   "startIndex": news_col_h, "endIndex": news_col_h+1},
-        "properties": {"pixelSize": 24}, "fields": "pixelSize"}})
+        "properties": {"pixelSize": 28}, "fields": "pixelSize"}})
 
     for nr0, t in news_row_info:
         bg = "EBF3FB" if ticker_alt.get(t, 0) == 0 else "FFFFFF"
