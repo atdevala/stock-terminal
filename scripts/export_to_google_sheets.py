@@ -42,7 +42,7 @@ def _est_time(pub_ts):
             dt = datetime.fromtimestamp(pub_ts, tz=timezone.utc)
         else:
             return ""
-        return dt.astimezone(_EST).strftime("%b %d %H:%M EST")
+        return dt.astimezone(_EST).strftime("%b %d %I:%M %p EST")
     except Exception:
         return ""
 
