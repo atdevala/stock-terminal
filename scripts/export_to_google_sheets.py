@@ -154,6 +154,50 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         all_values.append([""] * N_COLS)   # gap
         nr_idx += 1
 
+    # ── News Feed section (below notes) ───────────────────────────────────────
+    # News cols: Ticker | Company | Headline | Published (4 cols, fits in N_COLS)
+    news_section_r0 = len(all_values)   # 0-based
+    all_values.append(["📰  LATEST NEWS"] + [""] * (N_COLS - 1))
+    all_values.append(["Ticker", "Company", "Headline", "Published"]
+                      + [""] * (N_COLS - 4))
+
+    news_row_info = []   # (0-based index, ticker) for formatting
+    alt = 0
+    ticker_alt = {}
+    for stock in stocks:
+        t = stock["ticker"]
+        if t not in ticker_alt:
+            ticker_alt[t] = alt
+            alt = 1 - alt
+        try:
+            items = yf.Ticker(t).news or []
+            if not items:
+                idx = len(all_values)
+                all_values.append([t, stock["company"], "(no recent news)", ""]
+                                  + [""] * (N_COLS - 4))
+                news_row_info.append((idx, t))
+                continue
+            for item in items[:4]:
+                content  = item.get("content", {})
+                headline = content.get("title") or item.get("title", "No title")
+                pub_ts   = content.get("pubDate") or item.get("providerPublishTime")
+                if isinstance(pub_ts, (int, float)):
+                    pub = datetime.fromtimestamp(pub_ts).strftime("%Y-%m-%d %H:%M")
+                elif isinstance(pub_ts, str):
+                    pub = pub_ts[:16]
+                else:
+                    pub = ""
+                idx = len(all_values)
+                all_values.append([t, stock["company"], headline, pub]
+                                  + [""] * (N_COLS - 4))
+                news_row_info.append((idx, t))
+        except Exception as e:
+            idx = len(all_values)
+            all_values.append([t, stock["company"], f"(error fetching news: {e})", ""]
+                              + [""] * (N_COLS - 4))
+            news_row_info.append((idx, t))
+        all_values.append([""] * N_COLS)   # gap between stocks
+
     # Write all values
     ws.update(all_values, "A1", value_input_option="USER_ENTERED")
 
@@ -241,6 +285,36 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
             "range": {"sheetId": sheet_id, "dimension": "ROWS",
                       "startIndex": note_r, "endIndex": note_r+1},
             "properties": {"pixelSize": 200}, "fields": "pixelSize"}})
+
+    # ── News section formatting ────────────────────────────────────────────────
+    # news_section_r0 is 0-based index of the "📰 LATEST NEWS" header row
+    news_h0 = news_section_r0
+    news_col_h = news_h0 + 1   # column header row
+
+    reqs += [merge(news_h0, news_h0+1, 0, N_COLS),
+             fmt_req(news_h0, news_h0+1, 0, N_COLS, bg=cat_hex, bold=True,
+                     fg=WHITE, size=12, h="LEFT")]
+    reqs.append({"updateDimensionProperties": {
+        "range": {"sheetId": sheet_id, "dimension": "ROWS",
+                  "startIndex": news_h0, "endIndex": news_h0+1},
+        "properties": {"pixelSize": 28}, "fields": "pixelSize"}})
+    reqs.append(fmt_req(news_col_h, news_col_h+1, 0, N_COLS,
+                        bg=DARK_BLUE, bold=True, fg=WHITE, size=10, h="CENTER"))
+    reqs.append({"updateDimensionProperties": {
+        "range": {"sheetId": sheet_id, "dimension": "ROWS",
+                  "startIndex": news_col_h, "endIndex": news_col_h+1},
+        "properties": {"pixelSize": 24}, "fields": "pixelSize"}})
+
+    for nr0, t in news_row_info:
+        bg = "EBF3FB" if ticker_alt.get(t, 0) == 0 else "FFFFFF"
+        reqs.append(fmt_req(nr0, nr0+1, 0, N_COLS, bg=bg, size=10))
+        reqs.append(fmt_req(nr0, nr0+1, 0, 1, bg=bg, bold=True, fg="0070C0", size=10))
+        # Headline col (C=2) — wrap text
+        reqs.append(fmt_req(nr0, nr0+1, 2, 3, bg=bg, size=10, wrap=True, h="LEFT"))
+        reqs.append({"updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": "ROWS",
+                      "startIndex": nr0, "endIndex": nr0+1},
+            "properties": {"pixelSize": 34}, "fields": "pixelSize"}})
 
     # Conditional formatting — alert col S orange
     reqs.append({"addConditionalFormatRule": {"rule": {
@@ -442,64 +516,6 @@ def build_dashboard_sheet(spreadsheet, analyst_data):
         rows.append(blank())   # gap between categories
         current_row += 1
 
-    watchlist_end_row = current_row   # 0-based, first row after watchlist
-
-    # ── News section ──────────────────────────────────────────────────────────
-    print("  Fetching news headlines from Yahoo Finance...")
-    all_stocks = []
-    for cat in CATEGORIES:
-        for s in cat["stocks"]:
-            s["_cat"] = cat["name"]
-            all_stocks.append(s)
-
-    news_header_r = current_row
-    rows.append(["📰  STOCK NEWS FEED"] + [""] * (N_DASH - 1))
-    current_row += 1
-    rows.append(["Ticker", "Company", "Category", "Headline", "Published"]
-                + [""] * (N_DASH - 5))
-    current_row += 1
-    news_data_r0 = current_row
-
-    news_ticker_rows = []   # (0-based row, ticker) for alternating bg
-
-    alt = 0
-    ticker_alt = {}
-    for stock in all_stocks:
-        t = stock["ticker"]
-        if t not in ticker_alt:
-            ticker_alt[t] = alt
-            alt = 1 - alt
-        try:
-            items = yf.Ticker(t).news or []
-            if not items:
-                rows.append([t, stock["company"], stock["_cat"], "(no recent news)", ""]
-                            + [""] * (N_DASH - 5))
-                news_ticker_rows.append((current_row, t))
-                current_row += 1
-                continue
-            for item in items[:3]:
-                content = item.get("content", {})
-                headline = content.get("title") or item.get("title", "No title")
-                pub_ts   = content.get("pubDate") or item.get("providerPublishTime")
-                if isinstance(pub_ts, (int, float)):
-                    pub = datetime.fromtimestamp(pub_ts).strftime("%Y-%m-%d %H:%M")
-                elif isinstance(pub_ts, str):
-                    pub = pub_ts[:16]
-                else:
-                    pub = ""
-                rows.append([t, stock["company"], stock["_cat"], headline, pub]
-                            + [""] * (N_DASH - 5))
-                news_ticker_rows.append((current_row, t))
-                current_row += 1
-        except Exception as e:
-            rows.append([t, stock["company"], stock.get("_cat", ""),
-                         f"(error: {e})", ""] + [""] * (N_DASH - 5))
-            news_ticker_rows.append((current_row, t))
-            current_row += 1
-
-        rows.append(blank())   # gap between tickers
-        current_row += 1
-
     # ── Write to sheet ────────────────────────────────────────────────────────
     ws.update(rows, "A1", value_input_option="USER_ENTERED")
 
@@ -593,23 +609,6 @@ def build_dashboard_sheet(spreadsheet, analyst_data):
                            "textFormat": {"bold": True, "foregroundColor": color(WHITE)}},
             }}, "index": 2}})
 
-    # News section title & header
-    reqs += [merge(news_header_r, news_header_r+1, 0, N_DASH),
-             fmt_req(news_header_r, news_header_r+1, 0, N_DASH,
-                     bg=DARK_BLUE, bold=True, fg=WHITE, size=13, h="LEFT")]
-    reqs.append(dim("ROWS", news_header_r, news_header_r+1, 30))
-    reqs.append(fmt_req(news_header_r+1, news_header_r+2, 0, N_DASH,
-                        bg=DARK_BLUE, bold=True, fg=WHITE, size=10, h="CENTER"))
-    reqs.append(dim("ROWS", news_header_r+1, news_header_r+2, 26))
-
-    # News data rows — alternating colour, wrap headline (col D=3)
-    for nr0, t in news_ticker_rows:
-        bg = "EBF3FB" if ticker_alt.get(t, 0) == 0 else "FFFFFF"
-        reqs.append(fmt_req(nr0, nr0+1, 0, N_DASH, bg=bg, size=10))
-        reqs.append(fmt_req(nr0, nr0+1, 0, 1, bg=bg, bold=True, fg="0070C0", size=10))
-        reqs.append(fmt_req(nr0, nr0+1, 3, 4, bg=bg, size=10, wrap=True))
-        reqs.append(dim("ROWS", nr0, nr0+1, 32))
-
     # Column widths (dashboard cols)
     for ci, (_, px) in enumerate(DASH_COLS):
         reqs.append(dim("COLUMNS", ci, ci+1, px))
@@ -632,9 +631,8 @@ def build_dashboard_sheet(spreadsheet, analyst_data):
         "properties": {"sheetId": sheet_id, "index": 0},
         "fields": "index"}}]})
 
-    n_stocks  = len(stock_row_info)
-    n_news    = len(news_ticker_rows)
-    print(f"  ✓  📊 Dashboard ({n_stocks} stocks, {n_news} news rows)")
+    n_stocks = len(stock_row_info)
+    print(f"  ✓  📊 Dashboard ({n_stocks} stocks, no news — news lives in each category tab)")
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
