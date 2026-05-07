@@ -69,6 +69,31 @@ export const GetMarketStatusResponse = zod.object({
 });
 
 /**
+ * @summary Get computed Valuation Quality, Growth Volatility, and Combined Opportunity scores for all stocks
+ */
+export const GetScoresResponseItem = zod.object({
+  ticker: zod.string(),
+  vqs: zod.number().describe("Valuation Quality Score (0-100)"),
+  gvs: zod.number().describe("Growth Volatility Score (0-100)"),
+  cos: zod.number().describe("Combined Opportunity Score (0-100)"),
+  vqsLabel: zod.string(),
+  gvsLabel: zod.string(),
+  cosLabel: zod.string(),
+  revenueGrowthYoy: zod.number().optional(),
+  revenueGrowthQoQ: zod.number().optional(),
+  grossMargin: zod.number().optional(),
+  operatingMargin: zod.number().optional(),
+  fcfMargin: zod.number().optional(),
+  debtToEquity: zod.number().optional(),
+  pe: zod.number().optional(),
+  evSales: zod.number().optional(),
+  priceAbove50MA: zod.boolean().optional(),
+  priceAbove200MA: zod.boolean().optional(),
+  earningsRevisionsUp: zod.boolean().optional(),
+});
+export const GetScoresResponse = zod.array(GetScoresResponseItem);
+
+/**
  * @summary Get top gainers and losers from the watchlist today
  */
 export const GetMoversResponse = zod.object({

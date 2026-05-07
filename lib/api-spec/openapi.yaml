@@ -67,6 +67,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/MarketStatus"
 
+  /scores:
+    get:
+      operationId: getScores
+      tags: [stocks]
+      summary: Get computed Valuation Quality, Growth Volatility, and Combined Opportunity scores for all stocks
+      responses:
+        "200":
+          description: Computed scores for all tracked stocks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockScore"
+
   /movers:
     get:
       operationId: getMovers
@@ -175,6 +190,50 @@ components:
         session:
           type: string
       required: [isOpen, exchange, timezone, session]
+
+    StockScore:
+      type: object
+      properties:
+        ticker:
+          type: string
+        vqs:
+          type: number
+          description: Valuation Quality Score (0-100)
+        gvs:
+          type: number
+          description: Growth Volatility Score (0-100)
+        cos:
+          type: number
+          description: Combined Opportunity Score (0-100)
+        vqsLabel:
+          type: string
+        gvsLabel:
+          type: string
+        cosLabel:
+          type: string
+        revenueGrowthYoy:
+          type: number
+        revenueGrowthQoQ:
+          type: number
+        grossMargin:
+          type: number
+        operatingMargin:
+          type: number
+        fcfMargin:
+          type: number
+        debtToEquity:
+          type: number
+        pe:
+          type: number
+        evSales:
+          type: number
+        priceAbove50MA:
+          type: boolean
+        priceAbove200MA:
+          type: boolean
+        earningsRevisionsUp:
+          type: boolean
+      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel]
 
     MoverStock:
       type: object

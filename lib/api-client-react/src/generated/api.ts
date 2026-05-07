@@ -18,6 +18,7 @@ import type {
   MarketStatus,
   QuotesResponse,
   StockCategory,
+  StockScore,
   TopMovers,
 } from "./api.schemas";
 
@@ -306,6 +307,73 @@ export function useGetMarketStatus<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetMarketStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Get computed Valuation Quality, Growth Volatility, and Combined Opportunity scores for all stocks
+ */
+export const getGetScoresUrl = () => {
+  return `/api/scores`;
+};
+
+export const getScores = async (
+  options?: RequestInit,
+): Promise<StockScore[]> => {
+  return customFetch<StockScore[]>(getGetScoresUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetScoresQueryKey = () => {
+  return [`/api/scores`] as const;
+};
+
+export const getGetScoresQueryOptions = <
+  TData = Awaited<ReturnType<typeof getScores>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getScores>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetScoresQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getScores>>> = ({
+    signal,
+  }) => getScores({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getScores>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetScoresQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getScores>>
+>;
+export type GetScoresQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Get computed Valuation Quality, Growth Volatility, and Combined Opportunity scores for all stocks
+ */
+
+export function useGetScores<
+  TData = Awaited<ReturnType<typeof getScores>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<Awaited<ReturnType<typeof getScores>>, TError, TData>;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetScoresQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

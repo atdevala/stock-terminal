@@ -53,6 +53,30 @@ export interface MarketStatus {
   session: string;
 }
 
+export interface StockScore {
+  ticker: string;
+  /** Valuation Quality Score (0-100) */
+  vqs: number;
+  /** Growth Volatility Score (0-100) */
+  gvs: number;
+  /** Combined Opportunity Score (0-100) */
+  cos: number;
+  vqsLabel: string;
+  gvsLabel: string;
+  cosLabel: string;
+  revenueGrowthYoy?: number;
+  revenueGrowthQoQ?: number;
+  grossMargin?: number;
+  operatingMargin?: number;
+  fcfMargin?: number;
+  debtToEquity?: number;
+  pe?: number;
+  evSales?: number;
+  priceAbove50MA?: boolean;
+  priceAbove200MA?: boolean;
+  earningsRevisionsUp?: boolean;
+}
+
 export interface MoverStock {
   ticker: string;
   company: string;
