@@ -2,17 +2,36 @@ import { useGetMarketStatus } from "@workspace/api-client-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useEffect } from "react";
 
-function formatInTimezone(date: Date, timezone: string): string {
-  return new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    year: "numeric",
+const NY_TZ = "America/New_York";
+
+function useNYClock() {
+  const [display, setDisplay] = useState(() => getNYTimeString());
+
+  useEffect(() => {
+    const tick = () => setDisplay(getNYTimeString());
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  return display;
+}
+
+function getNYTimeString(): string {
+  const now = new Date();
+  const datePart = now.toLocaleDateString("en-US", {
+    timeZone: NY_TZ,
     month: "short",
     day: "numeric",
+    year: "numeric",
+  });
+  const timePart = now.toLocaleTimeString("en-US", {
+    timeZone: NY_TZ,
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    hour12: false,
-  }).format(date);
+    hour12: true,
+  });
+  return `${datePart} ${timePart}`;
 }
 
 export function MarketStatusHeader() {
@@ -20,12 +39,7 @@ export function MarketStatusHeader() {
     query: { refetchInterval: 30000 }
   });
 
-  const [now, setNow] = useState(new Date());
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const clockDisplay = useNYClock();
 
   if (isLoading) {
     return (
@@ -58,8 +72,8 @@ export function MarketStatusHeader() {
         </div>
       </div>
       <div className="flex items-center gap-4 text-sm font-mono text-muted-foreground">
-        <div data-testid="market-timezone">{status.exchange} ({status.timezone})</div>
-        <div data-testid="current-time">{formatInTimezone(now, status.timezone)}</div>
+        <div data-testid="market-timezone">US (America/New_York)</div>
+        <div data-testid="current-time">{clockDisplay}</div>
       </div>
     </div>
   );
