@@ -273,6 +273,24 @@ export const GetSignalDeltasResponseItem = zod.object({
       acs: zod.number(),
     })
     .nullish(),
+  deltaBaseline: zod
+    .object({
+      vqs: zod.number(),
+      gvs: zod.number(),
+      cos: zod.number(),
+      ins: zod.number(),
+      acs: zod.number(),
+    })
+    .nullish()
+    .describe(
+      "Fallback delta vs oldest available snapshot when 1D\/7D not yet available",
+    ),
+  baselineAgeMs: zod
+    .number()
+    .nullish()
+    .describe(
+      "Age of the baseline snapshot in milliseconds (used to render a human-readable period label)",
+    ),
   accel: zod
     .object({
       vqs: zod.number(),

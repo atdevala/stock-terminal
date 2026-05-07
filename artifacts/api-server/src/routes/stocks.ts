@@ -10,7 +10,7 @@ import {
 } from "../lib/finnhub";
 import { computeScore, mean } from "../lib/scores";
 import { getScannerState, triggerScan } from "../lib/scanner";
-import { takeSnapshotIfDue, getAllSignalDeltas } from "../lib/signal-history";
+import { takeSnapshotIfDue, setCurrentScores, getAllSignalDeltas } from "../lib/signal-history";
 
 const router = Router();
 
@@ -37,7 +37,9 @@ router.get("/scores", (_req, res) => {
     const q = getQuote(ext.ticker);
     return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0, q);
   });
-  // Take a snapshot of current scores for the signal history tracker (debounced to 30 min)
+  // Keep live scores in memory so /api/signal-deltas can use them as "current"
+  setCurrentScores(scores);
+  // Take a snapshot for the signal history tracker (debounced to 30 min)
   takeSnapshotIfDue(scores);
   res.json(scores);
 });

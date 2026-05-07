@@ -39,20 +39,25 @@ export interface SignalTrends {
 }
 
 export interface SignalDelta {
-  ticker:    string;
-  current:   SignalValues;
-  delta1D:   SignalValues | null;
-  delta7D:   SignalValues | null;
-  accel:     SignalValues | null;
-  trends:    SignalTrends;
-  divergence: string;
-  history:   { ts: number; ins: number; cos: number; acs: number }[];
+  ticker:          string;
+  current:         SignalValues;
+  delta1D:         SignalValues | null;
+  delta7D:         SignalValues | null;
+  /** Fallback delta vs oldest available snapshot when 1D/7D not yet available */
+  deltaBaseline:   SignalValues | null;
+  /** Age in ms of the baseline snapshot (used to render a human-readable period label) */
+  baselineAgeMs:   number | null;
+  accel:           SignalValues | null;
+  trends:          SignalTrends;
+  divergence:      string;
+  history:         { ts: number; ins: number; cos: number; acs: number }[];
 }
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const MAX_SNAPSHOTS    = 500;
-const MIN_INTERVAL_MS  = 30 * 60 * 1000; // 30 min minimum between snapshots
+const MAX_SNAPSHOTS     = 500;
+const MIN_INTERVAL_MS   = 30 * 60 * 1000; // 30 min minimum between snapshots
+const MIN_BASELINE_MS   = 2 * 60 * 1000; // baseline must be at least 2 min old
 
 // DATA_DIR resolution — portable across dev (tsx source) and prod (esbuild bundle):
 //
@@ -68,10 +73,18 @@ const DATA_FILE = path.resolve(
   "signal-history.json"
 );
 
-// ── In-memory store ───────────────────────────────────────────────────────────
+// ── In-memory stores ───────────────────────────────────────────────────────────
 
 const store = new Map<string, SignalSnapshot[]>();
 let lastSnapshotTs = 0;
+
+/** Live scores cache — updated by /api/scores on every request */
+const _liveScores = new Map<string, StockScore>();
+
+export function setCurrentScores(scores: StockScore[]): void {
+  _liveScores.clear();
+  for (const s of scores) _liveScores.set(s.ticker, s);
+}
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 
@@ -106,6 +119,11 @@ function saveToDisk(): void {
 // ── Snapshot capture ──────────────────────────────────────────────────────────
 
 export function takeSnapshotIfDue(scores: StockScore[]): void {
+  // Skip empty-data calls — Finnhub may not have loaded yet.
+  // Critically: do NOT update lastSnapshotTs here, or the 30-min timer
+  // fires prematurely and the first real snapshot is delayed by another 30 min.
+  if (scores.length === 0) return;
+
   const now = Date.now();
   if (now - lastSnapshotTs < MIN_INTERVAL_MS) return; // debounce
   lastSnapshotTs = now;
@@ -144,7 +162,19 @@ function findSnapshotNear(snaps: SignalSnapshot[], targetTs: number): SignalSnap
   return best;
 }
 
-function diff(a: SignalSnapshot, b: SignalSnapshot): SignalValues {
+/** Diff: current live values minus a historical snapshot */
+function diffVals(current: SignalValues, snap: SignalSnapshot): SignalValues {
+  return {
+    vqs: Math.round(current.vqs - snap.vqs),
+    gvs: Math.round(current.gvs - snap.gvs),
+    cos: Math.round(current.cos - snap.cos),
+    ins: Math.round(current.ins - snap.ins),
+    acs: Math.round(current.acs - snap.acs),
+  };
+}
+
+/** Diff: snapshot A minus snapshot B */
+function diffSnaps(a: SignalSnapshot, b: SignalSnapshot): SignalValues {
   return {
     vqs: Math.round(a.vqs - b.vqs),
     gvs: Math.round(a.gvs - b.gvs),
@@ -162,8 +192,8 @@ function classifyTrend(delta: number): SignalTrend {
   return "FLAT";
 }
 
-function computeTrends(delta1D: SignalValues | null): SignalTrends {
-  const d = delta1D ?? { vqs: 0, gvs: 0, cos: 0, ins: 0, acs: 0 };
+function computeTrends(delta: SignalValues | null): SignalTrends {
+  const d = delta ?? { vqs: 0, gvs: 0, cos: 0, ins: 0, acs: 0 };
   return {
     vqs: classifyTrend(d.vqs),
     gvs: classifyTrend(d.gvs),
@@ -201,28 +231,33 @@ export function getAllSignalDeltas(): SignalDelta[] {
   const now     = Date.now();
   const results: SignalDelta[] = [];
 
-  for (const [ticker, snaps] of store.entries()) {
-    if (snaps.length === 0) continue;
-    const latest = snaps[snaps.length - 1]!;
+  // Build the full set of tickers from both live scores and history store
+  const allTickers = new Set([..._liveScores.keys(), ...store.keys()]);
 
-    const current: SignalValues = {
-      vqs: latest.vqs,
-      gvs: latest.gvs,
-      cos: latest.cos,
-      ins: latest.ins,
-      acs: latest.acs,
-    };
+  for (const ticker of allTickers) {
+    const snaps    = store.get(ticker) ?? [];
+    const liveSc   = _liveScores.get(ticker);
+    const latestSn = snaps.length > 0 ? snaps[snaps.length - 1] : null;
 
+    if (!liveSc && !latestSn) continue;
+
+    // "Current" values: prefer live score (real-time), fall back to latest snapshot
+    const current: SignalValues = liveSc
+      ? { vqs: liveSc.vqs, gvs: liveSc.gvs, cos: liveSc.cos, ins: liveSc.ins ?? 50, acs: liveSc.acs }
+      : { vqs: latestSn!.vqs, gvs: latestSn!.gvs, cos: latestSn!.cos, ins: latestSn!.ins, acs: latestSn!.acs };
+
+    // 1D / 7D deltas: compare current to a snapshot from ~1 day or ~7 days ago
     const snap1D  = findSnapshotNear(snaps, now - 24 * 3600_000);
     const snap7D  = findSnapshotNear(snaps, now - 7  * 86400_000);
     const snap48h = findSnapshotNear(snaps, now - 48 * 3600_000);
 
-    const delta1D = snap1D ? diff(latest, snap1D) : null;
-    const delta7D = snap7D ? diff(latest, snap7D) : null;
+    const delta1D = snap1D ? diffVals(current, snap1D) : null;
+    const delta7D = snap7D ? diffVals(current, snap7D) : null;
 
+    // Acceleration: how much faster 1D changed vs the prior 1D window
     let accel: SignalValues | null = null;
     if (delta1D && snap1D && snap48h) {
-      const prev1D = diff(snap1D, snap48h);
+      const prev1D = diffSnaps(snap1D, snap48h);
       accel = {
         vqs: delta1D.vqs - prev1D.vqs,
         gvs: delta1D.gvs - prev1D.gvs,
@@ -232,7 +267,23 @@ export function getAllSignalDeltas(): SignalDelta[] {
       };
     }
 
-    const trends     = computeTrends(delta1D);
+    // Baseline delta: shown when 1D/7D snapshots don't exist yet.
+    // Uses the oldest snapshot that is at least MIN_BASELINE_MS old.
+    // This lets the user see *some* delta immediately after the first snapshot cycle.
+    let deltaBaseline: SignalValues | null = null;
+    let baselineAgeMs: number | null = null;
+
+    if (!delta1D && !delta7D && snaps.length > 0) {
+      const oldest = snaps[0];
+      const age    = now - oldest.ts;
+      if (age >= MIN_BASELINE_MS) {
+        deltaBaseline = diffVals(current, oldest);
+        baselineAgeMs = age;
+      }
+    }
+
+    const bestDeltaForTrend = delta1D ?? deltaBaseline;
+    const trends     = computeTrends(bestDeltaForTrend);
     const divergence = detectDivergence(current, trends);
 
     // Last 30 snapshots for sparklines
@@ -243,7 +294,18 @@ export function getAllSignalDeltas(): SignalDelta[] {
       acs: s.acs,
     }));
 
-    results.push({ ticker, current, delta1D, delta7D, accel, trends, divergence, history });
+    results.push({
+      ticker,
+      current,
+      delta1D,
+      delta7D,
+      deltaBaseline,
+      baselineAgeMs,
+      accel,
+      trends,
+      divergence,
+      history,
+    });
   }
 
   results.sort((a, b) => b.current.ins - a.current.ins);

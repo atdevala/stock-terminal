@@ -66,33 +66,39 @@ function fmt(v: number | undefined, suffix = "%", decimals = 1): string {
 
 type SignalKey = "vqs" | "gvs" | "cos" | "ins" | "acs";
 
-/** Returns the best available delta: 1D preferred, falls back to 7D */
+/** Returns the best available delta: 1D preferred, then 7D, then baseline fallback */
 function getBestDelta(sd: SignalDelta | undefined, key: SignalKey): number | null {
   if (!sd) return null;
   const v1D = sd.delta1D?.[key];
   if (v1D !== undefined && v1D !== null) return v1D;
   const v7D = sd.delta7D?.[key];
   if (v7D !== undefined && v7D !== null) return v7D;
+  const vB = sd.deltaBaseline?.[key];
+  if (vB !== undefined && vB !== null) return vB;
   return null;
 }
 
-/** Returns which period we're showing ("1D" | "7D" | null) */
-function getDeltaPeriod(sd: SignalDelta | undefined, key: SignalKey): "1D" | "7D" | null {
+/** Returns a human-readable period label for the delta being shown */
+function getDeltaPeriod(sd: SignalDelta | undefined, key: SignalKey): string | null {
   if (!sd) return null;
   const v1D = sd.delta1D?.[key];
   if (v1D !== undefined && v1D !== null) return "1D";
   const v7D = sd.delta7D?.[key];
   if (v7D !== undefined && v7D !== null) return "7D";
+  const vB = sd.deltaBaseline?.[key];
+  if (vB !== undefined && vB !== null && sd.baselineAgeMs != null) {
+    const ms = sd.baselineAgeMs;
+    if (ms >= 23 * 3600_000) return "1D";
+    if (ms >= 3600_000) return `${Math.round(ms / 3600_000)}h`;
+    return `${Math.max(1, Math.round(ms / 60_000))}m`;
+  }
   return null;
 }
 
 // ── Delta chip inside badge ────────────────────────────────────────────────────
 
-function DeltaLine({ delta, period }: { delta: number | null; period: "1D" | "7D" | null }) {
-  if (delta === null || period === null) return null;
-  if (delta === 0) return (
-    <span className="text-[9px] leading-none text-zinc-600 font-medium tabular-nums">±0</span>
-  );
+function DeltaLine({ delta, period }: { delta: number | null; period: string | null }) {
+  if (delta === null || delta === 0 || period === null) return null;
   const pos = delta > 0;
   return (
     <span className={cn(
@@ -100,6 +106,7 @@ function DeltaLine({ delta, period }: { delta: number | null; period: "1D" | "7D
       pos ? "text-emerald-400" : "text-red-400"
     )}>
       {pos ? "+" : ""}{delta}
+      <span className="opacity-60 font-normal"> {period}</span>
     </span>
   );
 }
@@ -118,7 +125,7 @@ function ScoreBadge({
   score: number;
   colorFn?: (s: number) => string;
   delta: number | null;
-  period: "1D" | "7D" | null;
+  period: string | null;
   tooltip: React.ReactNode;
 }) {
   const color = (colorFn ?? scoreColor)(score);

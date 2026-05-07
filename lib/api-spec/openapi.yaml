@@ -534,6 +534,14 @@ components:
         delta7D:
           $ref: "#/components/schemas/SignalValues"
           nullable: true
+        deltaBaseline:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+          description: "Fallback delta vs oldest available snapshot when 1D/7D not yet available"
+        baselineAgeMs:
+          type: number
+          nullable: true
+          description: "Age of the baseline snapshot in milliseconds (used to render a human-readable period label)"
         accel:
           $ref: "#/components/schemas/SignalValues"
           nullable: true

@@ -14,6 +14,10 @@ export interface SignalDelta {
   current: SignalValues;
   delta1D?: SignalValues | null;
   delta7D?: SignalValues | null;
+  /** Fallback delta vs oldest available snapshot when 1D/7D not yet available */
+  deltaBaseline?: SignalValues | null;
+  /** Age of the baseline snapshot in milliseconds (used to render a human-readable period label) */
+  baselineAgeMs?: number | null;
   accel?: SignalValues | null;
   trends: SignalTrends;
   /** EARLY IGNITION SETUP | SPECULATIVE MOMENTUM (UNCONFIRMED) | LATE CYCLE / EXHAUSTION RISK | INSTITUTIONAL ACCUMULATION BEFORE REPRICING | empty string */
