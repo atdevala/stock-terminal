@@ -748,14 +748,14 @@ def build_dashboard_sheet(spreadsheet, analyst_data, cat_sheet_ids):
     reqs.append(fmt_req(2,3,0,N_DASH, bg=DARK_BLUE, bold=True, fg=WHITE, size=10, h="CENTER"))
     reqs += [dim("ROWS",0,1,32), dim("ROWS",1,2,18), dim("ROWS",2,3,28)]
 
-    DASH_CAT_COLOR = "9B72CF"   # light purple for all category headers on Dashboard
+    DASH_CAT_COLOR = "D9E1F2"   # same light blue as subtitle row (A2:I2)
 
     # Category header rows & stock rows
     for cat_hex, cr0, cr1 in cat_row_ranges:
         # Category name row
         reqs += [merge(cr0, cr0+1, 0, N_DASH),
                  fmt_req(cr0, cr0+1, 0, N_DASH, bg=DASH_CAT_COLOR, bold=True,
-                         fg=WHITE, size=11, h="LEFT")]
+                         fg=DARK_BLUE, size=11, h="LEFT")]
         reqs.append(dim("ROWS", cr0, cr0+1, 26))
         # Stock rows in this category
         for i, (sr0, _) in enumerate(
