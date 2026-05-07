@@ -143,18 +143,20 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         all_values.append([""] * N_COLS)
     all_values.append(["INVESTMENT THESIS & RESEARCH NOTES"] + [""] * (N_COLS - 1))
 
-    WRAP_WIDTH = 60
+    # Notes rows — write raw text (no textwrap); Google Sheets wraps visually.
+    # Merged cell is ~1877px wide; at 10pt ~250 chars/line → longest note ~4 lines.
+    # 120px height is enough for 5 lines + padding, no clipping.
+    NOTES_ROW_PX = 120
     nr_idx = notes_start  # 1-based row of next notes row to add
     for j, stock in enumerate(stocks):
-        note_text = stock.get("notes", "")
+        note_text = stock.get("notes", "") or "(no notes)"
         all_values.append(
             [stock["ticker"],
              f"  {stock['company']}   |   Risk: {stock['risk']}"]
             + [""] * (N_COLS - 2)
         )
         nr_idx += 1
-        lines = textwrap.wrap(note_text, width=WRAP_WIDTH) if note_text else ["(no notes)"]
-        all_values.append(["", "\n".join(lines)] + [""] * (N_COLS - 2))
+        all_values.append(["", note_text] + [""] * (N_COLS - 2))
         nr_idx += 1
         all_values.append([""] * N_COLS)   # gap
         nr_idx += 1
@@ -299,7 +301,7 @@ def build_watchlist_sheet(spreadsheet, cat, sheet_id_map):
         reqs.append({"updateDimensionProperties": {
             "range": {"sheetId": sheet_id, "dimension": "ROWS",
                       "startIndex": note_r, "endIndex": note_r+1},
-            "properties": {"pixelSize": 200}, "fields": "pixelSize"}})
+            "properties": {"pixelSize": NOTES_ROW_PX}, "fields": "pixelSize"}})
 
     # ── News section formatting ────────────────────────────────────────────────
     # news_section_r0 is 0-based index of the "📰 LATEST NEWS" header row
