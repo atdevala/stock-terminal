@@ -342,7 +342,13 @@ components:
         isSuperstock:
           type: boolean
           description: True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics
-      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, trendLabel, convictionTier, isSuperstock]
+        csos:
+          type: number
+          description: "Composite Stock Opportunity Score (1-100) — multi-layer model combining VQS/GVS/INS/ACS/COS with regime, divergence, and conviction adjustments"
+        csosLabel:
+          type: string
+          description: "EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | LATE STAGE MOVE | LOW QUALITY / AVOID"
+      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, trendLabel, convictionTier, isSuperstock, csos, csosLabel]
 
     MoverStock:
       type: object

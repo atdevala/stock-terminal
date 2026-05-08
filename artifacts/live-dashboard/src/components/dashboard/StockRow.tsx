@@ -36,6 +36,13 @@ function acsColor(s: number): string {
   return "text-zinc-500 border-zinc-700/40 bg-zinc-800/30";
 }
 
+function csosColor(s: number): string {
+  if (s >= 75) return "text-amber-300 border-amber-500/50 bg-amber-500/10";
+  if (s >= 55) return "text-amber-400 border-amber-600/40 bg-amber-600/10";
+  if (s >= 35) return "text-orange-400 border-orange-500/40 bg-orange-500/10";
+  return "text-zinc-500 border-zinc-700/40 bg-zinc-800/30";
+}
+
 function divergenceStyle(tag: string): string {
   if (tag === "EARLY OPPORTUNITY")  return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
   if (tag === "LATE STAGE RISK")    return "bg-red-500/15 text-red-300 border-red-500/30";
@@ -312,6 +319,96 @@ function AcsTooltipContent({ score }: { score: StockScore }) {
   );
 }
 
+function csosLabelStyle(label: string): string {
+  if (label === "EARLY BREAKOUT SETUP") return "text-amber-300";
+  if (label === "CONFIRMED TREND")      return "text-amber-400";
+  if (label === "QUALITY COMPOUNDER")   return "text-yellow-400";
+  if (label === "LATE STAGE MOVE")      return "text-orange-400";
+  return "text-red-400";
+}
+
+function CsosTooltipContent({ score }: { score: StockScore }) {
+  const csos  = score.csos ?? 0;
+  const label = score.csosLabel ?? "—";
+
+  const components: [string, number, string][] = [
+    ["VQS", score.vqs,       "40%"],
+    ["GVS", score.gvs,       "25%"],
+    ["INS", score.ins ?? 0,  "15%"],
+    ["ACS", score.acs,       "12%"],
+    ["COS", score.cos,        "8%"],
+  ];
+
+  const base = components.reduce((sum, [, val, wt]) => sum + val * parseFloat(wt) / 100, 0);
+
+  // Detect which intelligence layers fired for the tooltip
+  const ins = score.ins ?? 0;
+  const acs = score.acs;
+  const cos = score.cos;
+  const vqs = score.vqs;
+
+  const layers: { label: string; color: string }[] = [];
+  if (ins > 75 && cos < 60)               layers.push({ label: "Early Breakout Edge (+bonus)",      color: "text-amber-300" });
+  if (cos > 80 && ins < 50)               layers.push({ label: "Late Stage Warning (−penalty)",     color: "text-red-400" });
+  if (vqs < 40)                            layers.push({ label: "Fundamental Floor (−override)",     color: "text-red-400" });
+  if (ins >= 65 && acs >= 65)             layers.push({ label: "Accumulation Boost (×multiplier)",  color: "text-teal-400" });
+  if (ins > 72 && acs < 45)              layers.push({ label: "Divergence Penalty (INS∅ACS)",       color: "text-orange-400" });
+  if (cos > 72 && ins < 45)              layers.push({ label: "Divergence Penalty (COS∅INS)",       color: "text-orange-400" });
+  if (acs > 68 && vqs < 38)             layers.push({ label: "Divergence Penalty (ACS∅VQS)",       color: "text-orange-400" });
+  if (ins > 70 && acs > 70 && cos > 70 && vqs > 60)
+                                           layers.push({ label: "Signal Agreement Bonus (+bonus)",   color: "text-emerald-400" });
+
+  return (
+    <div className="text-xs" style={{ backgroundColor: "#000000", color: "#ffffff" }}>
+      {/* Header */}
+      <div className="px-3 py-2.5 border-b" style={{ borderColor: "#27272a", backgroundColor: "#140e00" }}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="uppercase tracking-widest text-[9px]" style={{ color: "#d97706" }}>CSOS — Composite Score</span>
+          <span className={cn("text-lg font-bold leading-none", csosColor(csos).split(" ")[0])}>{csos}</span>
+        </div>
+        <div className={cn("text-[9px] font-semibold uppercase tracking-wide leading-tight", csosLabelStyle(label))}>{label}</div>
+      </div>
+
+      {/* Component weights */}
+      <div className="px-3 py-2 space-y-1.5">
+        <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "#52525b" }}>Signal Weights</div>
+        {components.map(([k, val, wt]) => (
+          <div key={k} className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-1.5">
+              <span className="font-mono text-[9px]" style={{ color: "#52525b" }}>{wt}</span>
+              <span style={{ color: "#71717a" }}>{k}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-16 h-1 rounded-full overflow-hidden" style={{ backgroundColor: "#27272a" }}>
+                <div className="h-full rounded-full" style={{ width: `${val}%`, backgroundColor: "#d97706" }} />
+              </div>
+              <span className="font-mono font-medium w-6 text-right" style={{ color: "#ffffff" }}>{val}</span>
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center justify-between gap-4 pt-1 border-t" style={{ borderColor: "#27272a" }}>
+          <span style={{ color: "#52525b" }}>Base (weighted)</span>
+          <span className="font-mono" style={{ color: "#a1a1aa" }}>{Math.round(base)}</span>
+        </div>
+      </div>
+
+      {/* Intelligence layers that fired */}
+      {layers.length > 0 && (
+        <div className="px-3 pb-2 border-t space-y-1" style={{ borderColor: "#27272a" }}>
+          <div className="text-[9px] uppercase tracking-widest mt-2 mb-1" style={{ color: "#52525b" }}>Active Adjustments</div>
+          {layers.map(l => (
+            <div key={l.label} className={cn("text-[9px] font-medium", l.color)}>{l.label}</div>
+          ))}
+        </div>
+      )}
+
+      <div className="px-3 pb-2 text-[9px] italic" style={{ color: "#52525b" }}>
+        Regime-adjusted. CSOS is NOT a simple average — it is a signal interaction model.
+      </div>
+    </div>
+  );
+}
+
 // ── Row ────────────────────────────────────────────────────────────────────────
 
 export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
@@ -472,6 +569,19 @@ export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
             colorFn={acsColor}
             chips={getDeltaChips(signalDelta, "acs")}
             tooltip={<AcsTooltipContent score={score} />}
+          />
+        ) : <span className="text-muted-foreground text-xs">—</span>}
+      </td>
+
+      {/* CSOS */}
+      <td className="py-2.5 px-3 text-center align-middle hidden xl:table-cell">
+        {score?.csos !== undefined ? (
+          <ScoreBadge
+            label={`csos-${stock.ticker}`}
+            score={score.csos}
+            colorFn={csosColor}
+            chips={[]}
+            tooltip={<CsosTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
       </td>

@@ -1,6 +1,6 @@
 import type { ExtendedMetrics, QuoteData } from "./finnhub";
 import { computeINS } from "./ins";
-import { getSpyCloses60d } from "./finnhub";
+import { getSpyCloses60d, getMarketRegime } from "./finnhub";
 
 // ── Math helpers ───────────────────────────────────────────────────────────────
 
@@ -585,6 +585,116 @@ function computeSuperstock(ins: number, acs: number, fbrs: number): boolean {
   return ins >= 72 && acs >= 68 && fbrs < 28;
 }
 
+// ── CSOS: Composite Stock Opportunity Score ───────────────────────────────────
+// A multi-layer institutional decision model for the watchlist tab ONLY.
+//
+// Base weights:  VQS 40% | GVS 25% | INS 15% | ACS 12% | COS 8%
+//
+// Intelligence layers applied on top of the weighted base:
+//   1. Early Breakout Edge    — INS leading COS bonus
+//   2. Late Stage Warning     — COS extended / INS fading penalty
+//   3. Fundamental Floor      — VQS < 40 risk override
+//   4. Accumulation Boost     — INS + ACS co-elevated multiplier
+//   5. Signal Divergence      — conflicting signals penalty
+//   6. Signal Agreement       — all signals aligned bonus
+//   7. Regime Awareness       — SPY trend / volatility multiplier
+//
+// Isolated to watchlist pipeline. Does NOT affect Scanner, Signal Tracker,
+// or any other module. Safely handles null/missing values via defaults.
+
+function csosLabelText(s: number): string {
+  if (s >= 78) return "EARLY BREAKOUT SETUP";
+  if (s >= 62) return "CONFIRMED TREND";
+  if (s >= 48) return "QUALITY COMPOUNDER";
+  if (s >= 35) return "LATE STAGE MOVE";
+  return "LOW QUALITY / AVOID";
+}
+
+export function calculateCSOS(
+  vqs: number,
+  gvs: number,
+  ins: number,
+  acs: number,
+  cos: number,
+  regime: string,
+): { csos: number; csosLabel: string } {
+  // Guard against NaN inputs
+  const v = isFinite(vqs) ? vqs : 50;
+  const g = isFinite(gvs) ? gvs : 50;
+  const i = isFinite(ins) ? ins : 50;
+  const a = isFinite(acs) ? acs : 50;
+  const c = isFinite(cos) ? cos : 50;
+
+  // ── 1. BASE WEIGHTED SCORE ────────────────────────────────────────────────
+  let score = v * 0.40 + g * 0.25 + i * 0.15 + a * 0.12 + c * 0.08;
+
+  // ── 2. EARLY BREAKOUT EDGE ────────────────────────────────────────────────
+  // INS leads COS by 2–6 weeks. High INS + low COS = pre-breakout positioning.
+  if (i > 75 && c < 60) {
+    const bonus = i > 85 ? 10 : i > 80 ? 8 : 5;
+    score += bonus;
+  }
+
+  // ── 3. LATE STAGE WARNING ─────────────────────────────────────────────────
+  // COS very high but INS fading = move already extended, weak forward edge.
+  if (c > 80 && i < 50) {
+    const penalty = i < 40 ? 10 : 6;
+    score -= penalty;
+  }
+
+  // ── 4. FUNDAMENTAL FLOOR (RISK OVERRIDE) ──────────────────────────────────
+  // VQS below 40 = structurally weak company; override other bullish signals.
+  if (v < 40) {
+    const penalty = v < 25 ? 18 : v < 30 ? 14 : 10;
+    score -= penalty;
+  }
+
+  // ── 5. ACCUMULATION CONFIRMATION BOOST ───────────────────────────────────
+  // Both INS and ACS elevated = early momentum + institutional alignment.
+  // High absolute levels on both strongly imply co-trending upward.
+  if (i >= 65 && a >= 65) {
+    const multiplier = i >= 78 && a >= 75 ? 1.10 : i >= 70 && a >= 70 ? 1.07 : 1.04;
+    score *= multiplier;
+  }
+
+  // ── 6. SIGNAL DIVERGENCE PENALTY ─────────────────────────────────────────
+  // Conflicting signals = unstable setup / fake breakout risk.
+  let divergencePenalty = 0;
+  if (i > 72 && a < 45) divergencePenalty += i > 82 ? 10 : 7;   // INS high, ACS absent
+  if (c > 72 && i < 45) divergencePenalty += c > 82 ? 12 : 8;   // COS high, INS fading
+  if (a > 68 && v < 38) divergencePenalty += 6;                  // ACS high, VQS weak
+  score -= divergencePenalty;
+
+  // ── 7. SIGNAL AGREEMENT BONUS ────────────────────────────────────────────
+  // All major signals aligned = high-conviction opportunity.
+  if (i > 70 && a > 70 && c > 70 && v > 60) {
+    const bonus = i > 80 && a > 80 ? 8 : i > 75 && a > 75 ? 6 : 3;
+    score += bonus;
+  }
+
+  // ── 8. REGIME AWARENESS ───────────────────────────────────────────────────
+  // SPY trend and volatility adjust the final score directionally.
+  let regimeMultiplier: number;
+  if (regime === "RISK-ON MOMENTUM") {
+    regimeMultiplier = 1.07;                              // Bull: favor INS + COS
+  } else if (regime === "QUALITY GROWTH") {
+    regimeMultiplier = 1.03;
+  } else if (regime === "DEFENSIVE MARKET") {
+    regimeMultiplier = 0.90;                              // Bear: penalize COS-driven
+    if (c > 65 && v < 50) score -= 5;                    // extra for weak-quality melt-ups
+  } else if (regime === "HIGH VOLATILITY / UNSTABLE") {
+    regimeMultiplier = 0.88;                              // Choppy: require ACS confirmation
+    if (c > 65) score -= 5;
+    if (a < 55) score -= 3;
+  } else {
+    regimeMultiplier = 0.97;                              // NEUTRAL / UNKNOWN
+  }
+  score *= regimeMultiplier;
+
+  const finalScore = Math.round(clamp(score, 1, 100));
+  return { csos: finalScore, csosLabel: csosLabelText(finalScore) };
+}
+
 // ── StockScore interface ───────────────────────────────────────────────────────
 
 export interface StockScore {
@@ -622,6 +732,9 @@ export interface StockScore {
   trendLabel: string;
   convictionTier: number;
   isSuperstock: boolean;
+  // ── CSOS — watchlist-only composite opportunity score ─────────────────────
+  csos: number;
+  csosLabel: string;
 }
 
 // ── Master score computation ───────────────────────────────────────────────────
@@ -706,6 +819,11 @@ export function computeScore(
   const convictionTier = computeConvictionTier(ins, cos, acs, fbrs);
   const isSuperstock   = computeSuperstock(ins, acs, fbrs);
 
+  // ── CSOS — watchlist-only composite opportunity score ─────────────────────
+  // Fetch the current market regime so CSOS can apply the regime multiplier.
+  const { regime } = getMarketRegime();
+  const csosResult = calculateCSOS(vqs, gvs, ins, acs, cos, regime);
+
   return {
     ticker,
     vqs, gvs, cos,
@@ -732,5 +850,7 @@ export function computeScore(
     trendLabel,
     convictionTier,
     isSuperstock,
+    csos:      csosResult.csos,
+    csosLabel: csosResult.csosLabel,
   };
 }

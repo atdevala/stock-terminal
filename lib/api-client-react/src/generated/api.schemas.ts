@@ -98,6 +98,10 @@ export interface StockScore {
   convictionTier: number;
   /** True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics */
   isSuperstock: boolean;
+  /** Composite Stock Opportunity Score (1-100) — multi-layer model combining VQS/GVS/INS/ACS/COS with regime, divergence, and conviction adjustments */
+  csos: number;
+  /** EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | LATE STAGE MOVE | LOW QUALITY / AVOID */
+  csosLabel: string;
 }
 
 export interface MoverStock {

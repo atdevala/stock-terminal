@@ -130,6 +130,16 @@ export const GetScoresResponseItem = zod.object({
     .describe(
       "True when stock shows early NVDA\/CRDO\/AVGO-type accumulation characteristics",
     ),
+  csos: zod
+    .number()
+    .describe(
+      "Composite Stock Opportunity Score (1-100) — multi-layer model combining VQS\/GVS\/INS\/ACS\/COS with regime, divergence, and conviction adjustments",
+    ),
+  csosLabel: zod
+    .string()
+    .describe(
+      "EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | LATE STAGE MOVE | LOW QUALITY \/ AVOID",
+    ),
 });
 export const GetScoresResponse = zod.array(GetScoresResponseItem);
 

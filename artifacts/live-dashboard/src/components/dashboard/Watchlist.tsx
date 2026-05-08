@@ -240,6 +240,29 @@ export function Watchlist() {
                           </TooltipContent>
                         </Tooltip>
                       </th>
+                      <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-amber-400">CSOS</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
+                            <p className="font-semibold text-amber-300">(Composite Stock Opportunity Score)</p>
+                            <p className="text-zinc-300 text-xs">The overall attractiveness of a stock as an opportunity — combining fundamentals, growth, momentum, and institutional behavior into a single regime-aware score.</p>
+                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
+                              <div className="text-zinc-400 font-semibold mb-1">Base weights:</div>
+                              <div className="text-zinc-400">40% VQS · 25% GVS · 15% INS · 12% ACS · 8% COS</div>
+                            </div>
+                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
+                              <div><span className="text-amber-300 font-mono">78+</span><span className="text-zinc-300"> → EARLY BREAKOUT SETUP</span></div>
+                              <div><span className="text-amber-400 font-mono">62–77</span><span className="text-zinc-300"> → CONFIRMED TREND</span></div>
+                              <div><span className="text-yellow-400 font-mono">48–61</span><span className="text-zinc-300"> → QUALITY COMPOUNDER</span></div>
+                              <div><span className="text-orange-400 font-mono">35–47</span><span className="text-zinc-300"> → LATE STAGE MOVE</span></div>
+                              <div><span className="text-red-400 font-mono">below 35</span><span className="text-zinc-300"> → LOW QUALITY / AVOID</span></div>
+                            </div>
+                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Regime-adjusted. Includes divergence penalties, agreement bonuses, and early breakout edge detection.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </th>
                       <th className="py-3 px-4 font-medium text-center hidden lg:table-cell">Focus</th>
                     </tr>
                   </thead>
