@@ -95,7 +95,8 @@ export const CATEGORIES: StockCategory[] = [
       { ticker: "OKLO",  company: "Oklo Inc",         focus: "Nuclear SMRs + nuclear fuel waste",         risk: "Very High" },
       { ticker: "CEG",   company: "Constellation Energy", focus: "Largest US nuclear power operator",     risk: "Medium"    },
       { ticker: "SMR",   company: "NuScale Power",    focus: "Small modular reactor technology",          risk: "Very High" },
-      { ticker: "NNE",   company: "Nano Nuclear Energy", focus: "Portable microreactors & nuclear fuel",  risk: "Very High" },
+      { ticker: "NNE",   company: "Nano Nuclear Energy",   focus: "Portable microreactors & nuclear fuel",          risk: "Very High" },
+      { ticker: "AMPX",  company: "Amprius Technologies",  focus: "Ultra-high energy density silicon anode batteries", risk: "Very High" },
     ],
   },
   {
