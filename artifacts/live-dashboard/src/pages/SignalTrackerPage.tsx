@@ -156,7 +156,50 @@ function acsColor(v: number): string {
   return "text-zinc-500";
 }
 
-// ── Building blocks map for lookup by ticker ──────────────────────────────────
+// ── Column header with tooltip ────────────────────────────────────────────────
+
+function ColHeader({ children, tip }: { children: React.ReactNode; tip: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="cursor-help underline decoration-dotted decoration-zinc-600 underline-offset-2">
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="bottom"
+        className="max-w-[260px] p-0 overflow-hidden !bg-black border border-zinc-700 shadow-2xl rounded-lg text-left"
+        style={{ backgroundColor: "#000000" }}
+      >
+        {tip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function TipBody({ title, color, desc, levels }: {
+  title: string;
+  color: string;
+  desc: string;
+  levels: [string, string][];
+}) {
+  return (
+    <div style={{ backgroundColor: "#000000", color: "#ffffff" }}>
+      <div className="px-3 py-2 border-b border-zinc-800" style={{ backgroundColor: "#111111" }}>
+        <div className="text-[10px] uppercase tracking-widest font-semibold" style={{ color }}>{title}</div>
+        <div className="text-[11px] text-zinc-300 mt-0.5 leading-snug">{desc}</div>
+      </div>
+      <div className="px-3 py-2 space-y-1">
+        {levels.map(([band, meaning]) => (
+          <div key={band} className="flex items-start gap-2 text-[10px]">
+            <span className="font-mono text-zinc-400 shrink-0 w-[46px]">{band}</span>
+            <span className="text-zinc-400">{meaning}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
@@ -248,34 +291,170 @@ export function SignalTrackerPage() {
       <table className="w-full text-sm border-collapse min-w-[900px]">
         <thead>
           <tr className="text-[11px] uppercase tracking-wide text-zinc-500 border-b border-zinc-800">
-            <th className="px-3 py-2 text-left w-[90px]">Ticker</th>
+            <th className="px-3 py-2 text-left w-[90px]">
+              <ColHeader tip={
+                <TipBody
+                  title="Ticker"
+                  color="#a1a1aa"
+                  desc="Stock symbol. Rows are sorted by your selected sort key above."
+                  levels={[
+                    ["↑↑ / ↓↓", "Strongly rising or falling (6+ pts)"],
+                    ["↑ / ↓",   "Rising or falling (2–5 pts)"],
+                    ["→",       "Flat movement (within ±1 pt)"],
+                  ]}
+                />
+              }>Ticker</ColHeader>
+            </th>
 
             <th className="px-2 py-2 text-center" colSpan={2}>
-              <span className="text-violet-400">INS</span>
-              <span className="ml-1 text-zinc-600">7D</span>
+              <ColHeader tip={
+                <TipBody
+                  title="INS — Inflection Signal Score"
+                  color="#a78bfa"
+                  desc="Leading breakout indicator. Detects early momentum shifts before they show up in price. Leads COS by 2–6 weeks on genuine breakouts. Number below is the 7-day change."
+                  levels={[
+                    ["≥ 75", "Strong breakout signal — high conviction"],
+                    ["≥ 55", "Momentum building — watch closely"],
+                    ["≥ 35", "Weak / early signal — low conviction"],
+                    ["< 35",  "No signal — avoid or wait"],
+                  ]}
+                />
+              }>
+                <span className="text-violet-400">INS</span>
+                <span className="ml-1 text-zinc-600">7D</span>
+              </ColHeader>
             </th>
-            <th className="px-2 py-2 text-center text-[10px] text-zinc-600">Spark</th>
+            <th className="px-2 py-2 text-center text-[10px] text-zinc-600">
+              <ColHeader tip={
+                <TipBody
+                  title="INS Sparkline"
+                  color="#a78bfa"
+                  desc="30-snapshot trend line of the INS score over time (each snapshot = 30 min apart). A rising curve signals building momentum."
+                  levels={[
+                    ["Rising",  "Momentum accelerating — positive sign"],
+                    ["Flat",    "Score stable — no directional signal"],
+                    ["Falling", "Momentum fading — caution"],
+                  ]}
+                />
+              }>Spark</ColHeader>
+            </th>
 
             <th className="px-2 py-2 text-center" colSpan={2}>
-              <span className="text-teal-400">ACS</span>
-              <span className="ml-1 text-zinc-600">7D</span>
+              <ColHeader tip={
+                <TipBody
+                  title="ACS — Accumulation Confidence Score"
+                  color="#2dd4bf"
+                  desc="Detects quiet institutional buying before the crowd notices. Measures up-volume strength, relative strength vs SPY, price compression, and closing strength. Number below is the 7-day change."
+                  levels={[
+                    ["≥ 75", "Strong institutional accumulation underway"],
+                    ["≥ 55", "Moderate accumulation — watch for follow-through"],
+                    ["≥ 35", "Weak / inconsistent buying pressure"],
+                    ["< 35",  "No accumulation signal detected"],
+                  ]}
+                />
+              }>
+                <span className="text-teal-400">ACS</span>
+                <span className="ml-1 text-zinc-600">7D</span>
+              </ColHeader>
             </th>
-            <th className="px-2 py-2 text-center text-[10px] text-zinc-600">Spark</th>
+            <th className="px-2 py-2 text-center text-[10px] text-zinc-600">
+              <ColHeader tip={
+                <TipBody
+                  title="ACS Sparkline"
+                  color="#2dd4bf"
+                  desc="30-snapshot trend line of the ACS score. A rising curve indicates growing institutional interest over recent sessions."
+                  levels={[
+                    ["Rising",  "Buying pressure increasing — bullish"],
+                    ["Flat",    "Accumulation pace unchanged"],
+                    ["Falling", "Buying pressure easing — caution"],
+                  ]}
+                />
+              }>Spark</ColHeader>
+            </th>
 
             <th className="px-2 py-2 text-center" colSpan={2}>
-              <span className="text-emerald-400">COS</span>
-              <span className="ml-1 text-zinc-600">7D</span>
+              <ColHeader tip={
+                <TipBody
+                  title="COS — Combined Opportunity Score"
+                  color="#34d399"
+                  desc="Blended composite of VQS + GVS. Confirms that a breakout has both fundamental quality and price momentum behind it. Lags INS — use INS to get in early, COS to confirm. Number below is the 7-day change."
+                  levels={[
+                    ["≥ 75", "High-conviction opportunity — both quality & momentum"],
+                    ["≥ 55", "Moderate opportunity — decent setup"],
+                    ["≥ 35", "Low opportunity — wait for improvement"],
+                    ["< 35",  "Avoid — weak fundamentals and/or momentum"],
+                  ]}
+                />
+              }>
+                <span className="text-emerald-400">COS</span>
+                <span className="ml-1 text-zinc-600">7D</span>
+              </ColHeader>
             </th>
-            <th className="px-2 py-2 text-center text-[10px] text-zinc-600">Spark</th>
+            <th className="px-2 py-2 text-center text-[10px] text-zinc-600">
+              <ColHeader tip={
+                <TipBody
+                  title="COS Sparkline"
+                  color="#34d399"
+                  desc="30-snapshot trend line of the COS score. Watch for COS rising after INS already moved — that's the confirmation pattern."
+                  levels={[
+                    ["Rising",  "Setup improving — quality + momentum both up"],
+                    ["Flat",    "Setup holding steady"],
+                    ["Falling", "Setup deteriorating — review thesis"],
+                  ]}
+                />
+              }>Spark</ColHeader>
+            </th>
 
             <th className="px-2 py-2 text-center">
-              <span className="text-yellow-500">VQS</span>
+              <ColHeader tip={
+                <TipBody
+                  title="VQS — Valuation Quality Score"
+                  color="#eab308"
+                  desc="Measures fundamental business quality: revenue growth, gross & operating margins, FCF margin, debt/equity, P/E, and analyst revision trends."
+                  levels={[
+                    ["≥ 75", "Strong fundamentals — high-quality business"],
+                    ["≥ 55", "Decent fundamentals — solid but not exceptional"],
+                    ["≥ 35", "Weak fundamentals — speculative territory"],
+                    ["< 35",  "Poor fundamentals — high risk"],
+                  ]}
+                />
+              }>
+                <span className="text-yellow-500">VQS</span>
+              </ColHeader>
             </th>
             <th className="px-2 py-2 text-center">
-              <span className="text-orange-400">GVS</span>
+              <ColHeader tip={
+                <TipBody
+                  title="GVS — Growth Volatility Score"
+                  color="#fb923c"
+                  desc="Measures price momentum and breakout potential: 52-week range position, distance from moving averages, and recent price acceleration. High GVS = stock is in motion."
+                  levels={[
+                    ["≥ 75", "Strong momentum — stock is breaking out"],
+                    ["≥ 55", "Moderate momentum — directional trend in place"],
+                    ["≥ 35", "Weak momentum — choppy or range-bound"],
+                    ["< 35",  "No momentum — avoid until trend develops"],
+                  ]}
+                />
+              }>
+                <span className="text-orange-400">GVS</span>
+              </ColHeader>
             </th>
 
-            <th className="px-3 py-2 text-left">Flag</th>
+            <th className="px-3 py-2 text-left">
+              <ColHeader tip={
+                <TipBody
+                  title="Divergence Flag"
+                  color="#c4b5fd"
+                  desc="Fires when two or more scores diverge in a meaningful pattern, often signaling an inflection point before it's obvious in price."
+                  levels={[
+                    ["EARLY IGNITION",   "INS↑ + ACS↑ + COS<65 — pre-breakout setup"],
+                    ["INSTITUTIONAL",    "ACS↑ + INS↑ + COS flat — quiet buying detected"],
+                    ["SPECULATIVE",      "INS↑ + COS↓ — momentum without fundamental backing"],
+                    ["LATE CYCLE",       "COS↑ + INS↓ — lagging confirmation, exhaustion risk"],
+                  ]}
+                />
+              }>Flag</ColHeader>
+            </th>
           </tr>
         </thead>
         <tbody>
