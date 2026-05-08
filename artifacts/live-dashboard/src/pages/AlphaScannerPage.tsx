@@ -351,6 +351,239 @@ function SectorRotationPanel() {
   );
 }
 
+// ── Per-stock analytical verdict ──────────────────────────────────────────────
+
+interface Verdict {
+  action:      string;
+  actionStyle: string;
+  actionBg:    string;
+  confidence:  "HIGH" | "MEDIUM" | "LOW";
+  reasons:     string[];
+  risks:       string[];
+  entryNote:   string | null;
+}
+
+function confColor(c: "HIGH" | "MEDIUM" | "LOW"): string {
+  if (c === "HIGH")   return "text-emerald-400";
+  if (c === "MEDIUM") return "text-yellow-400";
+  return "text-zinc-500";
+}
+
+function buildVerdict(score: StockScore, delta: SignalDelta | undefined): Verdict {
+  const ins      = score.ins  ?? 50;
+  const acs      = score.acs;
+  const cos      = score.cos;
+  const vqs      = score.vqs;
+  const fbrs     = score.fbrs ?? 50;
+  const csos     = score.csos;
+  const cpe      = (score as unknown as Record<string, unknown>).cpe as number | undefined ?? 50;
+  const label    = score.csosLabel ?? "";
+  const insD1    = (delta?.delta1D as Record<string, number> | null | undefined)?.ins ?? 0;
+  const acsD1    = (delta?.delta1D as Record<string, number> | null | undefined)?.acs ?? 0;
+  const insTrend = delta?.trends?.ins ?? "FLAT";
+
+  let action:      string;
+  let actionStyle: string;
+  let actionBg:    string;
+  let confidence:  "HIGH" | "MEDIUM" | "LOW";
+  let entryNote:   string | null = null;
+
+  if (vqs < 40) {
+    action = "AVOID"; actionStyle = "text-red-300"; actionBg = "bg-red-900/40 border-red-700";
+    confidence = "HIGH";
+    entryNote = "Fundamentally weak business — signals are unreliable regardless of price action.";
+  } else if (label === "LATE STAGE MOVE" || (cos > 78 && ins < 48)) {
+    action = "TRIM / REDUCE"; actionStyle = "text-orange-300"; actionBg = "bg-orange-900/40 border-orange-700";
+    confidence = cos > 82 ? "HIGH" : "MEDIUM";
+    entryNote = "The easy money has already been made. Risk/reward is poor for new entries.";
+  } else if (label === "PRIME OPPORTUNITY" || score.isSuperstock) {
+    action = "BUILD POSITION"; actionStyle = "text-emerald-300"; actionBg = "bg-emerald-900/40 border-emerald-700";
+    confidence = "HIGH";
+    entryNote = "All signals aligned — enter with full conviction. Scale in over 2–3 sessions.";
+  } else if (label === "EARLY BREAKOUT SETUP" || (ins >= 72 && acs >= 60 && fbrs < 50 && cos < 65)) {
+    action = "ACCUMULATE"; actionStyle = "text-amber-300"; actionBg = "bg-amber-900/40 border-amber-700";
+    confidence = ins >= 80 && acs >= 65 ? "HIGH" : "MEDIUM";
+    entryNote = "INS is front-running COS. Build a starter position now; add as COS confirms the move.";
+  } else if (label === "STEALTH ACCUMULATION") {
+    action = "INITIATE / MONITOR"; actionStyle = "text-teal-300"; actionBg = "bg-teal-900/40 border-teal-700";
+    confidence = "MEDIUM";
+    entryNote = "Smart money is loading quietly. Initiate small; full commitment on INS breakout above 70.";
+  } else if (label === "HIDDEN CATALYST POTENTIAL") {
+    action = "INITIATE / MONITOR"; actionStyle = "text-sky-300"; actionBg = "bg-sky-900/40 border-sky-700";
+    confidence = "MEDIUM";
+    entryNote = "Elevated catalyst signal unconfirmed by momentum. Small starter; wait for INS or ACS to follow.";
+  } else if (label === "CONFIRMED TREND" && cos < 78) {
+    action = "HOLD / ADD"; actionStyle = "text-sky-300"; actionBg = "bg-sky-900/40 border-sky-700";
+    confidence = ins >= 60 ? "MEDIUM" : "LOW";
+    entryNote = "Move confirmed, mid-stage. Existing positions: hold. New: small size with stop under structure.";
+  } else if (label === "QUALITY COMPOUNDER") {
+    const ready = ins >= 60;
+    action      = ready ? "ACCUMULATE" : "WATCHLIST — AWAIT INS";
+    actionStyle = ready ? "text-amber-300" : "text-blue-300";
+    actionBg    = ready ? "bg-amber-900/40 border-amber-700" : "bg-blue-900/40 border-blue-700";
+    confidence  = ready ? "MEDIUM" : "LOW";
+    entryNote   = ready
+      ? "Strong fundamentals with INS signal activating. Use VQS as your fundamental anchor."
+      : "High-quality business — no timing signal yet. Add to watchlist; wait for INS to break above 60.";
+  } else if (csos >= 45 && (insD1 > 0 || acsD1 > 0)) {
+    action = "MONITOR — SIGNALS BUILDING"; actionStyle = "text-zinc-300"; actionBg = "bg-zinc-800 border-zinc-600";
+    confidence = "LOW";
+    entryNote = "Signals are starting to move. Watch the next 2–3 snapshots for acceleration before committing.";
+  } else if (csos >= 35) {
+    action = "MONITOR"; actionStyle = "text-zinc-400"; actionBg = "bg-zinc-800 border-zinc-700";
+    confidence = "LOW";
+    entryNote = null;
+  } else {
+    action = "PASS"; actionStyle = "text-red-400"; actionBg = "bg-zinc-900 border-zinc-700";
+    confidence = "LOW";
+    entryNote = null;
+  }
+
+  if (fbrs > 70 && !["AVOID", "TRIM / REDUCE", "PASS"].includes(action)) {
+    action      = "CAUTION — " + action;
+    actionStyle = "text-orange-300";
+    actionBg    = "bg-orange-900/40 border-orange-700";
+    confidence  = confidence === "HIGH" ? "MEDIUM" : "LOW";
+    entryNote   = "⚠ High false-breakout risk (FBRS " + fbrs + "). Size smaller and keep stops tight. " + (entryNote ?? "");
+  }
+
+  const reasons: string[] = [];
+
+  if (ins >= 70) {
+    reasons.push(`INS ${ins} — strong breakout signal${insD1 > 0 ? `, +${insD1} today` : ""}`);
+  } else if (ins >= 55) {
+    reasons.push(`INS ${ins} — momentum building${insD1 > 0 ? `, +${insD1} today` : ""}`);
+  } else if (insTrend === "STRONGLY_RISING" || insTrend === "RISING") {
+    reasons.push(`INS ${ins} — rising from low base${insD1 > 0 ? `, +${insD1} today` : ""}`);
+  }
+
+  if (acs >= 65) {
+    reasons.push(`ACS ${acs} — institutional accumulation detected${acsD1 > 0 ? `, +${acsD1} today` : ""}`);
+  } else if (acs >= 50 && acsD1 > 0) {
+    reasons.push(`ACS ${acs} rising (+${acsD1} today) — buying pressure building`);
+  }
+
+  if (ins > cos + 10 && cos < 72) {
+    reasons.push(`INS (${ins}) leads COS (${cos}) by ${ins - cos} pts — pre-consensus entry window`);
+  } else if (cos >= 65 && ins >= 60) {
+    reasons.push(`INS ${ins} + COS ${cos} co-elevated — breakout confirmed`);
+  }
+
+  if (vqs >= 65) reasons.push(`VQS ${vqs} — ${score.vqsLabel}`);
+  if (cpe >= 65)  reasons.push(`CPE ${cpe} — elevated catalyst probability`);
+  if (score.isSuperstock) reasons.push("Superstock candidate — INS · ACS · FBRS all at elite thresholds");
+
+  const divFlag = delta?.divergence;
+  if (divFlag === "EARLY IGNITION SETUP") {
+    reasons.push("Early Ignition flag: INS + ACS moving before COS");
+  } else if (divFlag === "INSTITUTIONAL ACCUMULATION BEFORE REPRICING") {
+    reasons.push("Institutional Accumulation flag: quiet smart-money build-up");
+  }
+
+  const risks: string[] = [];
+
+  if (fbrs > 50) {
+    risks.push(`FBRS ${fbrs} — ${fbrs > 70 ? "high" : "moderate"} false-breakout risk; verify with ACS before sizing up`);
+  }
+  if (cos > 72 && ins < 55) {
+    risks.push(`COS (${cos}) has run ahead of INS (${ins}) — late-stage positioning risk`);
+  }
+  if (vqs < 55 && vqs >= 40) {
+    risks.push(`VQS ${vqs} — below-average fundamentals; reduces margin of safety`);
+  }
+  if (insTrend === "FALLING" || insTrend === "STRONGLY_FALLING") {
+    risks.push("INS trend is falling — momentum may be rolling over");
+  }
+  if (acs < 45 && ins >= 65) {
+    risks.push(`ACS ${acs} not confirming INS — watch for false breakout`);
+  }
+  if (cpe < 30) {
+    risks.push(`CPE ${cpe} — low near-term catalyst probability`);
+  }
+
+  if (risks.length === 0 && !["AVOID", "PASS", "TRIM / REDUCE"].includes(action)) {
+    risks.push("No major red flags — setup is clean across all signal dimensions");
+  }
+
+  return { action, actionStyle, actionBg, confidence, reasons, risks, entryNote };
+}
+
+function AnalysisTooltip({ row }: { row: RowData }) {
+  const verdict = buildVerdict(row.score, row.delta);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="font-bold text-sm text-zinc-100 cursor-help underline decoration-dotted decoration-zinc-600 underline-offset-2">
+          {row.ticker}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent
+        side="right"
+        align="start"
+        sideOffset={10}
+        className="p-0 overflow-hidden border border-zinc-700 shadow-2xl rounded-lg text-left z-50 w-[310px]"
+        style={{ backgroundColor: "#000000" }}
+      >
+        <div className="px-3 pt-2.5 pb-2 border-b border-zinc-800" style={{ backgroundColor: "#0f0f0f" }}>
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+              {row.ticker} · Analysis
+            </span>
+            <span className={cn("text-[8px] font-bold uppercase tracking-wide", confColor(verdict.confidence))}>
+              {verdict.confidence} CONF.
+            </span>
+          </div>
+          <div className={cn(
+            "text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded border inline-block leading-none mb-1.5",
+            verdict.actionBg, verdict.actionStyle,
+          )}>
+            {verdict.action}
+          </div>
+          {verdict.entryNote && (
+            <p className="text-[10px] text-zinc-400 leading-snug">{verdict.entryNote}</p>
+          )}
+        </div>
+
+        {verdict.reasons.length > 0 && (
+          <div className="px-3 py-2 border-b border-zinc-800/60">
+            <div className="text-[8px] uppercase tracking-widest text-zinc-600 mb-1.5 font-bold">
+              Supporting Signals
+            </div>
+            {verdict.reasons.map((r, i) => (
+              <div key={i} className="flex items-start gap-1.5 mb-1 last:mb-0">
+                <span className="text-emerald-500 text-[9px] shrink-0 mt-px font-bold">✓</span>
+                <span className="text-[10px] text-zinc-300 leading-snug">{r}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {verdict.risks.length > 0 && (
+          <div className="px-3 py-2">
+            <div className="text-[8px] uppercase tracking-widest text-zinc-600 mb-1.5 font-bold">
+              Risks & Concerns
+            </div>
+            {verdict.risks.map((r, i) => {
+              const isClean = r.startsWith("No major");
+              return (
+                <div key={i} className="flex items-start gap-1.5 mb-1 last:mb-0">
+                  <span className={cn(
+                    "text-[9px] shrink-0 mt-px font-bold",
+                    isClean ? "text-emerald-500" : "text-orange-400",
+                  )}>
+                    {isClean ? "✓" : "!"}
+                  </span>
+                  <span className="text-[10px] text-zinc-300 leading-snug">{r}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 // ── Row data type ──────────────────────────────────────────────────────────────
 
 interface RowData {
@@ -772,7 +1005,7 @@ export function AlphaScannerPage() {
                             <span style={{ color: dotColor }} className="font-semibold">{score.trendLabel}</span>
                           </TooltipContent>
                         </Tooltip>
-                        <span className="font-bold text-sm text-zinc-100">{row.ticker}</span>
+                        <AnalysisTooltip row={row} />
                         {score.isSuperstock && (
                           <Tooltip>
                             <TooltipTrigger asChild>
