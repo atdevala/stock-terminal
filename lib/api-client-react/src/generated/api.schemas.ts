@@ -210,6 +210,7 @@ export interface SignalValues {
   cos: number;
   ins: number;
   acs: number;
+  csos: number;
 }
 
 export interface SignalTrends {

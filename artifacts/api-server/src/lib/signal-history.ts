@@ -7,20 +7,22 @@ import type { StockScore } from "./scores";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export interface SignalSnapshot {
-  ts:  number;
-  vqs: number;
-  gvs: number;
-  cos: number;
-  ins: number;
-  acs: number;
+  ts:   number;
+  vqs:  number;
+  gvs:  number;
+  cos:  number;
+  ins:  number;
+  acs:  number;
+  csos: number;
 }
 
 export interface SignalValues {
-  vqs: number;
-  gvs: number;
-  cos: number;
-  ins: number;
-  acs: number;
+  vqs:  number;
+  gvs:  number;
+  cos:  number;
+  ins:  number;
+  acs:  number;
+  csos: number;
 }
 
 export type SignalTrend =
@@ -132,12 +134,13 @@ export function takeSnapshotIfDue(scores: StockScore[]): void {
 
   for (const s of scores) {
     const snap: SignalSnapshot = {
-      ts:  now,
-      vqs: s.vqs,
-      gvs: s.gvs,
-      cos: s.cos,
-      ins: s.ins ?? 50,
-      acs: s.acs,
+      ts:   now,
+      vqs:  s.vqs,
+      gvs:  s.gvs,
+      cos:  s.cos,
+      ins:  s.ins ?? 50,
+      acs:  s.acs,
+      csos: s.csos,
     };
 
     const existing = store.get(s.ticker) ?? [];
@@ -167,22 +170,24 @@ function findSnapshotNear(snaps: SignalSnapshot[], targetTs: number): SignalSnap
 /** Diff: current live values minus a historical snapshot */
 function diffVals(current: SignalValues, snap: SignalSnapshot): SignalValues {
   return {
-    vqs: Math.round(current.vqs - snap.vqs),
-    gvs: Math.round(current.gvs - snap.gvs),
-    cos: Math.round(current.cos - snap.cos),
-    ins: Math.round(current.ins - snap.ins),
-    acs: Math.round(current.acs - snap.acs),
+    vqs:  Math.round(current.vqs  - snap.vqs),
+    gvs:  Math.round(current.gvs  - snap.gvs),
+    cos:  Math.round(current.cos  - snap.cos),
+    ins:  Math.round(current.ins  - snap.ins),
+    acs:  Math.round(current.acs  - snap.acs),
+    csos: Math.round(current.csos - (snap.csos ?? 0)),
   };
 }
 
 /** Diff: snapshot A minus snapshot B */
 function diffSnaps(a: SignalSnapshot, b: SignalSnapshot): SignalValues {
   return {
-    vqs: Math.round(a.vqs - b.vqs),
-    gvs: Math.round(a.gvs - b.gvs),
-    cos: Math.round(a.cos - b.cos),
-    ins: Math.round(a.ins - b.ins),
-    acs: Math.round(a.acs - b.acs),
+    vqs:  Math.round(a.vqs  - b.vqs),
+    gvs:  Math.round(a.gvs  - b.gvs),
+    cos:  Math.round(a.cos  - b.cos),
+    ins:  Math.round(a.ins  - b.ins),
+    acs:  Math.round(a.acs  - b.acs),
+    csos: Math.round((a.csos ?? 0) - (b.csos ?? 0)),
   };
 }
 
@@ -195,7 +200,7 @@ function classifyTrend(delta: number): SignalTrend {
 }
 
 function computeTrends(delta: SignalValues | null): SignalTrends {
-  const d = delta ?? { vqs: 0, gvs: 0, cos: 0, ins: 0, acs: 0 };
+  const d = delta ?? { vqs: 0, gvs: 0, cos: 0, ins: 0, acs: 0, csos: 0 };
   return {
     vqs: classifyTrend(d.vqs),
     gvs: classifyTrend(d.gvs),
@@ -245,8 +250,8 @@ export function getAllSignalDeltas(): SignalDelta[] {
 
     // "Current" values: prefer live score (real-time), fall back to latest snapshot
     const current: SignalValues = liveSc
-      ? { vqs: liveSc.vqs, gvs: liveSc.gvs, cos: liveSc.cos, ins: liveSc.ins ?? 50, acs: liveSc.acs }
-      : { vqs: latestSn!.vqs, gvs: latestSn!.gvs, cos: latestSn!.cos, ins: latestSn!.ins, acs: latestSn!.acs };
+      ? { vqs: liveSc.vqs, gvs: liveSc.gvs, cos: liveSc.cos, ins: liveSc.ins ?? 50, acs: liveSc.acs, csos: liveSc.csos }
+      : { vqs: latestSn!.vqs, gvs: latestSn!.gvs, cos: latestSn!.cos, ins: latestSn!.ins, acs: latestSn!.acs, csos: latestSn!.csos ?? 0 };
 
     // 1H / 1D / 7D deltas: compare current to snapshots at each horizon
     const snap1H  = findSnapshotNear(snaps, now - 1  * 3600_000);
@@ -264,11 +269,12 @@ export function getAllSignalDeltas(): SignalDelta[] {
     if (delta1D && snap1D && snap48h) {
       const prev1D = diffSnaps(snap1D, snap48h);
       accel = {
-        vqs: delta1D.vqs - prev1D.vqs,
-        gvs: delta1D.gvs - prev1D.gvs,
-        cos: delta1D.cos - prev1D.cos,
-        ins: delta1D.ins - prev1D.ins,
-        acs: delta1D.acs - prev1D.acs,
+        vqs:  delta1D.vqs  - prev1D.vqs,
+        gvs:  delta1D.gvs  - prev1D.gvs,
+        cos:  delta1D.cos  - prev1D.cos,
+        ins:  delta1D.ins  - prev1D.ins,
+        acs:  delta1D.acs  - prev1D.acs,
+        csos: delta1D.csos - prev1D.csos,
       };
     }
 

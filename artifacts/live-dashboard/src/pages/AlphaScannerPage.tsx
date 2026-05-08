@@ -96,14 +96,14 @@ function TrendArrow({ trend }: { trend: string | undefined }) {
   );
 }
 
-function DeltaChip({ v }: { v: number | null | undefined }) {
+function DeltaChip({ v, label = "1D" }: { v: number | null | undefined; label?: string }) {
   if (v == null) return null;
-  if (v === 0)   return <span className="text-[9px] text-zinc-700">±0</span>;
+  if (v === 0)   return <span className="text-[9px] text-zinc-700">±0 <span className="opacity-40">{label}</span></span>;
   const pos = v > 0;
   return (
     <span className={cn("text-[9px] font-semibold tabular-nums leading-none", pos ? "text-emerald-400" : "text-red-400")}>
       {pos ? "+" : ""}{v}
-      <span className="opacity-50 font-normal"> 1D</span>
+      <span className="opacity-50 font-normal"> {label}</span>
     </span>
   );
 }
@@ -570,10 +570,10 @@ export function AlphaScannerPage() {
                       color="#a78bfa"
                       desc="The leading breakout indicator — detects early momentum shifts before they appear in price or in the consensus score (COS). Measures: Δ GVS momentum, Δ VQS quality trend, volume acceleration, EPS estimate slope, and narrative momentum. INS typically leads COS by 2–6 weeks on genuine breakouts. A stock where INS is rising while COS is flat is a pre-consensus setup — highest risk, highest reward."
                       levels={[
-                        ["≥ 75", "Strong breakout signal. High-conviction pre-consensus entry window. The signal is leading and not yet priced in."],
-                        ["≥ 55", "Momentum building. Watch closely for INS acceleration toward the 75 threshold — that crossing is the key event."],
-                        ["≥ 35", "Weak or early signal. Low conviction — monitor only, do not commit capital yet."],
-                        ["< 35",  "No signal. Avoid until INS recovers. Chasing here typically results in buying right before a flat period."],
+                        ["75–100", "Strong breakout signal. High-conviction pre-consensus entry window. The signal is leading and not yet priced in."],
+                        ["55–74",  "Momentum building. Watch closely for INS acceleration toward 75 — that crossing is the key event."],
+                        ["35–54",  "Weak or early signal. Low conviction — monitor only, do not commit capital yet."],
+                        ["0–34",   "No signal. Avoid until INS recovers. Chasing here typically results in buying right before a flat period."],
                         ["↑↑ trend", "Strongly rising — 6+ point swing across recent snapshots. Momentum is accelerating, not just drifting."],
                         ["↑ trend",  "Rising — 2–5 point movement. Healthy direction, watch for continuation."],
                         ["→ trend",  "Flat — within ±1 pt. No directional conviction right now."],
@@ -595,10 +595,10 @@ export function AlphaScannerPage() {
                       color="#2dd4bf"
                       desc="Detects institutional 'smart money' accumulation before a move is publicly recognized. Measures: up-volume ratio, relative strength vs SPY, price compression (coiling), closing strength, and volume surge patterns. ACS rising while price is flat is classic stealth accumulation — the market is loading up quietly before a re-rating."
                       levels={[
-                        ["≥ 75", "Strong accumulation. Institutional buyers are building positions aggressively. This level alongside high INS is the EARLY IGNITION flag — highest-quality pre-breakout signal in the system."],
-                        ["≥ 55", "Moderate accumulation. Buying pressure is building — watch for follow-through and INS confirmation before sizing up."],
-                        ["≥ 35", "Weak or inconsistent. Some buying activity but not sustained. Do not act on ACS alone at this level."],
-                        ["< 35",  "No accumulation signal. Smart money is not engaged. Without ACS support, any INS move has lower conviction."],
+                        ["75–100", "Strong accumulation. Institutional buyers are building positions aggressively. This level alongside high INS is the EARLY IGNITION flag — highest-quality pre-breakout signal in the system."],
+                        ["55–74",  "Moderate accumulation. Buying pressure is building — watch for follow-through and INS confirmation before sizing up."],
+                        ["35–54",  "Weak or inconsistent. Some buying activity but not sustained. Do not act on ACS alone at this level."],
+                        ["0–34",   "No accumulation signal. Smart money is not engaged. Without ACS support, any INS move has lower conviction."],
                         ["↑ trend", "Buying pressure intensifying across snapshots. This is the most actionable ACS signal — it means the accumulation is not random, it is directional."],
                         ["+N 1D Δ",  "ACS improved N points since the last snapshot. Use the 'ACS Δ1D' sort to surface stocks where institutional buying just shifted — these are often 1–4 weeks ahead of a public breakout."],
                       ]}
@@ -617,10 +617,10 @@ export function AlphaScannerPage() {
                       color="#34d399"
                       desc="The confirmation signal — blends VQS (fundamental quality) with GVS (price momentum). COS intentionally lags INS by design. The relationship between INS and COS is the key read: use INS to get in early, then watch COS to confirm the move is real. When COS finally catches up to a high INS reading, the breakout is entering mid-stage and the risk profile changes."
                       levels={[
-                        ["≥ 75", "High conviction — both quality fundamentals and price momentum are confirmed and elevated together. Breakout is mid-stage or later."],
-                        ["≥ 55", "Moderate opportunity. Decent setup but not fully extended. COS at this level while INS is higher is the ideal pre-breakout configuration."],
-                        ["≥ 35", "Low opportunity. Wait for COS to improve before committing."],
-                        ["< 35",  "Avoid. Weak fundamentals and/or no price momentum — no edge here."],
+                        ["75–100", "High conviction — both quality fundamentals and price momentum are confirmed and elevated together. Breakout is mid-stage or later."],
+                        ["55–74",  "Moderate opportunity. Decent setup but not fully extended. COS at this level while INS is higher is the ideal pre-breakout configuration."],
+                        ["35–54",  "Low opportunity. Wait for COS to improve before committing."],
+                        ["0–34",   "Avoid. Weak fundamentals and/or no price momentum — no edge here."],
                         ["COS > INS", "Late-stage warning pattern. COS has run ahead of INS — the crowd may be late to the move and risk/reward is poor."],
                         ["INS > COS", "Pre-consensus setup. The leading signal is elevated but confirmation hasn't arrived yet. This gap is where the best entries live."],
                         ["+N 1D Δ",  "COS accelerating after INS already rose is a breakout confirmation pattern — the move is transitioning from speculative to confirmed."],
@@ -684,6 +684,9 @@ export function AlphaScannerPage() {
                 const d1Ins   = delta?.delta1D?.ins ?? null;
                 const d1Acs   = delta?.delta1D?.acs ?? null;
                 const d1Cos   = delta?.delta1D?.cos ?? null;
+                const d1hCsos = delta?.delta1H?.csos ?? null;
+                const d1dCsos = delta?.delta1D?.csos ?? null;
+                const d7dCsos = delta?.delta7D?.csos ?? null;
                 const history = (delta?.history ?? []) as { ts: number; ins: number; cos: number; acs: number }[];
                 const divFlag = delta?.divergence;
                 const dotColor = `#${row.categoryColor}`;
@@ -776,6 +779,11 @@ export function AlphaScannerPage() {
                           <span className="text-[9px] text-zinc-600 leading-none tabular-nums">
                             VQS {score.vqs} · GVS {score.gvs}
                           </span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <DeltaChip v={d1hCsos} label="1H" />
+                            <DeltaChip v={d1dCsos} label="1D" />
+                            <DeltaChip v={d7dCsos} label="7D" />
+                          </div>
                         </div>
                       </div>
                     </td>

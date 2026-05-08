@@ -501,12 +501,13 @@ components:
     SignalValues:
       type: object
       properties:
-        vqs: { type: number }
-        gvs: { type: number }
-        cos: { type: number }
-        ins: { type: number }
-        acs: { type: number }
-      required: [vqs, gvs, cos, ins, acs]
+        vqs:  { type: number }
+        gvs:  { type: number }
+        cos:  { type: number }
+        ins:  { type: number }
+        acs:  { type: number }
+        csos: { type: number }
+      required: [vqs, gvs, cos, ins, acs, csos]
 
     SignalTrends:
       type: object
