@@ -97,8 +97,7 @@ function TrendArrow({ trend }: { trend: string | undefined }) {
 }
 
 function DeltaChip({ v, label = "1D" }: { v: number | null | undefined; label?: string }) {
-  if (v == null) return null;
-  if (v === 0)   return <span className="text-[9px] text-zinc-700">±0 <span className="opacity-40">{label}</span></span>;
+  if (v == null || v === 0) return null;
   const pos = v > 0;
   return (
     <span className={cn("text-[9px] font-semibold tabular-nums leading-none", pos ? "text-emerald-400" : "text-red-400")}>
@@ -106,6 +105,51 @@ function DeltaChip({ v, label = "1D" }: { v: number | null | undefined; label?: 
       <span className="opacity-50 font-normal"> {label}</span>
     </span>
   );
+}
+
+function formatBaselineAge(ms: number): string {
+  if (ms >= 23 * 3600_000) return "1D";
+  if (ms >= 3600_000) return `${Math.round(ms / 3600_000)}h`;
+  return `${Math.max(1, Math.round(ms / 60_000))}m`;
+}
+
+type SigKey = "ins" | "acs" | "cos" | "csos";
+
+/** Best available single delta: 1D → 1H → baseline. Skips zeros. */
+function resolveDelta(
+  delta: SignalDelta | undefined,
+  key: SigKey,
+): { v: number | null; label: string } {
+  if (!delta) return { v: null, label: "" };
+  const v1D = (delta.delta1D as Record<string, number> | null | undefined)?.[key] ?? null;
+  if (v1D !== null && v1D !== 0) return { v: v1D, label: "1D" };
+  const v1H = (delta.delta1H as Record<string, number> | null | undefined)?.[key] ?? null;
+  if (v1H !== null && v1H !== 0) return { v: v1H, label: "1H" };
+  const vB  = (delta.deltaBaseline as Record<string, number> | null | undefined)?.[key] ?? null;
+  if (vB !== null && vB !== 0 && delta.baselineAgeMs != null)
+    return { v: vB, label: formatBaselineAge(delta.baselineAgeMs) };
+  return { v: null, label: "" };
+}
+
+/** All available CSOS chips: 1H/baseline slot, 1D slot, 7D slot. */
+function resolveCsosChips(
+  delta: SignalDelta | undefined,
+): Array<{ v: number; label: string }> {
+  if (!delta) return [];
+  const chips: Array<{ v: number; label: string }> = [];
+  const v1H = (delta.delta1H as Record<string, number> | null | undefined)?.["csos"] ?? null;
+  if (v1H !== null && v1H !== 0) {
+    chips.push({ v: v1H, label: "1H" });
+  } else {
+    const vB = (delta.deltaBaseline as Record<string, number> | null | undefined)?.["csos"] ?? null;
+    if (vB !== null && vB !== 0 && delta.baselineAgeMs != null)
+      chips.push({ v: vB, label: formatBaselineAge(delta.baselineAgeMs) });
+  }
+  const v1D = (delta.delta1D as Record<string, number> | null | undefined)?.["csos"] ?? null;
+  if (v1D !== null && v1D !== 0) chips.push({ v: v1D, label: "1D" });
+  const v7D = (delta.delta7D as Record<string, number> | null | undefined)?.["csos"] ?? null;
+  if (v7D !== null && v7D !== 0) chips.push({ v: v7D, label: "7D" });
+  return chips;
 }
 
 // ── Column header tooltip helpers ─────────────────────────────────────────────
@@ -681,12 +725,10 @@ export function AlphaScannerPage() {
                 const cos     = score.cos;
                 const csos    = score.csos;
                 const label   = score.csosLabel ?? "";
-                const d1Ins   = delta?.delta1D?.ins ?? null;
-                const d1Acs   = delta?.delta1D?.acs ?? null;
-                const d1Cos   = delta?.delta1D?.cos ?? null;
-                const d1hCsos = delta?.delta1H?.csos ?? null;
-                const d1dCsos = delta?.delta1D?.csos ?? null;
-                const d7dCsos = delta?.delta7D?.csos ?? null;
+                const rdIns      = resolveDelta(delta, "ins");
+                const rdAcs      = resolveDelta(delta, "acs");
+                const rdCos      = resolveDelta(delta, "cos");
+                const csosChips  = resolveCsosChips(delta);
                 const history = (delta?.history ?? []) as { ts: number; ins: number; cos: number; acs: number }[];
                 const divFlag = delta?.divergence;
                 const dotColor = `#${row.categoryColor}`;
@@ -779,42 +821,44 @@ export function AlphaScannerPage() {
                           <span className="text-[9px] text-zinc-600 leading-none tabular-nums">
                             VQS {score.vqs} · GVS {score.gvs}
                           </span>
-                          <div className="flex items-center gap-1.5 mt-0.5">
-                            <DeltaChip v={d1hCsos} label="1H" />
-                            <DeltaChip v={d1dCsos} label="1D" />
-                            <DeltaChip v={d7dCsos} label="7D" />
-                          </div>
+                          {csosChips.length > 0 && (
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {csosChips.map(({ v, label: lbl }) => (
+                                <DeltaChip key={lbl} v={v} label={lbl} />
+                              ))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
 
-                    {/* INS + trend arrow + 1D delta */}
+                    {/* INS + trend arrow + best delta */}
                     <td className="px-3 py-2.5 text-center">
                       <div className="flex flex-col items-center gap-0.5">
                         <div className="flex items-center gap-1">
                           <span className={cn("font-bold text-sm tabular-nums", insColor(ins))}>{ins}</span>
                           <TrendArrow trend={delta?.trends?.ins} />
                         </div>
-                        <DeltaChip v={d1Ins} />
+                        <DeltaChip v={rdIns.v} label={rdIns.label} />
                       </div>
                     </td>
 
-                    {/* ACS + trend arrow + 1D delta */}
+                    {/* ACS + trend arrow + best delta */}
                     <td className="px-3 py-2.5 text-center">
                       <div className="flex flex-col items-center gap-0.5">
                         <div className="flex items-center gap-1">
                           <span className={cn("font-bold text-sm tabular-nums", acsColor(acs))}>{acs}</span>
                           <TrendArrow trend={delta?.trends?.acs} />
                         </div>
-                        <DeltaChip v={d1Acs} />
+                        <DeltaChip v={rdAcs.v} label={rdAcs.label} />
                       </div>
                     </td>
 
-                    {/* COS + 1D delta */}
+                    {/* COS + best delta */}
                     <td className="px-3 py-2.5 text-center hidden lg:table-cell">
                       <div className="flex flex-col items-center gap-0.5">
                         <span className={cn("font-bold text-sm tabular-nums", scoreColor(cos))}>{cos}</span>
-                        <DeltaChip v={d1Cos} />
+                        <DeltaChip v={rdCos.v} label={rdCos.label} />
                       </div>
                     </td>
 
