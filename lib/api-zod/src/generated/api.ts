@@ -255,6 +255,18 @@ export const GetSignalDeltasResponseItem = zod.object({
     ins: zod.number(),
     acs: zod.number(),
   }),
+  delta1H: zod
+    .object({
+      vqs: zod.number(),
+      gvs: zod.number(),
+      cos: zod.number(),
+      ins: zod.number(),
+      acs: zod.number(),
+    })
+    .nullish()
+    .describe(
+      "Delta vs snapshot closest to 1 hour ago (requires ≥30 min of history)",
+    ),
   delta1D: zod
     .object({
       vqs: zod.number(),

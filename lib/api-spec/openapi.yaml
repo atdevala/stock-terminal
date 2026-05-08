@@ -528,6 +528,10 @@ components:
           type: string
         current:
           $ref: "#/components/schemas/SignalValues"
+        delta1H:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+          description: "Delta vs snapshot closest to 1 hour ago (requires ≥30 min of history)"
         delta1D:
           $ref: "#/components/schemas/SignalValues"
           nullable: true

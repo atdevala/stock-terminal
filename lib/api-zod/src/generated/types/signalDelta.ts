@@ -12,6 +12,8 @@ import type { SignalValues } from "./signalValues";
 export interface SignalDelta {
   ticker: string;
   current: SignalValues;
+  /** Delta vs snapshot closest to 1 hour ago (requires ≥30 min of history) */
+  delta1H?: SignalValues | null;
   delta1D?: SignalValues | null;
   delta7D?: SignalValues | null;
   /** Fallback delta vs oldest available snapshot when 1D/7D not yet available */

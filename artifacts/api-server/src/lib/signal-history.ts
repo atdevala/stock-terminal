@@ -41,6 +41,8 @@ export interface SignalTrends {
 export interface SignalDelta {
   ticker:          string;
   current:         SignalValues;
+  /** Delta vs snapshot closest to 1 hour ago (requires ≥30 min of history) */
+  delta1H:         SignalValues | null;
   delta1D:         SignalValues | null;
   delta7D:         SignalValues | null;
   /** Fallback delta vs oldest available snapshot when 1D/7D not yet available */
@@ -246,11 +248,14 @@ export function getAllSignalDeltas(): SignalDelta[] {
       ? { vqs: liveSc.vqs, gvs: liveSc.gvs, cos: liveSc.cos, ins: liveSc.ins ?? 50, acs: liveSc.acs }
       : { vqs: latestSn!.vqs, gvs: latestSn!.gvs, cos: latestSn!.cos, ins: latestSn!.ins, acs: latestSn!.acs };
 
-    // 1D / 7D deltas: compare current to a snapshot from ~1 day or ~7 days ago
+    // 1H / 1D / 7D deltas: compare current to snapshots at each horizon
+    const snap1H  = findSnapshotNear(snaps, now - 1  * 3600_000);
     const snap1D  = findSnapshotNear(snaps, now - 24 * 3600_000);
     const snap7D  = findSnapshotNear(snaps, now - 7  * 86400_000);
     const snap48h = findSnapshotNear(snaps, now - 48 * 3600_000);
 
+    // Only count snap1H if it's actually ≥30 min old (avoids duplicate with baseline)
+    const delta1H = (snap1H && now - snap1H.ts >= 30 * 60_000) ? diffVals(current, snap1H) : null;
     const delta1D = snap1D ? diffVals(current, snap1D) : null;
     const delta7D = snap7D ? diffVals(current, snap7D) : null;
 
@@ -297,6 +302,7 @@ export function getAllSignalDeltas(): SignalDelta[] {
     results.push({
       ticker,
       current,
+      delta1H,
       delta1D,
       delta7D,
       deltaBaseline,

@@ -66,48 +66,73 @@ function fmt(v: number | undefined, suffix = "%", decimals = 1): string {
 
 type SignalKey = "vqs" | "gvs" | "cos" | "ins" | "acs";
 
-/** Returns the best available delta: 1D preferred, then 7D, then baseline fallback */
-function getBestDelta(sd: SignalDelta | undefined, key: SignalKey): number | null {
-  if (!sd) return null;
-  const v1D = sd.delta1D?.[key];
-  if (v1D !== undefined && v1D !== null) return v1D;
-  const v7D = sd.delta7D?.[key];
-  if (v7D !== undefined && v7D !== null) return v7D;
-  const vB = sd.deltaBaseline?.[key];
-  if (vB !== undefined && vB !== null) return vB;
-  return null;
+function formatBaselineAge(ms: number): string {
+  if (ms >= 23 * 3600_000) return "1D";
+  if (ms >= 3600_000) return `${Math.round(ms / 3600_000)}h`;
+  return `${Math.max(1, Math.round(ms / 60_000))}m`;
 }
 
-/** Returns a human-readable period label for the delta being shown */
-function getDeltaPeriod(sd: SignalDelta | undefined, key: SignalKey): string | null {
-  if (!sd) return null;
-  const v1D = sd.delta1D?.[key];
-  if (v1D !== undefined && v1D !== null) return "1D";
-  const v7D = sd.delta7D?.[key];
-  if (v7D !== undefined && v7D !== null) return "7D";
-  const vB = sd.deltaBaseline?.[key];
-  if (vB !== undefined && vB !== null && sd.baselineAgeMs != null) {
-    const ms = sd.baselineAgeMs;
-    if (ms >= 23 * 3600_000) return "1D";
-    if (ms >= 3600_000) return `${Math.round(ms / 3600_000)}h`;
-    return `${Math.max(1, Math.round(ms / 60_000))}m`;
+interface DeltaChip { delta: number; period: string }
+
+/**
+ * Returns up to 3 chips for a score key:
+ *   1. Short-term: delta1H (label "1H") or deltaBaseline (label "2h" / "30m" etc.)
+ *   2. Medium:     delta1D  (label "1D")
+ *   3. Long:       delta7D  (label "7D")
+ * Zero-delta chips are omitted — no point showing ±0.
+ */
+function getDeltaChips(sd: SignalDelta | undefined, key: SignalKey): DeltaChip[] {
+  if (!sd) return [];
+  const chips: DeltaChip[] = [];
+
+  // Short-term slot: prefer explicit 1H bucket, fall back to baseline
+  const v1H = sd.delta1H?.[key];
+  if (v1H !== undefined && v1H !== null && v1H !== 0) {
+    chips.push({ delta: v1H, period: "1H" });
+  } else {
+    const vB = sd.deltaBaseline?.[key];
+    if (vB !== undefined && vB !== null && vB !== 0 && sd.baselineAgeMs != null) {
+      chips.push({ delta: vB, period: formatBaselineAge(sd.baselineAgeMs) });
+    }
   }
-  return null;
+
+  // Medium-term slot
+  const v1D = sd.delta1D?.[key];
+  if (v1D !== undefined && v1D !== null && v1D !== 0) {
+    chips.push({ delta: v1D, period: "1D" });
+  }
+
+  // Long-term slot
+  const v7D = sd.delta7D?.[key];
+  if (v7D !== undefined && v7D !== null && v7D !== 0) {
+    chips.push({ delta: v7D, period: "7D" });
+  }
+
+  return chips;
 }
 
-// ── Delta chip inside badge ────────────────────────────────────────────────────
+// ── Delta chips inside badge ───────────────────────────────────────────────────
 
-function DeltaLine({ delta, period }: { delta: number | null; period: string | null }) {
-  if (delta === null || delta === 0 || period === null) return null;
-  const pos = delta > 0;
+function DeltaChips({ chips }: { chips: DeltaChip[] }) {
+  if (chips.length === 0) return null;
   return (
-    <span className={cn(
-      "text-[9px] leading-none font-semibold tabular-nums",
-      pos ? "text-emerald-400" : "text-red-400"
-    )}>
-      {pos ? "+" : ""}{delta}
-      <span className="opacity-60 font-normal"> {period}</span>
-    </span>
+    <div className="flex flex-col items-center gap-[1px] mt-0.5">
+      {chips.map(({ delta, period }) => {
+        const pos = delta > 0;
+        return (
+          <span
+            key={period}
+            className={cn(
+              "text-[9px] leading-none font-semibold tabular-nums",
+              pos ? "text-emerald-400" : "text-red-400"
+            )}
+          >
+            {pos ? "+" : ""}{delta}
+            <span className="opacity-60 font-normal"> {period}</span>
+          </span>
+        );
+      })}
+    </div>
   );
 }
 
@@ -117,15 +142,13 @@ function ScoreBadge({
   label,
   score,
   colorFn,
-  delta,
-  period,
+  chips,
   tooltip,
 }: {
   label: string;
   score: number;
   colorFn?: (s: number) => string;
-  delta: number | null;
-  period: string | null;
+  chips: DeltaChip[];
   tooltip: React.ReactNode;
 }) {
   const color = (colorFn ?? scoreColor)(score);
@@ -140,7 +163,7 @@ function ScoreBadge({
           data-testid={`score-badge-${label}`}
         >
           <span className="font-bold text-sm leading-tight">{score}</span>
-          <DeltaLine delta={delta} period={period} />
+          <DeltaChips chips={chips} />
         </div>
       </TooltipTrigger>
       <TooltipContent
@@ -397,8 +420,7 @@ export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
           <ScoreBadge
             label={`vqs-${stock.ticker}`}
             score={score.vqs}
-            delta={getBestDelta(signalDelta, "vqs")}
-            period={getDeltaPeriod(signalDelta, "vqs")}
+            chips={getDeltaChips(signalDelta, "vqs")}
             tooltip={<ScoreTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -410,8 +432,7 @@ export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
           <ScoreBadge
             label={`gvs-${stock.ticker}`}
             score={score.gvs}
-            delta={getBestDelta(signalDelta, "gvs")}
-            period={getDeltaPeriod(signalDelta, "gvs")}
+            chips={getDeltaChips(signalDelta, "gvs")}
             tooltip={<ScoreTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -423,8 +444,7 @@ export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
           <ScoreBadge
             label={`cos-${stock.ticker}`}
             score={score.cos}
-            delta={getBestDelta(signalDelta, "cos")}
-            period={getDeltaPeriod(signalDelta, "cos")}
+            chips={getDeltaChips(signalDelta, "cos")}
             tooltip={<ScoreTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -437,8 +457,7 @@ export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
             label={`ins-${stock.ticker}`}
             score={score.ins}
             colorFn={insColor}
-            delta={getBestDelta(signalDelta, "ins")}
-            period={getDeltaPeriod(signalDelta, "ins")}
+            chips={getDeltaChips(signalDelta, "ins")}
             tooltip={<InsTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
@@ -451,8 +470,7 @@ export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
             label={`acs-${stock.ticker}`}
             score={score.acs}
             colorFn={acsColor}
-            delta={getBestDelta(signalDelta, "acs")}
-            period={getDeltaPeriod(signalDelta, "acs")}
+            chips={getDeltaChips(signalDelta, "acs")}
             tooltip={<AcsTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
