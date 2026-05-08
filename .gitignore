@@ -47,3 +47,11 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Environment secrets — never commit real credentials
+.env
+.env.local
+.env.*.local
+
+# Runtime data — signal history is generated at runtime, not source
+artifacts/api-server/data/signal-history.json
