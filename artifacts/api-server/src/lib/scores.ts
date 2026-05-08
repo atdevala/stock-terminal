@@ -644,7 +644,17 @@ export function calculateCPE(
 // ── CSOS: Composite Stock Opportunity Score ───────────────────────────────────
 // A multi-layer institutional decision model for the watchlist tab ONLY.
 //
-// Base weights:  VQS 40% | GVS 25% | INS 15% | ACS 12% | COS 8%
+// Base weights:  VQS 40% | GVS 25% | INS 15% | ACS 12% | Quality Filter 8%
+//   Quality Filter = (100 - FBRS) — replaces the former COS 8% slot.
+//   COS = 0.5*VQS + 0.5*GVS, so including it in the base alongside VQS and GVS
+//   was purely redundant (effective VQS weight became 44%, GVS 29%, COS 0%).
+//   (100 - FBRS) is the only remaining score not in the base, and adds a
+//   genuinely independent dimension: institutional setup cleanliness / hype risk.
+//   High FBRS (hype-driven, fake breakout risk) → penalises base score.
+//   Low FBRS (clean institutional setup) → rewards it.
+//
+// COS is still used in the intelligence layers (pattern detection), where it
+// serves as a valid "market recognition / momentum" proxy.
 //
 // Intelligence layers applied on top of the weighted base:
 //   1. Early Breakout Edge    — INS leading COS bonus
@@ -694,16 +704,20 @@ export function calculateCSOS(
   cos: number,
   regime: string,
   cpe = 50,
+  fbrs = 50,
 ): { csos: number; csosLabel: string } {
   // Guard against NaN inputs
-  const v = isFinite(vqs) ? vqs : 50;
-  const g = isFinite(gvs) ? gvs : 50;
-  const i = isFinite(ins) ? ins : 50;
-  const a = isFinite(acs) ? acs : 50;
-  const c = isFinite(cos) ? cos : 50;
+  const v = isFinite(vqs)  ? vqs  : 50;
+  const g = isFinite(gvs)  ? gvs  : 50;
+  const i = isFinite(ins)  ? ins  : 50;
+  const a = isFinite(acs)  ? acs  : 50;
+  const c = isFinite(cos)  ? cos  : 50;
+  const f = isFinite(fbrs) ? fbrs : 50;
 
   // ── 1. BASE WEIGHTED SCORE ────────────────────────────────────────────────
-  let score = v * 0.40 + g * 0.25 + i * 0.15 + a * 0.12 + c * 0.08;
+  // Quality Filter = (100 - FBRS): rewards clean institutional setups,
+  // penalises hype-driven or fake-breakout candidates.
+  let score = v * 0.40 + g * 0.25 + i * 0.15 + a * 0.12 + (100 - f) * 0.08;
 
   // ── 2. EARLY BREAKOUT EDGE ────────────────────────────────────────────────
   // INS leads COS by 2–6 weeks. High INS + low COS = pre-breakout positioning.
@@ -913,7 +927,7 @@ export function computeScore(
   // ── CSOS — watchlist-only composite opportunity score ─────────────────────
   // Fetch the current market regime so CSOS can apply the regime multiplier.
   const { regime } = getMarketRegime();
-  const csosResult = calculateCSOS(vqs, gvs, ins, acs, cos, regime, cpe);
+  const csosResult = calculateCSOS(vqs, gvs, ins, acs, cos, regime, cpe, fbrs);
 
   return {
     ticker,
