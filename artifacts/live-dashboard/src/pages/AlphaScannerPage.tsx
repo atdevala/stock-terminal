@@ -26,7 +26,7 @@ import { formatPercent } from "@/lib/formatters";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type FilterKey = "all" | "fly" | "rising" | "confirmed" | "latecycle";
+type FilterKey = "all" | "accumulate" | "watch" | "caution" | "avoid";
 type SortKey   = "csos" | "ins" | "acs" | "insD1" | "acsD1";
 
 // ── Color helpers ──────────────────────────────────────────────────────────────
@@ -606,20 +606,26 @@ interface RowData {
 
 // ── Filter logic ───────────────────────────────────────────────────────────────
 
-function matchesFilter(row: RowData, filter: FilterKey): boolean {
-  const { score, delta } = row;
-  const ins   = score.ins ?? 0;
-  const cos   = score.cos;
-  const label = score.csosLabel ?? "";
-  const d1Ins = delta?.delta1D?.ins ?? 0;
-  const d1Acs = delta?.delta1D?.acs ?? 0;
+const ACCUMULATE_ACTIONS = new Set(["BUILD POSITION", "ACCUMULATE"]);
+const WATCH_ACTIONS      = new Set([
+  "WATCHLIST — AWAIT INS",
+  "INITIATE / MONITOR",
+  "HOLD / ADD",
+  "MONITOR — SIGNALS BUILDING",
+]);
+const AVOID_ACTIONS      = new Set(["AVOID", "TRIM / REDUCE", "PASS", "MONITOR"]);
 
+function matchesFilter(row: RowData, filter: FilterKey): boolean {
+  if (filter === "all") return true;
+  const action = buildVerdict(row.score, row.delta).action;
+  const isCAUTION = action.startsWith("CAUTION —");
+  const base = isCAUTION ? action.slice("CAUTION — ".length) : action;
   switch (filter) {
-    case "fly":       return label === "EARLY BREAKOUT SETUP" || label === "PRIME OPPORTUNITY";
-    case "rising":    return d1Ins > 0 || d1Acs > 0;
-    case "confirmed": return ins > 65 && cos > 65;
-    case "latecycle": return label === "LATE STAGE MOVE" || (cos > 80 && ins < 50);
-    default:          return true;
+    case "accumulate": return !isCAUTION && ACCUMULATE_ACTIONS.has(base);
+    case "watch":      return !isCAUTION && WATCH_ACTIONS.has(base);
+    case "caution":    return isCAUTION;
+    case "avoid":      return !isCAUTION && AVOID_ACTIONS.has(base);
+    default:           return true;
   }
 }
 
@@ -639,36 +645,67 @@ function sortRows(rows: RowData[], sortBy: SortKey): RowData[] {
 
 // ── Filter bar config ──────────────────────────────────────────────────────────
 
-const FILTERS: { key: FilterKey; label: string; base: string; active: string }[] = [
+const FILTERS: {
+  key:   FilterKey;
+  label: string;
+  base:  string;
+  active: string;
+  tip:   { title: string; body: string; how: string };
+}[] = [
   {
     key:    "all",
     label:  "All Stocks",
     base:   "border-zinc-600 text-zinc-400 hover:border-zinc-400 hover:text-zinc-200",
     active: "bg-zinc-700 border-zinc-500 text-white",
+    tip: {
+      title: "All Stocks",
+      body:  "Shows every stock in the scanner ranked by CSOS. Use this to get the full picture before narrowing down with a verdict filter.",
+      how:   "Scan the CSOS column top-to-bottom. Use the sort controls to re-rank by INS or ACS delta to surface the fastest-moving setups.",
+    },
   },
   {
-    key:    "fly",
-    label:  "⚡ About to Fly",
+    key:    "accumulate",
+    label:  "Accumulate",
     base:   "border-amber-700 text-amber-500 hover:border-amber-500 hover:text-amber-300",
     active: "border-amber-500 bg-amber-900/40 text-amber-200",
+    tip: {
+      title: "Accumulate — Actionable Entry",
+      body:  "Stocks where the signal system says it is the right time to build or add to a position. Includes BUILD POSITION (all signals aligned, full conviction) and ACCUMULATE (INS front-running COS — early entry before the crowd confirms).",
+      how:   "Hover each ticker for the full verdict. Prioritise stocks with rising ACS alongside high INS — those are the highest-conviction setups. Scale in over 2–3 sessions rather than entering all at once.",
+    },
   },
   {
-    key:    "rising",
-    label:  "📈 Rising Signals",
-    base:   "border-emerald-700 text-emerald-500 hover:border-emerald-500 hover:text-emerald-300",
-    active: "border-emerald-500 bg-emerald-900/40 text-emerald-200",
+    key:    "watch",
+    label:  "Watchlist",
+    base:   "border-sky-700 text-sky-500 hover:border-sky-500 hover:text-sky-300",
+    active: "border-sky-500 bg-sky-900/40 text-sky-200",
+    tip: {
+      title: "Watchlist — Not Yet, But Worth Tracking",
+      body:  "Stocks with a developing setup that doesn't yet warrant a full position. Includes WATCHLIST — AWAIT INS (quality business waiting for a timing signal), INITIATE / MONITOR (small starter only), HOLD / ADD (move confirmed but mid-stage), and MONITOR — SIGNALS BUILDING (momentum just starting to stir).",
+      how:   "Add these to your tracking list and watch for INS to cross 60–70 or ACS to start rising. A signal building flag on one of these names is an early warning to size up.",
+    },
   },
   {
-    key:    "confirmed",
-    label:  "✓ Confirmed Move",
-    base:   "border-violet-700 text-violet-500 hover:border-violet-500 hover:text-violet-300",
-    active: "border-violet-500 bg-violet-900/40 text-violet-200",
+    key:    "caution",
+    label:  "Caution",
+    base:   "border-orange-700 text-orange-500 hover:border-orange-600 hover:text-orange-300",
+    active: "border-orange-500 bg-orange-900/40 text-orange-200",
+    tip: {
+      title: "Caution — Elevated False-Breakout Risk",
+      body:  "Stocks where FBRS (False Breakout Risk Score) is above 70. The underlying setup may still be valid, but the high FBRS means the move is more likely to be hype-driven and reverse quickly. The full verdict is shown after the CAUTION — prefix in the tooltip.",
+      how:   "If you trade these, cut position size in half and keep stops tight. Wait for ACS to confirm before adding. Do not chase momentum alone on a CAUTION stock — institutional support (ACS) is your key confirmation signal.",
+    },
   },
   {
-    key:    "latecycle",
-    label:  "⚠ Late Cycle Risk",
+    key:    "avoid",
+    label:  "Avoid",
     base:   "border-red-800 text-red-500 hover:border-red-600 hover:text-red-300",
     active: "border-red-600 bg-red-900/40 text-red-200",
+    tip: {
+      title: "Avoid — No Edge or Exit Signal",
+      body:  "Stocks the system says to skip or exit. Includes AVOID (fundamentally weak — VQS < 40), TRIM / REDUCE (late-stage, risk/reward has deteriorated), PASS (signals absent), and MONITOR (no actionable setup — watching only).",
+      how:   "Do not initiate new positions here. For stocks you already hold that show TRIM / REDUCE, consider taking partial profits or tightening your stop. Check back when INS and CSOS start recovering.",
+    },
   },
 ];
 
@@ -769,16 +806,36 @@ export function AlphaScannerPage() {
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-4 py-2 flex items-center gap-2 flex-wrap">
         <div className="flex gap-1.5 flex-wrap">
           {FILTERS.map(f => (
-            <button
-              key={f.key}
-              onClick={() => setFilter(f.key)}
-              className={cn(
-                "text-xs font-medium px-3 py-1 rounded border transition-colors duration-150",
-                filter === f.key ? f.active : f.base,
-              )}
-            >
-              {f.label}
-            </button>
+            <Tooltip key={f.key}>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={() => setFilter(f.key)}
+                  className={cn(
+                    "text-xs font-medium px-3 py-1 rounded border transition-colors duration-150",
+                    filter === f.key ? f.active : f.base,
+                  )}
+                >
+                  {f.label}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent
+                side="bottom"
+                align="start"
+                className="max-w-[300px] p-0 overflow-hidden border border-zinc-700 shadow-2xl rounded-lg z-50"
+                style={{ backgroundColor: "#000000" }}
+              >
+                <div style={{ backgroundColor: "#000000", color: "#ffffff" }}>
+                  <div className="px-3 py-2 border-b border-zinc-800" style={{ backgroundColor: "#0f0f0f" }}>
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-zinc-300 mb-1">{f.tip.title}</div>
+                    <div className="text-[11px] text-zinc-400 leading-snug">{f.tip.body}</div>
+                  </div>
+                  <div className="px-3 py-2">
+                    <div className="text-[9px] uppercase tracking-widest text-zinc-600 mb-1">How to use</div>
+                    <div className="text-[11px] text-zinc-300 leading-snug">{f.tip.how}</div>
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
           ))}
         </div>
 

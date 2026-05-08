@@ -180,8 +180,10 @@ function diffVals(current: SignalValues, snap: SignalSnapshot): SignalValues {
     cos:  Math.round(current.cos  - snap.cos),
     ins:  Math.round(current.ins  - snap.ins),
     acs:  Math.round(current.acs  - snap.acs),
-    csos: Math.round(current.csos - (snap.csos ?? 0)),
-    cpe:  Math.round(current.cpe  - (snap.cpe  ?? 0)),
+    // Use null-guard (not ?? 0) so that snapshots saved before these fields
+    // existed produce a 0 delta rather than the full current score.
+    csos: snap.csos != null ? Math.round(current.csos - snap.csos) : 0,
+    cpe:  snap.cpe  != null ? Math.round(current.cpe  - snap.cpe)  : 0,
   };
 }
 
@@ -193,8 +195,8 @@ function diffSnaps(a: SignalSnapshot, b: SignalSnapshot): SignalValues {
     cos:  Math.round(a.cos  - b.cos),
     ins:  Math.round(a.ins  - b.ins),
     acs:  Math.round(a.acs  - b.acs),
-    csos: Math.round((a.csos ?? 0) - (b.csos ?? 0)),
-    cpe:  Math.round((a.cpe  ?? 0) - (b.cpe  ?? 0)),
+    csos: (a.csos != null && b.csos != null) ? Math.round(a.csos - b.csos) : 0,
+    cpe:  (a.cpe  != null && b.cpe  != null) ? Math.round(a.cpe  - b.cpe)  : 0,
   };
 }
 
