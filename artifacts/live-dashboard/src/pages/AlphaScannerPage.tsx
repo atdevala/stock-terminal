@@ -39,12 +39,15 @@ function csosColor(s: number): string {
 }
 
 function csosLabelStyle(label: string): string {
-  if (label === "PRIME OPPORTUNITY")    return "text-emerald-300";
-  if (label === "EARLY BREAKOUT SETUP") return "text-amber-300";
-  if (label === "QUALITY COMPOUNDER")   return "text-sky-300";
-  if (label === "CONFIRMED TREND")      return "text-amber-400";
-  if (label === "DEVELOPING SETUP")     return "text-zinc-400";
-  if (label === "LATE STAGE MOVE")      return "text-orange-400";
+  if (label === "PRIME OPPORTUNITY")                return "text-emerald-300";
+  if (label === "EARLY BREAKOUT SETUP")             return "text-amber-300";
+  if (label === "STEALTH ACCUMULATION")             return "text-teal-300";
+  if (label === "HIDDEN CATALYST POTENTIAL")        return "text-sky-300";
+  if (label === "QUALITY COMPOUNDER — ACTIVATING")  return "text-blue-300";
+  if (label === "QUALITY COMPOUNDER — DORMANT")     return "text-blue-400";
+  if (label === "CONFIRMED TREND")                  return "text-amber-400";
+  if (label === "DEVELOPING SETUP")                 return "text-zinc-400";
+  if (label === "LATE STAGE MOVE")                  return "text-orange-400";
   return "text-red-400";
 }
 
@@ -423,23 +426,22 @@ function buildVerdict(score: StockScore, delta: SignalDelta | undefined): Verdic
     action = "HOLD / ADD"; actionStyle = "text-sky-300"; actionBg = "bg-sky-900/40 border-sky-700";
     confidence = ins >= 60 ? "MEDIUM" : "LOW";
     entryNote = "Move confirmed, mid-stage. Existing positions: hold. New: small size with stop under structure.";
-  } else if (label === "QUALITY COMPOUNDER") {
-    const ready = ins >= 60;
-    action      = ready ? "ACCUMULATE" : "WATCHLIST — AWAIT INS";
-    actionStyle = ready ? "text-amber-300" : "text-blue-300";
-    actionBg    = ready ? "bg-amber-900/40 border-amber-700" : "bg-blue-900/40 border-blue-700";
-    confidence  = ready ? "MEDIUM" : "LOW";
-    entryNote   = ready
-      ? "Strong fundamentals with INS signal activating. Use VQS as your fundamental anchor."
-      : "High-quality business — no timing signal yet. Add to watchlist; wait for INS to break above 60.";
-  } else if (csos >= 45 && (insD1 > 0 || acsD1 > 0)) {
+  } else if (label === "QUALITY COMPOUNDER — ACTIVATING") {
+    action = "ACCUMULATE"; actionStyle = "text-amber-300"; actionBg = "bg-amber-900/40 border-amber-700";
+    confidence = "MEDIUM";
+    entryNote = "Strong fundamentals with INS signal now live. Use VQS as your fundamental anchor — quality gives you a margin of safety on the entry.";
+  } else if (label === "QUALITY COMPOUNDER — DORMANT") {
+    action = "WATCHLIST — AWAIT INS"; actionStyle = "text-blue-300"; actionBg = "bg-blue-900/40 border-blue-700";
+    confidence = "LOW";
+    entryNote = "High-quality business — no timing signal yet. Add to watchlist; wait for INS to break above 60 before committing capital.";
+  } else if (csos >= 35 && (insD1 > 0 || acsD1 > 0 || cpe >= 65)) {
     action = "MONITOR — SIGNALS BUILDING"; actionStyle = "text-zinc-300"; actionBg = "bg-zinc-800 border-zinc-600";
     confidence = "LOW";
     entryNote = "Signals are starting to move. Watch the next 2–3 snapshots for acceleration before committing.";
   } else if (csos >= 35) {
     action = "MONITOR"; actionStyle = "text-zinc-400"; actionBg = "bg-zinc-800 border-zinc-700";
     confidence = "LOW";
-    entryNote = null;
+    entryNote = "No actionable entry signal yet. Revisit if INS, ACS, or CPE start to move.";
   } else {
     action = "PASS"; actionStyle = "text-red-400"; actionBg = "bg-zinc-900 border-zinc-700";
     confidence = "LOW";
@@ -508,8 +510,11 @@ function buildVerdict(score: StockScore, delta: SignalDelta | undefined): Verdic
     risks.push(`CPE ${cpe} — low near-term catalyst probability`);
   }
 
-  if (risks.length === 0 && !["AVOID", "PASS", "TRIM / REDUCE"].includes(action)) {
+  if (risks.length === 0 && !["AVOID", "PASS", "TRIM / REDUCE", "MONITOR"].includes(action)) {
     risks.push("No major red flags — setup is clean across all signal dimensions");
+  }
+  if (risks.length === 0 && action === "MONITOR") {
+    risks.push("No actionable entry signal yet — signals are present but below conviction thresholds");
   }
 
   return { action, actionStyle, actionBg, confidence, reasons, risks, entryNote };
@@ -612,8 +617,9 @@ const WATCH_ACTIONS      = new Set([
   "INITIATE / MONITOR",
   "HOLD / ADD",
   "MONITOR — SIGNALS BUILDING",
+  "MONITOR",
 ]);
-const AVOID_ACTIONS      = new Set(["AVOID", "TRIM / REDUCE", "PASS", "MONITOR"]);
+const AVOID_ACTIONS      = new Set(["AVOID", "TRIM / REDUCE", "PASS"]);
 
 function matchesFilter(row: RowData, filter: FilterKey): boolean {
   if (filter === "all") return true;
@@ -886,12 +892,15 @@ export function AlphaScannerPage() {
                     <TipBody
                       title="CSOS — Composite Signal Opportunity Score"
                       color="#f59e0b"
-                      desc="Blends VQS (fundamentals), INS (breakout signal), ACS (accumulation), and COS (momentum) into a single ranked number. The label is context-aware — it reflects the signal pattern, not just the raw score. Sort by CSOS to rank all 103 stocks by overall opportunity."
+                      desc="Blends VQS (fundamentals), INS (breakout signal), ACS (accumulation), and COS (momentum) into a single ranked number. The label is context-aware — it reflects the dominant signal pattern, not just the raw score. Sort by CSOS to rank all 103 stocks by overall opportunity."
                       levels={[
-                        ["PRIME OPP.", "All signals co-elevated — INS, ACS, and COS all >70 with strong VQS. Rare and highest-conviction. When this appears, it means multiple independent signals are pointing the same direction at once."],
-                        ["EARLY BRK.", "INS >75 leading COS by a wide margin. The signal is front-running the crowd — this is where early entries are found before the move becomes consensus."],
-                        ["QUALITY", "VQS ≥65 is the dominant driver. Strong business with durable fundamentals. Not yet in a breakout — watch INS for the right entry timing."],
-                        ["CONFIRMED", "COS and INS both elevated with ACS support. The move has started and is confirmed. Still actionable but you are no longer getting in early."],
+                        ["PRIME OPP.", "All signals co-elevated — INS, ACS, and COS all >70 with strong VQS. Rare and highest-conviction. Multiple independent signals pointing the same direction at once."],
+                        ["EARLY BRK.", "INS >75 leading COS by a wide margin. The signal is front-running the crowd — early entries before the move becomes consensus."],
+                        ["STEALTH ACCUM.", "ACS ≥65 with CPE ≥60 and COS still below 55. Institutions quietly positioning before a public breakout — classic pre-announcement accumulation."],
+                        ["HIDDEN CATALYST", "CPE ≥70 with COS below 55. Market hasn't priced in an improving story yet. Quality and accumulation signals suggest a re-rating event approaching."],
+                        ["QUALITY — ACTIVATING", "VQS ≥65 dominant driver + INS ≥60 now live. Established quality business entering an active setup phase — accumulate on the fundamental anchor."],
+                        ["QUALITY — DORMANT", "VQS ≥65 dominant driver, INS below 60. Strong business with no timing signal yet — watchlist only, wait for INS to cross 60."],
+                        ["CONFIRMED", "COS and INS both elevated with ACS support. The move has started and is confirmed. Still actionable but no longer an early entry."],
                         ["DEVELOPING", "Signals building but not yet converged. Monitor for INS or ACS acceleration before committing capital."],
                         ["LATE STAGE", "COS is extended but INS is fading. Risk/reward is deteriorating — the easy money has been made. Size down or wait for a full reset."],
                         ["LOW QUALITY", "VQS <40 fundamental override. Weak business quality negates price action. Do not chase regardless of momentum."],

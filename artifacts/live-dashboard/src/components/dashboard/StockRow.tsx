@@ -327,14 +327,15 @@ function cpeColor(s: number): string {
 }
 
 function csosLabelStyle(label: string): string {
-  if (label === "PRIME OPPORTUNITY")          return "text-emerald-300";
-  if (label === "EARLY BREAKOUT SETUP")       return "text-amber-300";
-  if (label === "STEALTH ACCUMULATION")       return "text-teal-300";
-  if (label === "HIDDEN CATALYST POTENTIAL")  return "text-sky-300";
-  if (label === "QUALITY COMPOUNDER")         return "text-blue-300";
-  if (label === "CONFIRMED TREND")            return "text-amber-400";
-  if (label === "DEVELOPING SETUP")           return "text-zinc-400";
-  if (label === "LATE STAGE MOVE")            return "text-orange-400";
+  if (label === "PRIME OPPORTUNITY")                return "text-emerald-300";
+  if (label === "EARLY BREAKOUT SETUP")             return "text-amber-300";
+  if (label === "STEALTH ACCUMULATION")             return "text-teal-300";
+  if (label === "HIDDEN CATALYST POTENTIAL")        return "text-sky-300";
+  if (label === "QUALITY COMPOUNDER — ACTIVATING")  return "text-blue-300";
+  if (label === "QUALITY COMPOUNDER — DORMANT")     return "text-blue-400";
+  if (label === "CONFIRMED TREND")                  return "text-amber-400";
+  if (label === "DEVELOPING SETUP")                 return "text-zinc-400";
+  if (label === "LATE STAGE MOVE")                  return "text-orange-400";
   return "text-red-400";
 }
 
@@ -365,10 +366,15 @@ function getCsosMainReason(
       headline: `Market underpricing an upcoming catalyst (CPE ${cpe})`,
       detail: `CPE (${cpe}) is high while COS (${cos}) is still muted — the market hasn't yet priced in the improving underlying story. Quality and accumulation signals suggest a re-rating event may be approaching.`,
     };
-  if (label === "QUALITY COMPOUNDER")
+  if (label === "QUALITY COMPOUNDER — ACTIVATING")
     return {
-      headline: `Fundamentals-anchored (VQS ${vqs})`,
-      detail: `VQS carries 40% weight and is the dominant driver here. This is an established, structurally strong business — the score is quality-anchored, not momentum-dependent, which makes it more durable.`,
+      headline: `Fundamentals-anchored with INS now live (VQS ${vqs}, INS ${ins})`,
+      detail: `VQS carries 40% weight and is the dominant driver here. INS (${ins}) has crossed 60 — the timing signal is now active alongside strong fundamentals. This is an established quality business entering an active setup phase.`,
+    };
+  if (label === "QUALITY COMPOUNDER — DORMANT")
+    return {
+      headline: `Fundamentals-anchored, timing signal not yet live (VQS ${vqs})`,
+      detail: `VQS carries 40% weight and is the dominant driver here. INS (${ins}) has not yet crossed 60 — the business quality is strong but there is no timing signal to act on. Watch for INS to activate before committing capital.`,
     };
   if (label === "CONFIRMED TREND")
     return {

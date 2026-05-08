@@ -687,8 +687,8 @@ function csosLabelText(
   if (a >= 65 && c < 55 && cpe >= 60) return "STEALTH ACCUMULATION";
   // 6. High catalyst probability unrecognized by momentum signals
   if (cpe >= 70 && c < 55) return "HIDDEN CATALYST POTENTIAL";
-  // 7. Fundamentals-driven score — established quality leader
-  if (v >= 65 && s >= 52) return "QUALITY COMPOUNDER";
+  // 7. Fundamentals-driven score — split on whether INS timing signal is live
+  if (v >= 65 && s >= 52) return i >= 60 ? "QUALITY COMPOUNDER — ACTIVATING" : "QUALITY COMPOUNDER — DORMANT";
   // 8. Momentum confirmed with institutional backing
   if (c >= 60 && i >= 50 && s >= 48) return "CONFIRMED TREND";
   // 9. Signals building but no clear dominant pattern yet

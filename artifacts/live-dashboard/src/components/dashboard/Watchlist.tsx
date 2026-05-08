@@ -366,12 +366,18 @@ export function Watchlist() {
                               <div className="text-zinc-400 font-semibold mb-1">Base weights:</div>
                               <div className="text-zinc-400">40% VQS · 25% GVS · 15% INS · 12% ACS · 8% COS</div>
                             </div>
-                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div><span className="text-amber-300 font-mono">78+</span><span className="text-zinc-300"> → EARLY BREAKOUT SETUP</span></div>
-                              <div><span className="text-amber-400 font-mono">62–77</span><span className="text-zinc-300"> → CONFIRMED TREND</span></div>
-                              <div><span className="text-yellow-400 font-mono">48–61</span><span className="text-zinc-300"> → QUALITY COMPOUNDER</span></div>
-                              <div><span className="text-orange-400 font-mono">35–47</span><span className="text-zinc-300"> → LATE STAGE MOVE</span></div>
-                              <div><span className="text-red-400 font-mono">below 35</span><span className="text-zinc-300"> → LOW QUALITY / AVOID</span></div>
+                            <div className="text-xs space-y-1 border-t border-zinc-700 pt-2">
+                              <div className="text-zinc-500 font-semibold mb-1 uppercase tracking-widest text-[9px]">Labels (pattern-based, not score ranges)</div>
+                              <div><span className="text-emerald-300 font-medium">PRIME OPPORTUNITY</span><span className="text-zinc-400"> — all signals co-elevated, full conviction</span></div>
+                              <div><span className="text-amber-300 font-medium">EARLY BREAKOUT SETUP</span><span className="text-zinc-400"> — INS front-running COS, pre-breakout entry</span></div>
+                              <div><span className="text-teal-300 font-medium">STEALTH ACCUMULATION</span><span className="text-zinc-400"> — quiet institutional build-up, ACS dominant</span></div>
+                              <div><span className="text-sky-300 font-medium">HIDDEN CATALYST</span><span className="text-zinc-400"> — CPE elevated, catalyst not yet priced in</span></div>
+                              <div><span className="text-blue-300 font-medium">QUALITY — ACTIVATING</span><span className="text-zinc-400"> — strong fundamentals + INS ≥60 now live</span></div>
+                              <div><span className="text-blue-400 font-medium">QUALITY — DORMANT</span><span className="text-zinc-400"> — quality business, no timing signal yet</span></div>
+                              <div><span className="text-amber-400 font-medium">CONFIRMED TREND</span><span className="text-zinc-400"> — move confirmed with institutional backing</span></div>
+                              <div><span className="text-zinc-400 font-medium">DEVELOPING SETUP</span><span className="text-zinc-400"> — signals building, not yet converged</span></div>
+                              <div><span className="text-orange-400 font-medium">LATE STAGE MOVE</span><span className="text-zinc-400"> — extended COS, fading INS — consider trimming</span></div>
+                              <div><span className="text-red-400 font-medium">LOW QUALITY / AVOID</span><span className="text-zinc-400"> — VQS below 40, do not chase</span></div>
                             </div>
                             <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Regime-adjusted. Includes divergence penalties, agreement bonuses, and early breakout edge detection.</p>
                           </TooltipContent>
