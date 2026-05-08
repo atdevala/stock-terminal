@@ -1,6 +1,7 @@
 import type { ExtendedMetrics, QuoteData } from "./finnhub";
 import { computeINS } from "./ins";
 import { getSpyCloses60d, getMarketRegime } from "./finnhub";
+import { logger } from "./logger";
 
 // ── Math helpers ───────────────────────────────────────────────────────────────
 
@@ -52,51 +53,6 @@ function cosLabel(s: number): string {
   if (s >= 50) return "Moderate Opportunity";
   if (s >= 35) return "Proceed with Caution";
   return "Avoid / High Risk";
-}
-
-// ── ACSv1: Legacy Accumulation Confidence Score (kept for reference) ──────────
-// DEPRECATED — superseded by computeACS_v2 below. Not called in production.
-// Retained as a safety fallback until ACSv2 is fully validated in production.
-
-function _computeACS_v1(ext: ExtendedMetrics, quote: QuoteData | undefined): number {
-  const price  = quote?.price   ?? 0;
-  const high52 = quote?.high52  ?? 0;
-  const low52  = quote?.low52   ?? 0;
-
-  let rangeSig = 50;
-  if (high52 > low52 && price > 0) {
-    const pos = (price - low52) / (high52 - low52);
-    if (pos <= 0.35) {
-      rangeSig = clamp(pos / 0.35 * 45, 0, 45);
-    } else if (pos <= 0.85) {
-      rangeSig = clamp(45 + (pos - 0.35) / 0.50 * 55, 45, 100);
-    } else {
-      rangeSig = clamp(100 - (pos - 0.85) / 0.15 * 20, 80, 100);
-    }
-  }
-
-  const eps = ext.epsSurprises ?? [];
-  let epsSig = 50;
-  if (eps.length > 0) {
-    const avg = eps.reduce((a, b) => a + b, 0) / eps.length;
-    epsSig = clamp(50 + avg * 0.8, 0, 100);
-  }
-
-  const yoy = ext.revenueGrowthYoy ?? 0;
-  const qoq = ext.revenueGrowthQoQ ?? 0;
-  const baseMomentum = clamp(50 + yoy * 0.5, 0, 100);
-  const accelBonus   = clamp((qoq - yoy) * 1.5, -30, 30);
-  const revAccel     = clamp(baseMomentum + accelBonus, 0, 100);
-
-  const gm  = ext.grossMargin     ?? 0;
-  const opM = ext.operatingMargin ?? 0;
-  const marginSig = clamp(30 + gm * 0.4 + Math.max(opM, 0) * 0.6, 0, 100);
-  const consensusSig = ext.earningsRevisionsUp ? 75 : 35;
-
-  return Math.round(clamp(
-    0.30 * rangeSig + 0.25 * epsSig + 0.20 * revAccel +
-    0.15 * marginSig + 0.10 * consensusSig,
-  ));
 }
 
 // ── ACSv2: Institutional-Grade Accumulation Confidence Score ─────────────────
@@ -877,6 +833,7 @@ export function computeScore(
   changePercent = 0,
   quote?: QuoteData,
 ): StockScore {
+  try {
   const rg    = ext.revenueGrowthYoy ?? 0;
   const rgQ   = ext.revenueGrowthQoQ ?? 0;
   const gm    = ext.grossMargin      ?? 0;
@@ -988,6 +945,23 @@ export function computeScore(
     csosLabel: csosResult.csosLabel,
     cpe,
   };
+  } catch (err) {
+    logger.error({ ticker, err }, "computeScore threw unexpectedly — returning safe defaults");
+    return {
+      ticker,
+      vqs: 0, gvs: 0, cos: 0,
+      vqsLabel: "Weak Fundamentals",
+      gvsLabel: "Broken Growth Story",
+      cosLabel: "Avoid / High Risk",
+      acs: 0, fbrs: 100,
+      trendLabel: "NEUTRAL",
+      convictionTier: 0,
+      isSuperstock: false,
+      csos: 0,
+      csosLabel: "LOW QUALITY / AVOID",
+      cpe: 0,
+    };
+  }
 }
 
 // ── Cross-sectional normalization ─────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { logger } from "../lib/logger";
 import { CATEGORIES } from "../lib/stocks-data";
 import {
   getAllQuotes,
@@ -32,19 +33,24 @@ router.get("/market-status", (_req, res) => {
 });
 
 router.get("/scores", (_req, res) => {
-  const metrics = getAllExtendedMetrics();
-  const rawScores = metrics.map(ext => {
-    const q = getQuote(ext.ticker);
-    return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0, q);
-  });
-  // Cross-sectional normalization: convert CSOS + CPE to percentile ranks within
-  // the universe so scores are relative (90+ is truly rare), not absolute.
-  const scores = normalizeScores(rawScores);
-  // Keep live scores in memory so /api/signal-deltas can use them as "current"
-  setCurrentScores(scores);
-  // Take a snapshot for the signal history tracker (debounced to 30 min)
-  takeSnapshotIfDue(scores);
-  res.json(scores);
+  try {
+    const metrics = getAllExtendedMetrics();
+    const rawScores = metrics.map(ext => {
+      const q = getQuote(ext.ticker);
+      return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0, q);
+    });
+    // Cross-sectional normalization: convert CSOS + CPE to percentile ranks within
+    // the universe so scores are relative (90+ is truly rare), not absolute.
+    const scores = normalizeScores(rawScores);
+    // Keep live scores in memory so /api/signal-deltas can use them as "current"
+    setCurrentScores(scores);
+    // Take a snapshot for the signal history tracker (debounced to 30 min)
+    takeSnapshotIfDue(scores);
+    res.json(scores);
+  } catch (err) {
+    logger.error({ err }, "/scores route failed");
+    res.status(500).json({ error: "Score computation failed" });
+  }
 });
 
 router.get("/movers", (_req, res) => {
@@ -71,42 +77,47 @@ router.post("/scanner/refresh", (_req, res) => {
 // ── Sector Rotation Engine ─────────────────────────────────────────────────────
 
 router.get("/sectors", (_req, res) => {
-  const metrics = getAllExtendedMetrics();
-  const qMap    = new Map(getAllQuotes().map(q => [q.ticker, q]));
+  try {
+    const metrics = getAllExtendedMetrics();
+    const qMap    = new Map(getAllQuotes().map(q => [q.ticker, q]));
 
-  type CatEntry = { name: string; color: string; ins: number[]; cos: number[]; acs: number[] };
-  const catMap  = new Map<string, CatEntry>();
-  for (const cat of CATEGORIES) {
-    catMap.set(cat.name, { name: cat.name, color: cat.color, ins: [], cos: [], acs: [] });
+    type CatEntry = { name: string; color: string; ins: number[]; cos: number[]; acs: number[] };
+    const catMap  = new Map<string, CatEntry>();
+    for (const cat of CATEGORIES) {
+      catMap.set(cat.name, { name: cat.name, color: cat.color, ins: [], cos: [], acs: [] });
+    }
+
+    for (const ext of metrics) {
+      const q = qMap.get(ext.ticker);
+      if (!q || q.price === 0) continue;
+      const scored = computeScore(ext.ticker, ext, q.price, q.changePercent, q);
+      const cat    = CATEGORIES.find(c => c.stocks.some(s => s.ticker === ext.ticker));
+      if (!cat) continue;
+      const entry  = catMap.get(cat.name)!;
+      entry.ins.push(scored.ins ?? 0);
+      entry.cos.push(scored.cos);
+      entry.acs.push(scored.acs);
+    }
+
+    const sectors = [...catMap.values()]
+      .filter(c => c.ins.length > 0)
+      .map(c => ({
+        name:       c.name,
+        color:      c.color,
+        avgIns:     Math.round(mean(c.ins)),
+        avgCos:     Math.round(mean(c.cos)),
+        avgAcs:     Math.round(mean(c.acs)),
+        stockCount: c.ins.length,
+        hotRank:    0,
+      }))
+      .sort((a, b) => b.avgIns - a.avgIns)
+      .map((s, i) => ({ ...s, hotRank: i + 1 }));
+
+    res.json(sectors);
+  } catch (err) {
+    logger.error({ err }, "/sectors route failed");
+    res.status(500).json({ error: "Sector computation failed" });
   }
-
-  for (const ext of metrics) {
-    const q = qMap.get(ext.ticker);
-    if (!q || q.price === 0) continue;
-    const scored = computeScore(ext.ticker, ext, q.price, q.changePercent, q);
-    const cat    = CATEGORIES.find(c => c.stocks.some(s => s.ticker === ext.ticker));
-    if (!cat) continue;
-    const entry  = catMap.get(cat.name)!;
-    entry.ins.push(scored.ins ?? 0);
-    entry.cos.push(scored.cos);
-    entry.acs.push(scored.acs);
-  }
-
-  const sectors = [...catMap.values()]
-    .filter(c => c.ins.length > 0)
-    .map(c => ({
-      name:       c.name,
-      color:      c.color,
-      avgIns:     Math.round(mean(c.ins)),
-      avgCos:     Math.round(mean(c.cos)),
-      avgAcs:     Math.round(mean(c.acs)),
-      stockCount: c.ins.length,
-      hotRank:    0,
-    }))
-    .sort((a, b) => b.avgIns - a.avgIns)
-    .map((s, i) => ({ ...s, hotRank: i + 1 }));
-
-  res.json(sectors);
 });
 
 // ── Market Regime Detection ────────────────────────────────────────────────────
