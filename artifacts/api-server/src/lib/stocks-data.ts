@@ -131,6 +131,7 @@ export const CATEGORIES: StockCategory[] = [
     color: "5A2E8C",
     description: "Next-gen cloud infrastructure and AI software platforms",
     stocks: [
+      { ticker: "MSFT",  company: "Microsoft Corp",          focus: "Azure cloud, Copilot AI, enterprise software",          risk: "Low-Med"  },
       { ticker: "NBIS",  company: "Nebius Group",          focus: "Neocloud + Clickhouse + AV Ride",                       risk: "High"     },
       { ticker: "PLTR",  company: "Palantir Technologies", focus: "AI software, government AI stack",                       risk: "Med-High" },
       { ticker: "RBRK",  company: "Rubrik Inc",            focus: "Cybersecurity, data management",                         risk: "Med-High" },
