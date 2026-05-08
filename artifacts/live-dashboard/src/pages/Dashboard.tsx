@@ -2,16 +2,14 @@ import { useState } from "react";
 import { MarketStatusHeader } from "@/components/dashboard/MarketStatusHeader";
 import { TopMoversStrip } from "@/components/dashboard/TopMoversStrip";
 import { Watchlist } from "@/components/dashboard/Watchlist";
-import { ScannerPage } from "@/pages/ScannerPage";
-import { SignalTrackerPage } from "@/pages/SignalTrackerPage";
+import { AlphaScannerPage } from "@/pages/AlphaScannerPage";
 import { cn } from "@/lib/utils";
 
-type AppTab = "watchlist" | "scanner" | "tracker";
+type AppTab = "watchlist" | "alpha";
 
 const TABS: { key: AppTab; label: string }[] = [
   { key: "watchlist", label: "Watchlist" },
-  { key: "scanner",   label: "⚡ INS Scanner" },
-  { key: "tracker",   label: "📈 Signal Tracker" },
+  { key: "alpha",     label: "⚡ Alpha Scanner" },
 ];
 
 export default function Dashboard() {
@@ -31,7 +29,7 @@ export default function Dashboard() {
               className={cn(
                 "px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors duration-150 whitespace-nowrap",
                 activeTab === tab.key
-                  ? "border-violet-500 text-violet-300"
+                  ? "border-amber-500 text-amber-300"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:border-zinc-600"
               )}
             >
@@ -44,8 +42,7 @@ export default function Dashboard() {
       <main className="flex-1 overflow-hidden flex flex-col relative">
         <div className="absolute inset-0 pointer-events-none opacity-[0.015] mix-blend-overlay bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIi8+CjxyZWN0IHdpZHRoPSIxIiBoZWlnaHQ9IjEiIGZpbGw9IiMwMDAiLz4KPC9zdmc+')]" />
         {activeTab === "watchlist" && <Watchlist />}
-        {activeTab === "scanner"   && <ScannerPage />}
-        {activeTab === "tracker"   && <SignalTrackerPage />}
+        {activeTab === "alpha"     && <AlphaScannerPage />}
       </main>
     </div>
   );
