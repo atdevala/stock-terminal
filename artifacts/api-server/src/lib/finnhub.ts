@@ -1,6 +1,17 @@
 import WebSocket from "ws";
 import { logger } from "./logger";
 import { ALL_TICKERS } from "./stocks-data";
+import {
+  loadExtCache,
+  getCachedFundamentals, setCachedFundamentals,
+  getCachedProfile,      setCachedProfile,
+  getCachedCandles,      setCachedCandles,
+  getCachedRecs,         setCachedRecs,
+  getCachedEarnings,     setCachedEarnings,
+  getCachedSpy,          setCachedSpy,
+  type FundamentalsPayload,
+  type CandlesPayload,
+} from "./ext-cache";
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY ?? "";
 
@@ -162,32 +173,67 @@ async function fetchQuoteRest(ticker: string): Promise<void> {
 }
 
 async function fetchFundamentals(ticker: string): Promise<void> {
-  try {
-    const data = await finnhubGet(`/stock/metric?symbol=${ticker}&metric=all`) as Record<string, unknown>;
-    const m = (data["metric"] ?? {}) as Record<string, number | null>;
-
+  const cached = getCachedFundamentals(ticker);
+  if (cached) {
     const existing = quoteCache.get(ticker);
     if (existing) {
       quoteCache.set(ticker, {
         ...existing,
-        high52: n(m["52WeekHigh"])          ?? existing.high52,
-        low52:  n(m["52WeekLow"])           ?? existing.low52,
-        pe:     n(m["peBasicExclExtraTTM"]) ?? n(m["peTTM"]) ?? existing.pe,
+        high52: cached.high52 ?? existing.high52,
+        low52:  cached.low52  ?? existing.low52,
+        pe:     cached.pe     ?? existing.pe,
       });
     }
-
     const ext = extMetricsCache.get(ticker) ?? { ticker };
     extMetricsCache.set(ticker, {
-      ...ext,
-      ticker,
+      ...ext, ticker,
+      revenueGrowthYoy: cached.revenueGrowthYoy,
+      revenueGrowthQoQ: cached.revenueGrowthQoQ,
+      grossMargin:      cached.grossMargin,
+      operatingMargin:  cached.operatingMargin,
+      fcfMargin:        cached.fcfMargin,
+      debtToEquity:     cached.debtToEquity,
+      pe:               cached.pe,
+      evSales:          cached.evSales,
+    });
+    return;
+  }
+  try {
+    const data = await finnhubGet(`/stock/metric?symbol=${ticker}&metric=all`) as Record<string, unknown>;
+    const m = (data["metric"] ?? {}) as Record<string, number | null>;
+    const payload: FundamentalsPayload = {
+      high52:           n(m["52WeekHigh"]),
+      low52:            n(m["52WeekLow"]),
+      pe:               n(m["peBasicExclExtraTTM"]) ?? n(m["peTTM"]),
       revenueGrowthYoy: n(m["revenueGrowthTTMYoy"]),
       revenueGrowthQoQ: n(m["revenueGrowthQuarterlyYoy"]),
       grossMargin:      n(m["grossMarginTTM"]),
       operatingMargin:  n(m["operatingMarginTTM"]),
       fcfMargin:        n(m["fcfMarginTTM"]),
       debtToEquity:     n(m["debtEquityQuarterly"]),
-      pe:               n(m["peBasicExclExtraTTM"]) ?? n(m["peTTM"]),
       evSales:          n(m["evSalesTTM"]),
+    };
+    setCachedFundamentals(ticker, payload);
+    const existing = quoteCache.get(ticker);
+    if (existing) {
+      quoteCache.set(ticker, {
+        ...existing,
+        high52: payload.high52 ?? existing.high52,
+        low52:  payload.low52  ?? existing.low52,
+        pe:     payload.pe     ?? existing.pe,
+      });
+    }
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, {
+      ...ext, ticker,
+      revenueGrowthYoy: payload.revenueGrowthYoy,
+      revenueGrowthQoQ: payload.revenueGrowthQoQ,
+      grossMargin:      payload.grossMargin,
+      operatingMargin:  payload.operatingMargin,
+      fcfMargin:        payload.fcfMargin,
+      debtToEquity:     payload.debtToEquity,
+      pe:               payload.pe,
+      evSales:          payload.evSales,
     });
   } catch (err) {
     logger.warn({ ticker, err }, "Fundamentals fetch failed");
@@ -195,19 +241,40 @@ async function fetchFundamentals(ticker: string): Promise<void> {
 }
 
 async function fetchProfile(ticker: string): Promise<void> {
+  const cached = getCachedProfile(ticker);
+  if (cached) {
+    const existing = quoteCache.get(ticker);
+    if (existing && cached.marketCapMillions) {
+      quoteCache.set(ticker, { ...existing, marketCap: fmtMcap(cached.marketCapMillions * 1e6) });
+    }
+    return;
+  }
   try {
     const data = await finnhubGet(`/stock/profile2?symbol=${ticker}`) as Record<string, unknown>;
-    const mcapMillions = data["marketCapitalization"] as number | null;
+    const mcapMillions = data["marketCapitalization"] as number | null | undefined;
     const existing = quoteCache.get(ticker);
     if (existing && mcapMillions) {
       quoteCache.set(ticker, { ...existing, marketCap: fmtMcap(mcapMillions * 1e6) });
     }
+    setCachedProfile(ticker, { marketCapMillions: mcapMillions ?? undefined });
   } catch (err) {
     logger.warn({ ticker, err }, "Profile fetch failed");
   }
 }
 
 async function fetchCandlesAndMAs(ticker: string): Promise<void> {
+  const cached = getCachedCandles(ticker);
+  if (cached) {
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, {
+      ...ext, ticker,
+      ma50:      cached.ma50,
+      ma200:     cached.ma200,
+      closes60d: cached.closes60d,
+      volumes60d: cached.volumes60d,
+    });
+    return;
+  }
   try {
     const to   = Math.floor(Date.now() / 1000);
     const from = to - 220 * 86400;
@@ -228,14 +295,21 @@ async function fetchCandlesAndMAs(ticker: string): Promise<void> {
       ? closes.slice(-200).reduce((a, b) => a + b, 0) / 200
       : closes.reduce((a, b) => a + b, 0) / closes.length;
 
-    const ext = extMetricsCache.get(ticker) ?? { ticker };
-    extMetricsCache.set(ticker, {
-      ...ext,
-      ticker,
+    const payload: CandlesPayload = {
       ma50,
       ma200,
       closes60d:  closes.slice(-60),
-      volumes60d: volumes ? volumes.slice(-60) : ext.volumes60d,
+      volumes60d: volumes ? volumes.slice(-60) : undefined,
+    };
+    setCachedCandles(ticker, payload);
+
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, {
+      ...ext, ticker,
+      ma50:      payload.ma50,
+      ma200:     payload.ma200,
+      closes60d: payload.closes60d,
+      volumes60d: payload.volumes60d ?? ext.volumes60d,
     });
   } catch (err) {
     logger.warn({ ticker, err }, "Candles/MA fetch failed");
@@ -243,6 +317,12 @@ async function fetchCandlesAndMAs(ticker: string): Promise<void> {
 }
 
 async function fetchRecommendations(ticker: string): Promise<void> {
+  const cached = getCachedRecs(ticker);
+  if (cached) {
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, { ...ext, ticker, earningsRevisionsUp: cached.earningsRevisionsUp });
+    return;
+  }
   try {
     const data = await finnhubGet(`/stock/recommendation?symbol=${ticker}`) as Array<Record<string, number>>;
     if (!Array.isArray(data) || data.length === 0) return;
@@ -250,9 +330,11 @@ async function fetchRecommendations(ticker: string): Promise<void> {
     const latest = data[0]!;
     const bullish = (latest["buy"] ?? 0) + (latest["strongBuy"] ?? 0);
     const bearish = (latest["sell"] ?? 0) + (latest["strongSell"] ?? 0);
+    const earningsRevisionsUp = bullish >= bearish;
+    setCachedRecs(ticker, { earningsRevisionsUp });
 
     const ext = extMetricsCache.get(ticker) ?? { ticker };
-    extMetricsCache.set(ticker, { ...ext, ticker, earningsRevisionsUp: bullish >= bearish });
+    extMetricsCache.set(ticker, { ...ext, ticker, earningsRevisionsUp });
   } catch (err) {
     logger.warn({ ticker, err }, "Recommendations fetch failed");
   }
@@ -260,6 +342,12 @@ async function fetchRecommendations(ticker: string): Promise<void> {
 
 /** Fetch last 4 quarters of EPS surprises for INS earnings slope component */
 async function fetchEarnings(ticker: string): Promise<void> {
+  const cached = getCachedEarnings(ticker);
+  if (cached) {
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, { ...ext, ticker, epsSurprises: cached.epsSurprises });
+    return;
+  }
   try {
     const data = await finnhubGet(`/stock/earnings?symbol=${ticker}&limit=4`) as Array<Record<string, unknown>>;
     if (!Array.isArray(data) || data.length === 0) return;
@@ -268,6 +356,7 @@ async function fetchEarnings(ticker: string): Promise<void> {
       .filter(e => e["actual"] != null && e["estimate"] != null && (e["estimate"] as number) !== 0)
       .map(e => ((e["actual"] as number) - (e["estimate"] as number)) / Math.abs(e["estimate"] as number) * 100)
       .slice(0, 4);
+    setCachedEarnings(ticker, { epsSurprises: surprises });
 
     const ext = extMetricsCache.get(ticker) ?? { ticker };
     extMetricsCache.set(ticker, { ...ext, ticker, epsSurprises: surprises });
@@ -278,6 +367,12 @@ async function fetchEarnings(ticker: string): Promise<void> {
 
 /** Fetch SPY daily candles for 60-day relative strength calculations */
 async function fetchSpyCandles(): Promise<void> {
+  const cached = getCachedSpy();
+  if (cached) {
+    spyCloses60d = cached.closes60d;
+    logger.info("  ✓ SPY candles (from cache)");
+    return;
+  }
   try {
     const to   = Math.floor(Date.now() / 1000);
     const from = to - 90 * 86400;
@@ -286,7 +381,10 @@ async function fetchSpyCandles(): Promise<void> {
     ) as Record<string, unknown>;
     if (data["s"] !== "ok") return;
     const closes = data["c"] as number[];
-    if (closes && closes.length > 0) spyCloses60d = closes.slice(-60);
+    if (closes && closes.length > 0) {
+      spyCloses60d = closes.slice(-60);
+      setCachedSpy({ closes60d: spyCloses60d });
+    }
     logger.info("  ✓ SPY candles loaded");
   } catch (err) {
     logger.warn({ err }, "SPY candles fetch failed");
@@ -542,6 +640,7 @@ export async function startFinnhubService(): Promise<void> {
     logger.warn("FINNHUB_API_KEY missing — set it to enable live prices");
     return;
   }
+  loadExtCache();
   await loadInitialData();
   connectWebSocket();
   void refreshMarketStatus();

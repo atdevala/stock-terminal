@@ -4,6 +4,10 @@ import { computeScore } from "./scores";
 import { getInsLabel } from "./ins";
 import { TICKER_TO_COMPANY } from "./stocks-data";
 import { logger } from "./logger";
+import {
+  getCachedCandles,      setCachedCandles,
+  getCachedFundamentals, setCachedFundamentals,
+} from "./ext-cache";
 
 // ── Scanner universe: 50 high-momentum stocks beyond the watchlist ─────────────
 export const SCANNER_UNIVERSE: Record<string, string> = {
@@ -141,6 +145,16 @@ async function fetchScannerQuote(ticker: string): Promise<void> {
 }
 
 async function fetchScannerCandles(ticker: string): Promise<void> {
+  const cached = getCachedCandles(ticker);
+  if (cached) {
+    const ext = scannerExtCache.get(ticker) ?? { ticker };
+    scannerExtCache.set(ticker, {
+      ...ext, ticker,
+      closes60d:  cached.closes60d,
+      volumes60d: cached.volumes60d,
+    });
+    return;
+  }
   try {
     const to   = Math.floor(Date.now() / 1000);
     const from = to - 90 * 86400;
@@ -151,24 +165,41 @@ async function fetchScannerCandles(ticker: string): Promise<void> {
     const closes  = data["c"] as number[];
     const volumes = data["v"] as number[] | undefined;
     if (!closes || closes.length < 10) return;
+    const closes60d  = closes.slice(-60);
+    const volumes60d = volumes ? volumes.slice(-60) : undefined;
+    setCachedCandles(ticker, { closes60d, volumes60d });
     const ext = scannerExtCache.get(ticker) ?? { ticker };
     scannerExtCache.set(ticker, {
       ...ext, ticker,
-      closes60d:  closes.slice(-60),
-      volumes60d: volumes ? volumes.slice(-60) : ext.volumes60d,
+      closes60d,
+      volumes60d: volumes60d ?? ext.volumes60d,
     });
   } catch { /* ignore */ }
 }
 
 async function fetchScannerFundamentals(ticker: string): Promise<void> {
+  const cached = getCachedFundamentals(ticker);
+  if (cached) {
+    const ext = scannerExtCache.get(ticker) ?? { ticker };
+    scannerExtCache.set(ticker, {
+      ...ext, ticker,
+      revenueGrowthYoy: cached.revenueGrowthYoy,
+      revenueGrowthQoQ: cached.revenueGrowthQoQ,
+      grossMargin:      cached.grossMargin,
+      operatingMargin:  cached.operatingMargin,
+      fcfMargin:        cached.fcfMargin,
+      debtToEquity:     cached.debtToEquity,
+      pe:               cached.pe,
+      evSales:          cached.evSales,
+    });
+    return;
+  }
   try {
     const data = await finnhubGet(
       `/stock/metric?symbol=${ticker}&metric=all`
     ) as Record<string, unknown>;
     const m = (data["metric"] as Record<string, unknown>) ?? {};
-    const ext = scannerExtCache.get(ticker) ?? { ticker };
-    scannerExtCache.set(ticker, {
-      ...ext, ticker,
+    const payload = {
       revenueGrowthYoy: nv(m["revenueGrowthTTMYoy"]) ?? nv(m["revenueGrowth3Y"]),
       revenueGrowthQoQ: nv(m["revenueGrowth5Y"]),
       grossMargin:      nv(m["grossMarginTTM"]),
@@ -177,7 +208,10 @@ async function fetchScannerFundamentals(ticker: string): Promise<void> {
       debtToEquity:     nv(m["totalDebt/totalEquityQuarterly"]),
       pe:               nv(m["peBasicExclExtraTTM"]),
       evSales:          nv(m["priceToSalesRatioTTM"]),
-    });
+    };
+    setCachedFundamentals(ticker, payload);
+    const ext = scannerExtCache.get(ticker) ?? { ticker };
+    scannerExtCache.set(ticker, { ...ext, ticker, ...payload });
   } catch { /* ignore */ }
 }
 
