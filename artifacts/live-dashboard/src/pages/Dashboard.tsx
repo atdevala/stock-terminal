@@ -9,7 +9,7 @@ type AppTab = "watchlist" | "alpha";
 
 const TABS: { key: AppTab; label: string }[] = [
   { key: "watchlist", label: "Watchlist" },
-  { key: "alpha",     label: "⚡ Alpha Scanner" },
+  { key: "alpha",     label: "⚡ Scanner" },
 ];
 
 export default function Dashboard() {

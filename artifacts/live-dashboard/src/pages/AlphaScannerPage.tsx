@@ -524,7 +524,7 @@ export function AlphaScannerPage() {
           <div className="text-3xl">⚡</div>
           <div className="text-base font-semibold text-zinc-300">Scores are loading</div>
           <div className="text-sm text-zinc-500 max-w-sm">
-            The Alpha Scanner ranks stocks by CSOS. Scores populate within a few minutes of the server starting.
+            The Scanner ranks stocks by CSOS. Scores populate within a few minutes of the server starting.
           </div>
         </div>
       )}

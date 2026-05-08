@@ -33,9 +33,9 @@ A personal financial dashboard tracking 103 watchlist stocks across 9 categories
 | `artifacts/api-server/src/lib/scanner.ts` | 80-stock INS scanner |
 | `artifacts/api-server/src/lib/stocks-data.ts` | Watchlist tickers and categories |
 | `artifacts/api-server/data/` | Persisted signal history JSON |
-| `artifacts/live-dashboard/src/pages/Dashboard.tsx` | Tab navigation (Watchlist / Alpha Scanner) |
+| `artifacts/live-dashboard/src/pages/Dashboard.tsx` | Tab navigation (Watchlist / Scanner) |
 | `artifacts/live-dashboard/src/components/dashboard/StockRow.tsx` | Score badges with inline delta indicators |
-| `artifacts/live-dashboard/src/pages/AlphaScannerPage.tsx` | Combined Alpha Scanner tab (CSOS rank + signal movement) |
+| `artifacts/live-dashboard/src/pages/AlphaScannerPage.tsx` | Combined Scanner tab (CSOS rank + signal movement) |
 
 ## Signal Scores
 
