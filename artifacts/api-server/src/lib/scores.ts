@@ -54,71 +54,417 @@ function cosLabel(s: number): string {
   return "Avoid / High Risk";
 }
 
-// ── ACS: Accumulation Confidence Score ────────────────────────────────────────
-// Detects quiet institutional accumulation before consensus forms.
-// Uses: 52W range position, EPS surprise momentum, revenue acceleration,
-//       margin quality, analyst consensus — all from REST endpoints.
-//
-// Formula: 0.30 RangePosition + 0.25 EPSSurpriseMomentum
-//        + 0.20 RevenueAcceleration + 0.15 MarginQuality + 0.10 AnalystConsensus
+// ── ACSv1: Legacy Accumulation Confidence Score (kept for reference) ──────────
+// DEPRECATED — superseded by computeACS_v2 below. Not called in production.
+// Retained as a safety fallback until ACSv2 is fully validated in production.
 
-function computeACS(ext: ExtendedMetrics, quote: QuoteData | undefined): number {
+function _computeACS_v1(ext: ExtendedMetrics, quote: QuoteData | undefined): number {
   const price  = quote?.price   ?? 0;
   const high52 = quote?.high52  ?? 0;
   const low52  = quote?.low52   ?? 0;
 
-  // 1. 52W Range Position (30%)
-  // Sweet spot: 50–85% of 52W range signals sustained accumulation.
-  // Bottom half = weak / distribution; very top = overextended.
   let rangeSig = 50;
   if (high52 > low52 && price > 0) {
-    const pos = (price - low52) / (high52 - low52); // 0–1
+    const pos = (price - low52) / (high52 - low52);
     if (pos <= 0.35) {
-      rangeSig = clamp(pos / 0.35 * 45, 0, 45);           // 0–45 — weak range
+      rangeSig = clamp(pos / 0.35 * 45, 0, 45);
     } else if (pos <= 0.85) {
-      rangeSig = clamp(45 + (pos - 0.35) / 0.50 * 55, 45, 100); // 45–100 — sweet spot
+      rangeSig = clamp(45 + (pos - 0.35) / 0.50 * 55, 45, 100);
     } else {
-      rangeSig = clamp(100 - (pos - 0.85) / 0.15 * 20, 80, 100); // 80–100 — slightly penalised at top
+      rangeSig = clamp(100 - (pos - 0.85) / 0.15 * 20, 80, 100);
     }
   }
 
-  // 2. EPS Surprise Momentum (25%)
-  // Consecutive beats = smart money positioned ahead of public.
   const eps = ext.epsSurprises ?? [];
   let epsSig = 50;
   if (eps.length > 0) {
     const avg = eps.reduce((a, b) => a + b, 0) / eps.length;
-    // avg beat of +10% → ~58; +50% → ~90; miss of -20% → ~34
     epsSig = clamp(50 + avg * 0.8, 0, 100);
   }
 
-  // 3. Revenue Acceleration (20%)
-  // QoQ growth > YoY = accelerating — institutions detect this early.
   const yoy = ext.revenueGrowthYoy ?? 0;
   const qoq = ext.revenueGrowthQoQ ?? 0;
-  // If both are positive and QoQ > YoY the score rises above 50.
-  // Also lift for strongly positive YoY even without QoQ signal.
   const baseMomentum = clamp(50 + yoy * 0.5, 0, 100);
   const accelBonus   = clamp((qoq - yoy) * 1.5, -30, 30);
   const revAccel     = clamp(baseMomentum + accelBonus, 0, 100);
 
-  // 4. Margin Quality (15%)
-  // High gross + positive operating margins = institutional-grade business.
   const gm  = ext.grossMargin     ?? 0;
   const opM = ext.operatingMargin ?? 0;
-  // Gross margin 60% → ~24; operating margin 20% → ~20; combined ~44 + base 30 ≈ 74
   const marginSig = clamp(30 + gm * 0.4 + Math.max(opM, 0) * 0.6, 0, 100);
-
-  // 5. Analyst Consensus Upgrade (10%)
   const consensusSig = ext.earningsRevisionsUp ? 75 : 35;
 
   return Math.round(clamp(
-    0.30 * rangeSig    +
-    0.25 * epsSig      +
-    0.20 * revAccel    +
-    0.15 * marginSig   +
-    0.10 * consensusSig,
+    0.30 * rangeSig + 0.25 * epsSig + 0.20 * revAccel +
+    0.15 * marginSig + 0.10 * consensusSig,
   ));
+}
+
+// ── ACSv2: Institutional-Grade Accumulation Confidence Score ─────────────────
+//
+// A significantly improved model replacing ACSv1. Detects TRUE institutional
+// accumulation using candle-based volume, relative strength persistence,
+// closing strength, volatility compression, and liquidity quality.
+//
+// Five components × weights:
+//   35% — Volume Structure    (OBV trend, relative vol, up-vol dominance)
+//   25% — RS Persistence      (excess return vs SPY over 1D / 5D / 20D)
+//   15% — Closing Strength    (CLV, up-close %, MA support)
+//   15% — Volatility Compress (realized vol contraction, Bollinger squeeze)
+//   10% — Liquidity Quality   (dollar volume level & stability)
+//
+// × Institutional Quality Multiplier [0.65–1.15]
+//   Penalizes parabolic blowoffs, high intraday dispersion, erratic action.
+//   Rewards steady multi-session accumulation with low-volatility structure.
+
+function computeACS_v2(
+  ext:       ExtendedMetrics,
+  quote:     QuoteData | undefined,
+  spyCloses: number[],
+): number {
+  const closes  = ext.closes60d  ?? [];
+  const volumes = ext.volumes60d ?? [];
+  const price    = quote?.price      ?? 0;
+  const high52   = quote?.high52     ?? 0;
+  const low52    = quote?.low52      ?? 0;
+  const qHigh    = quote?.high       ?? 0;
+  const qLow     = quote?.low        ?? 0;
+  const qOpen    = quote?.open       ?? 0;
+  const qPrev    = quote?.prevClose  ?? 0;
+  const changePct = quote?.changePercent ?? 0;
+  const candleMode = closes.length >= 20 && volumes.length >= 20;
+
+  // ── 1. VOLUME STRUCTURE (35%) ──────────────────────────────────────────────
+  // Candle mode:  OBV slope + relative volume + up-day volume dominance.
+  // Fundamental fallback: EPS beat consistency + revenue acceleration +
+  //   today's intraday buying pressure (close vs open as proxy).
+
+  let volumeScore: number;
+
+  if (candleMode) {
+    const n = Math.min(closes.length, volumes.length);
+
+    // 1a. On-Balance Volume — net buying pressure over 20 days
+    let obv = 0;
+    const obvSeries: number[] = [0];
+    for (let i = 1; i < n; i++) {
+      const delta = closes[i]! - closes[i - 1]!;
+      obv += delta > 0 ? volumes[i]! : delta < 0 ? -volumes[i]! : 0;
+      obvSeries.push(obv);
+    }
+    const avgVol30 = volumes.slice(-30).reduce((a, b) => a + b, 0) / Math.min(30, volumes.length);
+    const obv20Ago = obvSeries[Math.max(0, obvSeries.length - 21)] ?? obvSeries[0]!;
+    const obvSlope = avgVol30 > 0 ? (obv - obv20Ago) / (avgVol30 * 20) : 0;
+    const obvScore = clamp(50 + obvSlope * 100, 0, 100);
+
+    // 1b. Sustained relative volume (10D avg vs 30D avg)
+    const vol10 = volumes.slice(-10).reduce((a, b) => a + b, 0) / 10;
+    const vol30 = volumes.slice(-30).reduce((a, b) => a + b, 0) / Math.min(30, volumes.length);
+    const relVolScore = clamp(50 + (vol30 > 0 ? (vol10 / vol30) - 1 : 0) * 100, 0, 100);
+
+    // 1c. Up-day volume dominance over last 20 days
+    let upVol = 0, downVol = 0;
+    for (let i = Math.max(1, n - 20); i < n; i++) {
+      const d = closes[i]! - closes[i - 1]!;
+      if (d > 0) upVol += volumes[i]!; else if (d < 0) downVol += volumes[i]!;
+    }
+    const total = upVol + downVol;
+    const upVolScore = clamp((total > 0 ? upVol / total : 0.5) * 140 - 20, 0, 100);
+
+    volumeScore = clamp(0.50 * obvScore + 0.25 * relVolScore + 0.25 * upVolScore, 0, 100);
+
+  } else {
+    // Fundamental fallback — proxy for volume-driven accumulation:
+
+    // a. EPS beat momentum: institutions position before public knows (40%)
+    // Consistent beats = smart money already accumulating.
+    const eps = ext.epsSurprises ?? [];
+    let epsSig = 50;
+    if (eps.length > 0) {
+      const avg = eps.reduce((a, b) => a + b, 0) / eps.length;
+      // avg beat +10% → ~58; +40% → ~82; miss -20% → ~34
+      epsSig = clamp(50 + avg * 0.8, 0, 100);
+      // Boost for consistent beats (all quarters positive)
+      if (eps.length >= 3 && eps.every(e => e > 0)) epsSig = clamp(epsSig + 10, 0, 100);
+    }
+
+    // b. Revenue acceleration: QoQ > YoY = growth inflecting (30%)
+    const yoy = ext.revenueGrowthYoy ?? 0;
+    const qoq = ext.revenueGrowthQoQ ?? 0;
+    const revBase  = clamp(50 + yoy * 0.5, 0, 100);
+    const revAccel = clamp(revBase + (qoq - yoy) * 1.5, 0, 100);
+
+    // c. Intraday close vs open: buying pressure proxy (30%)
+    // If price closed well above its open, buyers stepped in.
+    let intradayBuyScore = 50;
+    if (qHigh > qLow && qOpen > 0 && price > 0) {
+      const clv = (price - qLow) / (qHigh - qLow); // 0=bottom, 1=top of day's range
+      intradayBuyScore = clamp(clv * 100, 0, 100);
+    } else if (qPrev > 0) {
+      // Fallback: day gain is a weak proxy
+      intradayBuyScore = clamp(50 + changePct * 3, 0, 100);
+    }
+
+    volumeScore = clamp(0.40 * epsSig + 0.30 * revAccel + 0.30 * intradayBuyScore, 0, 100);
+  }
+
+  // ── 2. RELATIVE STRENGTH PERSISTENCE (25%) ────────────────────────────────
+  // Candle mode:  daily excess return vs SPY over 1D / 5D / 20D + persistence ratio.
+  // Fundamental fallback: 52W range sweet-spot + revenue growth outperformance.
+
+  let rsScore: number;
+
+  if (closes.length >= 10 && spyCloses.length >= 10) {
+    const n = Math.min(closes.length, spyCloses.length, 20);
+    const stockSlice = closes.slice(-n);
+    const spySlice   = spyCloses.slice(-n);
+
+    const excessRets: number[] = [];
+    for (let i = 1; i < n; i++) {
+      const sRet   = stockSlice[i - 1]! > 0 ? (stockSlice[i]!   - stockSlice[i - 1]!)   / stockSlice[i - 1]!   * 100 : 0;
+      const spyRet = spySlice[i - 1]!   > 0 ? (spySlice[i]!     - spySlice[i - 1]!)     / spySlice[i - 1]!     * 100 : 0;
+      excessRets.push(sRet - spyRet);
+    }
+
+    if (excessRets.length > 0) {
+      const rs20D = excessRets.reduce((a, b) => a + b, 0);
+      const rs5D  = excessRets.slice(-5).reduce((a, b) => a + b, 0);
+      const rs1D  = excessRets[excessRets.length - 1] ?? 0;
+      const posCount = excessRets.filter(r => r > 0).length;
+      const persistScore = clamp(posCount / excessRets.length * 120 - 10, 0, 100);
+      rsScore = clamp(
+        0.40 * clamp(50 + rs20D * 2, 0, 100) +
+        0.30 * persistScore +
+        0.20 * clamp(50 + rs5D  * 5, 0, 100) +
+        0.10 * clamp(50 + rs1D  * 8, 0, 100),
+        0, 100,
+      );
+    } else {
+      rsScore = 50;
+    }
+
+  } else {
+    // Fundamental fallback — proxy for RS persistence:
+
+    // a. 52W range position sweet spot (50–85% = sustained RS, not yet exhausted)
+    let rangeSig = 50;
+    if (high52 > low52 && price > 0) {
+      const pos = (price - low52) / (high52 - low52);
+      if (pos <= 0.35)       rangeSig = clamp(pos / 0.35 * 40, 0, 40);
+      else if (pos <= 0.85)  rangeSig = clamp(40 + (pos - 0.35) / 0.50 * 60, 40, 100);
+      else                   rangeSig = clamp(100 - (pos - 0.85) / 0.15 * 25, 75, 100);
+    }
+
+    // b. Revenue growth vs 15% benchmark (persistent outperformance)
+    const yoy = ext.revenueGrowthYoy ?? 0;
+    const revRsSig = clamp(50 + (yoy - 15) * 1.2, 0, 100);
+
+    // c. Analyst revisions as RS confirmation
+    const revisionSig = ext.earningsRevisionsUp ? 72 : 35;
+
+    rsScore = clamp(0.55 * rangeSig + 0.30 * revRsSig + 0.15 * revisionSig, 0, 100);
+  }
+
+  // ── 3. CLOSING STRENGTH (15%) ─────────────────────────────────────────────
+  // Candle mode:  CLV within rolling 20D range + up-close % + MA support.
+  // Fundamental fallback: today's intraday CLV + 52W range context + MA.
+
+  let closeStrScore: number;
+
+  if (closes.length >= 10) {
+    const recent = closes.slice(-20);
+    const rHigh  = Math.max(...recent);
+    const rLow   = Math.min(...recent);
+    const lastClose = closes[closes.length - 1]!;
+    const clv = rHigh > rLow ? (lastClose - rLow) / (rHigh - rLow) : 0.5;
+    const clvScore = clamp(clv * 100, 0, 100);
+
+    let upCloseCount = 0;
+    for (let i = 1; i <= Math.min(10, closes.length - 1); i++) {
+      if (closes[closes.length - i]! > closes[closes.length - i - 1]!) upCloseCount++;
+    }
+    const upCloseScore = clamp((upCloseCount / 10) * 130 - 15, 0, 100);
+
+    let maSupportScore = 50;
+    if (ext.ma50 && ext.ma200 && price > 0) {
+      maSupportScore = price > ext.ma50 && price > ext.ma200 ? 85
+        : price > ext.ma50  ? 65
+        : price > ext.ma200 ? 55 : 25;
+    } else if (ext.ma50 && price > 0) {
+      maSupportScore = price > ext.ma50 ? 65 : 35;
+    }
+
+    closeStrScore = clamp(0.40 * clvScore + 0.35 * upCloseScore + 0.25 * maSupportScore, 0, 100);
+
+  } else {
+    // Fundamental fallback:
+
+    // a. Today's intraday CLV: (close - low) / (high - low)
+    let intradayClv = 50;
+    if (qHigh > qLow && price > 0) {
+      intradayClv = clamp(((price - qLow) / (qHigh - qLow)) * 100, 0, 100);
+    }
+
+    // b. 52W position: upper half = stock holding strength structurally
+    let rangeClv = 50;
+    if (high52 > low52 && price > 0) {
+      rangeClv = clamp(((price - low52) / (high52 - low52)) * 100, 0, 100);
+    }
+
+    // c. MA support (unchanged — computed from candles regardless)
+    let maSupportScore = 50;
+    if (ext.ma50 && ext.ma200 && price > 0) {
+      maSupportScore = price > ext.ma50 && price > ext.ma200 ? 85
+        : price > ext.ma50  ? 65
+        : price > ext.ma200 ? 55 : 25;
+    } else if (ext.ma50 && price > 0) {
+      maSupportScore = price > ext.ma50 ? 65 : 35;
+    }
+
+    closeStrScore = clamp(0.35 * intradayClv + 0.35 * rangeClv + 0.30 * maSupportScore, 0, 100);
+  }
+
+  // ── 4. VOLATILITY COMPRESSION / COILING (15%) ─────────────────────────────
+  // Candle mode:  10D vs 30D realized vol ratio + Bollinger Band width.
+  // Fundamental fallback: 52W range width + margin quality as stability proxy.
+
+  let compressionScore: number;
+
+  if (closes.length >= 20) {
+    const dailyRets10 = dailyRets(closes.slice(-11));
+    const dailyRets30 = dailyRets(closes.slice(-31));
+    const vol10D = stddev(dailyRets10);
+    const vol30D = stddev(dailyRets30.length >= 2 ? dailyRets30 : dailyRets10);
+    const volRatio = vol30D > 0 ? vol10D / vol30D : 1;
+    const volCompScore = clamp(50 + (1 - volRatio) * 70, 0, 100);
+
+    const closes20 = closes.slice(-20);
+    const ma20     = closes20.reduce((a, b) => a + b, 0) / 20;
+    const bb20std  = stddev(closes20);
+    const bbWidth  = ma20 > 0 ? (4 * bb20std) / ma20 * 100 : 10;
+    const bbScore  = clamp(100 - (bbWidth - 4) * 4, 0, 100);
+
+    compressionScore = clamp(0.60 * volCompScore + 0.40 * bbScore, 0, 100);
+
+  } else {
+    // Fundamental fallback:
+
+    // a. 52W range width: narrow range = price is coiling (compression proxy)
+    // A stock that has been consolidating stays within a tight 52W band.
+    let rangeWidthScore = 50;
+    if (high52 > low52 && low52 > 0) {
+      const rangeWidth = (high52 - low52) / low52 * 100; // as % of low
+      // <30% wide → high score (tight base); >150% wide → low score (volatile)
+      rangeWidthScore = clamp(100 - (rangeWidth - 20) * 0.6, 0, 100);
+    }
+
+    // b. Margin quality: high-margin businesses have lower structural volatility
+    const gm  = ext.grossMargin     ?? 0;
+    const opM = ext.operatingMargin ?? 0;
+    const marginStabilityScore = clamp(30 + gm * 0.3 + Math.max(opM, 0) * 0.5, 0, 100);
+
+    compressionScore = clamp(0.55 * rangeWidthScore + 0.45 * marginStabilityScore, 0, 100);
+  }
+
+  // ── 5. LIQUIDITY QUALITY (10%) ────────────────────────────────────────────
+  // Candle mode:  rolling dollar-volume stability (CV) + absolute size.
+  // Fundamental fallback: margin quality as business-quality / tradability proxy.
+
+  let liquidityScore: number;
+
+  if (closes.length >= 10 && volumes.length >= 10) {
+    const n = Math.min(closes.length, volumes.length, 20);
+    const dolVols = Array.from({ length: n }, (_, i) =>
+      (closes[closes.length - n + i]! * (volumes[volumes.length - n + i]!))
+    );
+    const avgDolVol = dolVols.reduce((a, b) => a + b, 0) / n;
+    const stdDolVol = stddev(dolVols);
+    const cv = avgDolVol > 0 ? stdDolVol / avgDolVol : 1;
+    const stabilityScore = clamp(100 - cv * 80, 0, 100);
+    const dolVolLevel    = avgDolVol > 0
+      ? clamp(20 + Math.log10(Math.max(avgDolVol / 1e6, 0.001)) * 20, 0, 100)
+      : 50;
+    liquidityScore = clamp(0.50 * stabilityScore + 0.50 * dolVolLevel, 0, 100);
+
+  } else {
+    // Fundamental fallback: gross + operating margins as institutional quality proxy.
+    // High-margin businesses attract institutional money; low-margin repels it.
+    const gm  = ext.grossMargin     ?? 0;
+    const opM = ext.operatingMargin ?? 0;
+    liquidityScore = clamp(30 + gm * 0.4 + Math.max(opM, 0) * 0.5, 0, 100);
+  }
+
+  // ── INSTITUTIONAL QUALITY MULTIPLIER [0.65 – 1.15] ───────────────────────
+  // Candle mode:  detects parabolic moves, high dispersion, and steady climbs.
+  // Fundamental fallback: uses 52W overextension + EPS consistency + FCF quality.
+
+  let multiplier = 1.0;
+
+  if (closes.length >= 10) {
+    const last5Ret = closes.length >= 6
+      ? (closes[closes.length - 1]! - closes[closes.length - 6]!) / closes[closes.length - 6]! * 100
+      : 0;
+    const prior15Avg = closes.length >= 21
+      ? (closes[closes.length - 6]! - closes[closes.length - 21]!) / closes[closes.length - 21]! * 100 / 3
+      : last5Ret;
+
+    if (last5Ret > 15 && last5Ret > prior15Avg * 3)      multiplier -= 0.18;
+    else if (last5Ret > 10 && last5Ret > prior15Avg * 2) multiplier -= 0.08;
+
+    const ret20D = closes.length >= 21
+      ? (closes[closes.length - 1]! - closes[closes.length - 21]!) / closes[closes.length - 21]! * 100
+      : 0;
+    if (ret20D > 8 && ret20D < 35)      multiplier += 0.10;
+    else if (ret20D > 3 && ret20D < 15) multiplier += 0.05;
+
+    const ret10 = dailyRets(closes.slice(-11));
+    const vol10 = stddev(ret10);
+    if (vol10 > 5)        multiplier -= 0.15;
+    else if (vol10 > 3.5) multiplier -= 0.07;
+    else if (vol10 < 1.5) multiplier += 0.08;
+
+    if (high52 > low52 && price > 0) {
+      if ((price - low52) / (high52 - low52) > 0.93) multiplier -= 0.05;
+    }
+
+  } else {
+    // Fundamental multiplier fallback:
+
+    // Penalize: 52W overextension (price at very top of 52W range = potential exhaustion)
+    if (high52 > low52 && price > 0) {
+      const pos = (price - low52) / (high52 - low52);
+      if (pos > 0.92) multiplier -= 0.10;
+      else if (pos > 0.80) multiplier -= 0.04;
+    }
+
+    // Penalize: erratic EPS (misses after beats = unstable business)
+    const eps = ext.epsSurprises ?? [];
+    if (eps.length >= 2) {
+      const hasRecentMiss = eps[0]! < -5;  // most recent quarter a big miss
+      if (hasRecentMiss) multiplier -= 0.10;
+    }
+
+    // Reward: FCF positive + no excess debt = institutional quality
+    const fcfM = ext.fcfMargin    ?? 0;
+    const de   = ext.debtToEquity ?? 0;
+    if (fcfM > 5 && de < 1.5)  multiplier += 0.10;
+    else if (fcfM > 0)          multiplier += 0.04;
+    else if (fcfM < -10)        multiplier -= 0.08;
+
+    // Reward: analyst upgrades = forward confirmation of accumulation thesis
+    if (ext.earningsRevisionsUp) multiplier += 0.05;
+  }
+
+  multiplier = clamp(multiplier, 0.65, 1.15);
+
+  // ── COMPOSITE ACSv2 SCORE ─────────────────────────────────────────────────
+  const raw =
+    0.35 * volumeScore      +
+    0.25 * rsScore          +
+    0.15 * closeStrScore    +
+    0.15 * compressionScore +
+    0.10 * liquidityScore;
+
+  return Math.round(clamp(raw * multiplier, 0, 100));
 }
 
 // ── FBRS: False Breakout Risk Score ──────────────────────────────────────────
@@ -344,8 +690,11 @@ export function computeScore(
   const insResult  = computeINS(ext, currentPrice, cos, spyCloses);
   const ins        = insResult.ins;
 
-  // ── ACCUMULATION CONFIDENCE SCORE ─────────────────────────────────────────
-  const acs = computeACS(ext, quote);
+  // ── ACCUMULATION CONFIDENCE SCORE (ACSv2) ────────────────────────────────
+  // ACSv2 uses candle-based volume structure, RS persistence vs SPY,
+  // closing strength, volatility compression, and liquidity quality.
+  // spyCloses is already loaded by getSpyCloses60d() (Phase 7 — no extra calls).
+  const acs = computeACS_v2(ext, quote, spyCloses);
 
   // ── FALSE BREAKOUT RISK SCORE ─────────────────────────────────────────────
   const fbrs = computeFBRS(ext, quote);
