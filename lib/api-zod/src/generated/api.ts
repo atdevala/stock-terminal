@@ -133,12 +133,17 @@ export const GetScoresResponseItem = zod.object({
   csos: zod
     .number()
     .describe(
-      "Composite Stock Opportunity Score (1-100) — multi-layer model combining VQS\/GVS\/INS\/ACS\/COS with regime, divergence, and conviction adjustments",
+      "Composite Stock Opportunity Score (1–100) — percentile-ranked within the watchlist universe. 90+ = truly rare elite setup.",
     ),
   csosLabel: zod
     .string()
     .describe(
-      "EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | LATE STAGE MOVE | LOW QUALITY \/ AVOID",
+      "EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | STEALTH ACCUMULATION | HIDDEN CATALYST POTENTIAL | LATE STAGE MOVE | LOW QUALITY \/ AVOID",
+    ),
+  cpe: zod
+    .number()
+    .describe(
+      "Catalyst Probability Engine (1–100) — estimates probability the market is underpricing a future major catalyst. Percentile-ranked within universe.",
     ),
 });
 export const GetScoresResponse = zod.array(GetScoresResponseItem);

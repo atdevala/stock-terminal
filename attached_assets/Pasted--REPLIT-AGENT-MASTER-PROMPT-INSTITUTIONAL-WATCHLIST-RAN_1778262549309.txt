@@ -1,0 +1,625 @@
+# 🚨 REPLIT AGENT MASTER PROMPT — INSTITUTIONAL WATCHLIST RANKING ENGINE
+# WATCHLIST TAB ONLY — PRODUCTION SAFE
+
+# =====================================================================
+# 🚨 CRITICAL SCOPE CONSTRAINT (NON-NEGOTIABLE)
+# =====================================================================
+
+You are working ONLY inside the WATCHLIST TAB of an existing stock intelligence dashboard.
+
+You MUST:
+- ONLY modify watchlist scoring/ranking logic
+- ONLY add or update watchlist columns
+- DO NOT modify any other tabs/pages/routes/modules
+- DO NOT refactor backend architecture outside watchlist pipeline
+- DO NOT break existing:
+  - APIs
+  - alerts
+  - charts
+  - sorting
+  - filtering
+  - rendering
+  - websocket updates
+  - database schemas unless absolutely necessary
+- Preserve full backward compatibility
+- Avoid large rewrites
+- Prefer additive, modular implementation
+
+This is a LOCALIZED enhancement ONLY.
+
+---
+
+# =====================================================================
+# 🎯 OBJECTIVE
+# =====================================================================
+
+Build an institutional-grade WATCHLIST ranking engine.
+
+The watchlist should rank stocks by:
+> total opportunity quality at the current price.
+
+The system should combine:
+- fundamentals
+- growth acceleration
+- early breakout detection
+- institutional accumulation
+- momentum confirmation
+- hidden catalyst probability
+- market regime awareness
+- relative opportunity ranking
+
+---
+
+# =====================================================================
+# 🧠 EXISTING SIGNAL DEFINITIONS (DO NOT MODIFY LOGIC)
+# =====================================================================
+
+## VQS = Valuation Quality Score
+“How strong is this business fundamentally per dollar being paid?”
+
+Includes:
+- revenue growth
+- margins
+- cash flow quality
+- valuation metrics
+- debt risk
+- dilution risk
+
+Represents:
+LONG-TERM QUALITY
+
+---
+
+## GVS = Growth / Re-rating Score
+“How strong is future narrative and growth acceleration?”
+
+Includes:
+- growth acceleration
+- earnings revisions
+- sector momentum
+- price momentum
+- valuation-adjusted growth
+
+Represents:
+MEDIUM-TERM RE-RATING POTENTIAL
+
+---
+
+## INS = Early Breakout Signal
+Leading indicator that detects setups BEFORE COS confirms.
+
+Includes:
+- momentum acceleration
+- volume acceleration
+- earnings slope
+- narrative momentum
+- delta GVS
+- delta VQS
+
+Represents:
+SHORT-TERM EARLY BREAKOUT DETECTION
+
+---
+
+## ACS = Accumulation Confidence Score
+Detects quiet institutional accumulation.
+
+Includes:
+- up-volume behavior
+- RS vs SPY
+- price compression
+- closing strength
+- volume persistence
+
+Represents:
+INSTITUTIONAL POSITIONING
+
+---
+
+## COS = Momentum Confirmation Score
+Confirms price acceptance after breakout begins.
+
+Represents:
+BREAKOUT CONFIRMATION / TREND ACCEPTANCE
+
+---
+
+# =====================================================================
+# 🚀 NEW SIGNAL — CPE (CATALYST PROBABILITY ENGINE)
+# =====================================================================
+
+Create:
+
+## CPE (1–100)
+
+Purpose:
+> estimate probability market is underpricing a future major catalyst.
+
+Examples:
+- strategic partnerships
+- AI deals
+- enterprise contracts
+- institutional reratings
+- surprise guidance shifts
+- product launches
+- narrative regime changes
+
+IMPORTANT:
+CPE is probabilistic only.
+It should NOT attempt magical prediction.
+
+---
+
+# =====================================================================
+# 🧠 CPE COMPONENTS
+# =====================================================================
+
+## 1. OPTIONS ACTIVITY ANOMALY (25%)
+
+If options data exists:
+Detect:
+- unusual call buying
+- OTM call spikes
+- IV expansion
+- skew shifts
+- persistent smart-money positioning
+
+Penalize:
+- meme-like options frenzy
+
+If unavailable:
+skip safely.
+
+---
+
+## 2. NARRATIVE ASYMMETRY (20%)
+
+Reward:
+- improving fundamentals
+- rising GVS
+- low public attention
+- low COS
+- muted momentum despite improving quality
+
+Meaning:
+> market under-recognizing improving story
+
+---
+
+## 3. QUIET ACCUMULATION (20%)
+
+Reward:
+- rising ACS without breakout
+- stable consolidation
+- persistent bid support
+- low-volatility positioning
+
+Penalize:
+- parabolic moves
+- unstable squeezes
+
+---
+
+## 4. STRATEGIC POSITIONING SIGNALS (15%)
+
+If data exists:
+Detect:
+- capex expansion
+- hiring acceleration
+- infrastructure buildout
+- semiconductor/foundry expansion
+- AI ecosystem positioning
+- enterprise partnerships
+
+If unavailable:
+skip safely.
+
+---
+
+## 5. LOW ATTENTION / HIGH QUALITY (10%)
+
+Reward:
+- strong VQS
+- improving GVS
+- low COS
+- low hype/social attention
+
+---
+
+## 6. FALSE HYPE FILTER (10%)
+
+Strongly penalize:
+- meme behavior
+- unstable squeezes
+- extreme volatility
+- disconnected momentum
+- retail-driven blowoffs
+
+---
+
+# =====================================================================
+# 🧠 TIMEFRAME SEPARATION (VERY IMPORTANT)
+# =====================================================================
+
+Signals belong to different time horizons.
+
+DO NOT treat all signals equally.
+
+## Long-Term Layer
+- VQS
+
+## Medium-Term Layer
+- GVS
+- ACS
+
+## Short-Term Layer
+- INS
+- COS
+
+## Catalyst Layer
+- CPE
+
+The final model should preserve this hierarchy.
+
+Avoid timeframe contamination.
+
+---
+
+# =====================================================================
+# 📊 CORE CSOS MODEL
+# =====================================================================
+
+Create:
+
+## CSOS (Composite Stock Opportunity Score)
+Range: 1–100
+
+Represents:
+> total opportunity quality at current price.
+
+---
+
+## BASE WEIGHTS
+
+VQS  * 0.40
+GVS  * 0.25
+INS  * 0.15
+ACS  * 0.12
+COS  * 0.08
+
+Optional:
+integrate small CPE contribution (5–10%)
+ONLY if implementation is safe.
+
+---
+
+# =====================================================================
+# 🧠 CRITICAL SIGNAL INTERACTION LOGIC
+# =====================================================================
+
+## 1. EARLY BREAKOUT EDGE
+
+If:
+- INS > 75
+- COS < 60
+
+→ ADD BONUS (+5 to +10)
+
+Meaning:
+early setup before crowd confirmation.
+
+---
+
+## 2. LATE STAGE WARNING
+
+If:
+- COS > 80
+- INS < 50
+
+→ APPLY PENALTY (-3 to -10)
+
+Meaning:
+move already extended.
+
+---
+
+## 3. FUNDAMENTAL FLOOR RULE
+
+If:
+- VQS < 40
+
+→ STRONG PENALTY
+
+Meaning:
+avoid structurally weak companies.
+
+---
+
+## 4. ACCUMULATION CONFIRMATION
+
+If:
+- INS rising
+- ACS rising
+
+→ APPLY MULTIPLIER (1.05–1.12)
+
+Meaning:
+early breakout + institutional accumulation alignment.
+
+---
+
+## 5. SIGNAL DIVERGENCE PENALTY
+
+If signals conflict:
+- INS high but ACS low
+- COS high but INS low
+- ACS high but VQS low
+
+→ APPLY PENALTY (-3 to -12)
+
+Meaning:
+fake breakouts or unstable moves.
+
+---
+
+## 6. SIGNAL AGREEMENT BONUS
+
+If:
+- INS > 70
+- ACS > 70
+- COS > 70
+- VQS > 60
+
+→ APPLY BONUS (+3 to +8)
+
+Meaning:
+strong alignment across layers.
+
+---
+
+# =====================================================================
+# 🌍 REGIME AWARENESS LAYER
+# =====================================================================
+
+Adjust behavior based on market regime.
+
+## Bull Regime
+Favor:
+- INS
+- COS
+- momentum continuation
+
+Multiplier:
+1.05–1.10
+
+---
+
+## Bear Regime
+Favor:
+- VQS
+- ACS
+- quality + accumulation
+
+Penalize:
+- weak momentum breakouts
+
+Multiplier:
+0.85–0.95
+
+---
+
+## Choppy / Sideways Regime
+Strongly penalize:
+- COS-only setups
+- unstable momentum
+
+Require:
+- stronger ACS confirmation
+
+Multiplier:
+0.95–1.00
+
+---
+
+# =====================================================================
+# 🔥 CROSS-SECTIONAL NORMALIZATION LAYER (VERY IMPORTANT)
+# =====================================================================
+
+The system MUST NOT score stocks in isolation.
+
+Instead:
+evaluate stocks RELATIVE to the active watchlist universe.
+
+Purpose:
+prevent score inflation/deflation across regimes.
+
+---
+
+# REQUIRED BEHAVIOR
+
+Normalize:
+- VQS
+- GVS
+- INS
+- ACS
+- COS
+- CPE
+- CSOS
+
+using:
+- percentile ranking
+OR
+- z-score normalization
+OR
+- rolling universe ranking
+
+---
+
+# ELITE SCORE DISTRIBUTION RULE
+
+90+ = rare exceptional setup
+80–89 = strong opportunity
+70–79 = solid
+60–69 = neutral/watchlist
+below 60 = weak edge
+
+DO NOT allow:
+large portions of watchlist to score 90+
+unless market conditions are truly exceptional.
+
+---
+
+# =====================================================================
+# 🧠 SIGNAL PERSISTENCE + DECAY LOGIC
+# =====================================================================
+
+Avoid reacting too strongly to single-day spikes.
+
+Require:
+- multi-day persistence
+for:
+- INS
+- ACS
+- accumulation trends
+
+---
+
+# DECAY RULES
+
+Reduce scores after:
+- failed breakouts
+- parabolic extensions
+- volatility explosions
+- gap-and-fade behavior
+- unstable momentum spikes
+
+Purpose:
+avoid stale leadership and meme chasing.
+
+---
+
+# =====================================================================
+# 📈 FORWARD RETURN CALIBRATION (OPTIONAL IF SAFE)
+# =====================================================================
+
+If architecture allows safely:
+
+Track:
+- 5-day forward returns
+- 20-day forward returns
+- volatility-adjusted returns
+
+Purpose:
+evaluate which signals actually predict outperformance.
+
+This is calibration only.
+NOT machine learning.
+
+---
+
+# =====================================================================
+# 📊 WATCHLIST OUTPUT REQUIREMENTS
+# =====================================================================
+
+Add columns:
+
+## CSOS
+## CPE
+
+Range:
+1–100
+
+Optional expanded metadata:
+- VQS
+- GVS
+- INS
+- ACS
+- COS
+- CPE
+- regime
+- signal alignment state
+
+---
+
+# CLASSIFICATION LABELS
+
+Assign one:
+
+- EARLY BREAKOUT SETUP
+- CONFIRMED TREND
+- QUALITY COMPOUNDER
+- STEALTH ACCUMULATION
+- HIDDEN CATALYST POTENTIAL
+- LATE STAGE MOVE
+- LOW QUALITY / AVOID
+
+---
+
+# =====================================================================
+# ⚙️ ENGINEERING REQUIREMENTS
+# =====================================================================
+
+Implement modularly:
+
+- calculateCSOS()
+- calculateCPE()
+
+Requirements:
+- WATCHLIST ONLY
+- Safe null handling
+- Efficient real-time computation
+- No breaking changes
+- Preserve sorting/filtering
+- Maintain stable UI rendering
+- Modular clean code
+- Inline comments explaining financial logic
+
+Avoid:
+- overengineering
+- giant rewrites
+- excessive dependencies
+
+---
+
+# =====================================================================
+# 🎯 PRIORITY ORDER
+# =====================================================================
+
+1. WATCHLIST isolation
+2. System stability
+3. Correct signal interaction logic
+4. Regime awareness
+5. Relative ranking behavior
+6. Persistence + decay handling
+7. Explainability
+8. Performance efficiency
+
+---
+
+# =====================================================================
+# 🧠 FINAL MODEL PHILOSOPHY
+# =====================================================================
+
+This system is NOT:
+- a collection of indicators
+- a momentum screener
+- a prediction engine
+
+It IS:
+> a multi-layer institutional opportunity ranking engine.
+
+The system should prioritize:
+- asymmetry
+- accumulation
+- quality
+- early positioning
+- relative opportunity strength
+
+while avoiding:
+- hype
+- overextended momentum
+- unstable speculation
+- noisy breakouts
+
+The final behavior should resemble:
+> an institutional capital allocation ranking model.

@@ -344,11 +344,14 @@ components:
           description: True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics
         csos:
           type: number
-          description: "Composite Stock Opportunity Score (1-100) — multi-layer model combining VQS/GVS/INS/ACS/COS with regime, divergence, and conviction adjustments"
+          description: "Composite Stock Opportunity Score (1–100) — percentile-ranked within the watchlist universe. 90+ = truly rare elite setup."
         csosLabel:
           type: string
-          description: "EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | LATE STAGE MOVE | LOW QUALITY / AVOID"
-      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, trendLabel, convictionTier, isSuperstock, csos, csosLabel]
+          description: "EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | STEALTH ACCUMULATION | HIDDEN CATALYST POTENTIAL | LATE STAGE MOVE | LOW QUALITY / AVOID"
+        cpe:
+          type: number
+          description: "Catalyst Probability Engine (1–100) — estimates probability the market is underpricing a future major catalyst. Percentile-ranked within universe."
+      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, trendLabel, convictionTier, isSuperstock, csos, csosLabel, cpe]
 
     MoverStock:
       type: object

@@ -240,6 +240,28 @@ export function Watchlist() {
                           </TooltipContent>
                         </Tooltip>
                       </th>
+                      <th className="py-3 px-4 font-medium text-center hidden 2xl:table-cell">
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-sky-400">CPE</span>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
+                            <p className="font-semibold text-sky-300">(Catalyst Probability Engine)</p>
+                            <p className="text-zinc-300 text-xs">Estimates the probability that the market is currently underpricing a future major catalyst — strategic partnerships, enterprise contracts, institutional re-ratings, surprise guidance shifts.</p>
+                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
+                              <div className="text-zinc-400 font-semibold mb-1">Components:</div>
+                              <div className="text-zinc-400">25% Narrative Asymmetry · 25% Quiet Accumulation</div>
+                              <div className="text-zinc-400">20% Low Attention / Quality · 20% Hype Filter · 10% Strategic Positioning</div>
+                            </div>
+                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
+                              <div><span className="text-sky-300 font-mono">80+</span><span className="text-zinc-300"> → high probability of underpriced catalyst</span></div>
+                              <div><span className="text-sky-400 font-mono">60–79</span><span className="text-zinc-300"> → moderate catalyst setup developing</span></div>
+                              <div><span className="text-zinc-400 font-mono">below 60</span><span className="text-zinc-300"> → story already priced in or no edge</span></div>
+                            </div>
+                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Percentile-ranked within the watchlist universe. High CPE + low COS = hidden opportunity before crowd confirmation.</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </th>
                       <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
                         <Tooltip>
                           <TooltipTrigger asChild>

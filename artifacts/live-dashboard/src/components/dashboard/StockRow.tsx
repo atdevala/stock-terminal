@@ -319,13 +319,22 @@ function AcsTooltipContent({ score }: { score: StockScore }) {
   );
 }
 
+function cpeColor(s: number): string {
+  if (s >= 75) return "text-sky-300 border-sky-500/50 bg-sky-500/10";
+  if (s >= 55) return "text-sky-400 border-sky-600/40 bg-sky-600/10";
+  if (s >= 35) return "text-sky-500/80 border-sky-700/40 bg-sky-700/10";
+  return "text-zinc-500 border-zinc-700/40 bg-zinc-800/30";
+}
+
 function csosLabelStyle(label: string): string {
-  if (label === "PRIME OPPORTUNITY")    return "text-emerald-300";
-  if (label === "EARLY BREAKOUT SETUP") return "text-amber-300";
-  if (label === "QUALITY COMPOUNDER")   return "text-sky-300";
-  if (label === "CONFIRMED TREND")      return "text-amber-400";
-  if (label === "DEVELOPING SETUP")     return "text-zinc-400";
-  if (label === "LATE STAGE MOVE")      return "text-orange-400";
+  if (label === "PRIME OPPORTUNITY")          return "text-emerald-300";
+  if (label === "EARLY BREAKOUT SETUP")       return "text-amber-300";
+  if (label === "STEALTH ACCUMULATION")       return "text-teal-300";
+  if (label === "HIDDEN CATALYST POTENTIAL")  return "text-sky-300";
+  if (label === "QUALITY COMPOUNDER")         return "text-blue-300";
+  if (label === "CONFIRMED TREND")            return "text-amber-400";
+  if (label === "DEVELOPING SETUP")           return "text-zinc-400";
+  if (label === "LATE STAGE MOVE")            return "text-orange-400";
   return "text-red-400";
 }
 
@@ -333,7 +342,7 @@ function csosLabelStyle(label: string): string {
 
 function getCsosMainReason(
   label: string,
-  vqs: number, ins: number, acs: number, cos: number,
+  vqs: number, ins: number, acs: number, cos: number, cpe: number,
 ): { headline: string; detail: string } {
   const gap = ins - cos;
   if (label === "PRIME OPPORTUNITY")
@@ -345,6 +354,16 @@ function getCsosMainReason(
     return {
       headline: `INS is leading COS by ${gap} points`,
       detail: `INS (${ins}) is signaling early institutional positioning before the move shows up in COS (${cos}). This gap historically closes over 2–6 weeks as the broader market confirms the move.`,
+    };
+  if (label === "STEALTH ACCUMULATION")
+    return {
+      headline: `Quiet institutional build-up detected (ACS ${acs})`,
+      detail: `ACS (${acs}) is elevated with COS (${cos}) still low and CPE (${cpe}) confirming catalyst probability — institutions are quietly positioning before the public breakout. Classic pre-announcement accumulation pattern.`,
+    };
+  if (label === "HIDDEN CATALYST POTENTIAL")
+    return {
+      headline: `Market underpricing an upcoming catalyst (CPE ${cpe})`,
+      detail: `CPE (${cpe}) is high while COS (${cos}) is still muted — the market hasn't yet priced in the improving underlying story. Quality and accumulation signals suggest a re-rating event may be approaching.`,
     };
   if (label === "QUALITY COMPOUNDER")
     return {
@@ -405,6 +424,68 @@ function getCsosEdgeInsights(
   return insights.slice(0, 3);
 }
 
+function CpeTooltipContent({ score }: { score: StockScore }) {
+  const cpe  = score.cpe ?? 0;
+  const cos  = score.cos;
+  const vqs  = score.vqs;
+  const gvs  = score.gvs;
+  const acs  = score.acs;
+  const ins  = score.ins ?? 0;
+  const fbrs = score.fbrs ?? 0;
+
+  const cpeLabel = cpe >= 80 ? "High Catalyst Probability"
+                 : cpe >= 60 ? "Moderate — Setup Developing"
+                 : "Story Priced In / No Edge";
+
+  const components: [string, string, number, string][] = [
+    ["25%", "Narrative Asymmetry",      Math.round((score.vqs * 0.6 + gvs * 0.4) - cos), "Quality signal vs consensus gap"],
+    ["25%", "Quiet Accumulation",       acs,   "ACS elevated, COS still low"],
+    ["20%", "Low Attention / Quality",  vqs,   "Strong VQS unrecognized by momentum"],
+    ["20%", "False Hype Filter",        100 - fbrs, "Inverse of FBRS (clean setup)"],
+    ["10%", "Strategic Positioning",    ins,   "INS + ACS leading COS"],
+  ];
+
+  return (
+    <div className="text-xs" style={{ backgroundColor: "#000000", color: "#ffffff", minWidth: "270px" }}>
+      <div className="px-3 py-2.5 border-b" style={{ borderColor: "#27272a", backgroundColor: "#000d14" }}>
+        <div className="flex items-center justify-between mb-1">
+          <span className="uppercase tracking-widest text-[9px]" style={{ color: "#38bdf8" }}>CPE — Catalyst Probability</span>
+          <span className={cn("text-xl font-bold leading-none", cpeColor(cpe).split(" ")[0])}>{cpe}</span>
+        </div>
+        <div className={cn("text-[10px] font-semibold uppercase tracking-wide", cpeColor(cpe).split(" ")[0])}>{cpeLabel}</div>
+      </div>
+      <div className="px-3 py-2.5 border-b" style={{ borderColor: "#1c1c1c" }}>
+        <div className="text-[9px] uppercase tracking-widest mb-1.5" style={{ color: "#52525b" }}>What CPE Detects</div>
+        <div className="text-[10px] leading-relaxed" style={{ color: "#a1a1aa" }}>
+          Estimates the probability the market is <span style={{ color: "#e4e4e7" }}>underpricing a future major catalyst</span> —
+          enterprise contracts, institutional re-ratings, strategic partnerships, or surprise guidance shifts.
+          High CPE + low COS = the market hasn't confirmed it yet.
+        </div>
+      </div>
+      <div className="px-3 pt-2 pb-2">
+        <div className="text-[9px] uppercase tracking-widest mb-1.5" style={{ color: "#52525b" }}>Proxy Components</div>
+        <div className="space-y-1">
+          {components.map(([wt, k, val, desc]) => (
+            <div key={k} className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <span className="font-mono text-[9px] shrink-0" style={{ color: "#3f3f46" }}>{wt}</span>
+                <div className="min-w-0">
+                  <div style={{ color: "#71717a" }}>{k}</div>
+                  <div className="text-[9px]" style={{ color: "#3f3f46" }}>{desc}</div>
+                </div>
+              </div>
+              <span className="font-mono font-semibold text-[10px] shrink-0" style={{ color: "#e4e4e7" }}>{val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="px-3 pb-2 text-[9px] italic" style={{ color: "#52525b" }}>
+        Percentile-ranked within the 103-stock watchlist universe.
+      </div>
+    </div>
+  );
+}
+
 function CsosTooltipContent({ score }: { score: StockScore }) {
   const csos  = score.csos ?? 0;
   const label = score.csosLabel ?? "—";
@@ -413,8 +494,9 @@ function CsosTooltipContent({ score }: { score: StockScore }) {
   const cos   = score.cos;
   const vqs   = score.vqs;
   const gvs   = score.gvs;
+  const cpe   = score.cpe ?? 0;
 
-  const reason   = getCsosMainReason(label, vqs, ins, acs, cos);
+  const reason   = getCsosMainReason(label, vqs, ins, acs, cos, cpe);
   const insights = getCsosEdgeInsights(vqs, ins, acs, cos, score.fbrs);
 
   const components: [string, number, string][] = [
@@ -423,6 +505,7 @@ function CsosTooltipContent({ score }: { score: StockScore }) {
     ["INS", ins,  "15%"],
     ["ACS", acs,  "12%"],
     ["COS", cos,   "8%"],
+    ["CPE", cpe,  "+bonus"],
   ];
   const base = Math.round(vqs * 0.40 + gvs * 0.25 + ins * 0.15 + acs * 0.12 + cos * 0.08);
 
@@ -670,6 +753,19 @@ export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
             colorFn={acsColor}
             chips={getDeltaChips(signalDelta, "acs")}
             tooltip={<AcsTooltipContent score={score} />}
+          />
+        ) : <span className="text-muted-foreground text-xs">—</span>}
+      </td>
+
+      {/* CPE */}
+      <td className="py-2.5 px-3 text-center align-middle hidden 2xl:table-cell">
+        {score?.cpe !== undefined ? (
+          <ScoreBadge
+            label={`cpe-${stock.ticker}`}
+            score={score.cpe}
+            colorFn={cpeColor}
+            chips={[]}
+            tooltip={<CpeTooltipContent score={score} />}
           />
         ) : <span className="text-muted-foreground text-xs">—</span>}
       </td>

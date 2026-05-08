@@ -98,10 +98,12 @@ export interface StockScore {
   convictionTier: number;
   /** True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics */
   isSuperstock: boolean;
-  /** Composite Stock Opportunity Score (1-100) — multi-layer model combining VQS/GVS/INS/ACS/COS with regime, divergence, and conviction adjustments */
+  /** Composite Stock Opportunity Score (1–100) — percentile-ranked within the watchlist universe. 90+ = truly rare elite setup. */
   csos: number;
-  /** EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | LATE STAGE MOVE | LOW QUALITY / AVOID */
+  /** EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | STEALTH ACCUMULATION | HIDDEN CATALYST POTENTIAL | LATE STAGE MOVE | LOW QUALITY / AVOID */
   csosLabel: string;
+  /** Catalyst Probability Engine (1–100) — estimates probability the market is underpricing a future major catalyst. Percentile-ranked within universe. */
+  cpe: number;
 }
 
 export interface MoverStock {

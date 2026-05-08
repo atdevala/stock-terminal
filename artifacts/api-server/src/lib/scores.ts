@@ -585,6 +585,106 @@ function computeSuperstock(ins: number, acs: number, fbrs: number): boolean {
   return ins >= 72 && acs >= 68 && fbrs < 28;
 }
 
+// ── CPE: Catalyst Probability Engine ─────────────────────────────────────────
+// Estimates probability that the market is underpricing a future major catalyst.
+// Watchlist tab ONLY. Uses existing computed signals as proxies — no extra API
+// calls needed. Proxy components:
+//   25% — Narrative Asymmetry     (quality gap vs public consensus)
+//   25% — Quiet Accumulation      (ACS elevated without COS breakout)
+//   20% — Low Attention / Quality (strong VQS unrecognized by COS/INS)
+//   20% — False Hype Filter       (inverse FBRS — clean institutional setup)
+//   10% — Strategic Positioning   (INS + ACS leading without COS confirmation)
+
+export function calculateCPE(
+  vqs: number,
+  gvs: number,
+  ins: number,
+  acs: number,
+  cos: number,
+  fbrs: number,
+): number {
+  const v = isFinite(vqs) ? vqs : 50;
+  const g = isFinite(gvs) ? gvs : 50;
+  const i = isFinite(ins) ? ins : 50;
+  const a = isFinite(acs) ? acs : 50;
+  const c = isFinite(cos) ? cos : 50;
+  const f = isFinite(fbrs) ? fbrs : 50;
+
+  // ── 1. NARRATIVE ASYMMETRY (25%) ─────────────────────────────────────────
+  // Blended quality (VQS + GVS) is strong but COS hasn't priced it in yet
+  // = market underpricing an improving story. The wider the gap, the higher
+  // the probability that a rerating catalyst is approaching.
+  const qualitySignal = v * 0.60 + g * 0.40;
+  const narrativeGap  = qualitySignal - c;
+  let narrativeScore: number;
+  if (narrativeGap > 25 && v >= 50) {
+    narrativeScore = clamp(55 + narrativeGap * 0.9, 0, 100);
+  } else if (narrativeGap > 10 && v >= 40) {
+    narrativeScore = clamp(45 + narrativeGap * 0.65, 0, 100);
+  } else if (narrativeGap < -10) {
+    // Story already fully recognized — lower forward catalyst probability
+    narrativeScore = clamp(50 + narrativeGap * 0.4, 0, 100);
+  } else {
+    narrativeScore = 45;
+  }
+
+  // ── 2. QUIET ACCUMULATION (25%) ──────────────────────────────────────────
+  // ACS elevated + COS still low + FBRS clean = institutions positioning before
+  // the public breakout. Highest CPE signal when accumulation is genuinely quiet.
+  let accumScore: number;
+  if (a >= 65 && c < 60 && f < 40) {
+    // Prime stealth accumulation window: high ACS, pre-breakout, low noise
+    accumScore = clamp(60 + (a - 65) * 0.9 + (60 - c) * 0.35, 0, 100);
+  } else if (a >= 55 && c < 65) {
+    // Moderate accumulation: building but not yet confirmed
+    accumScore = clamp(45 + (a - 55) * 0.65, 0, 100);
+  } else if (a < 40) {
+    // No meaningful accumulation = low catalyst probability
+    accumScore = clamp(a * 0.6, 0, 100);
+  } else {
+    accumScore = 40;
+  }
+
+  // ── 3. LOW ATTENTION / HIGH QUALITY (20%) ────────────────────────────────
+  // Strong business quality (VQS) not yet reflected in momentum signals
+  // = market hasn't noticed yet, potential for surprise discovery.
+  let attentionScore: number;
+  if (v >= 62 && c < 55 && i < 58) {
+    attentionScore = clamp(60 + (v - 62) * 0.85 + (55 - c) * 0.30, 0, 100);
+  } else if (v >= 50 && c < 62) {
+    attentionScore = clamp(42 + (v - 50) * 0.55, 0, 100);
+  } else {
+    attentionScore = 35;
+  }
+
+  // ── 4. FALSE HYPE FILTER (20%) ────────────────────────────────────────────
+  // High FBRS = speculative noise-driven setup, not a real catalyst opportunity.
+  // Clean, institutional-quality setups (low FBRS) have the highest CPE.
+  const hypeFilterScore = clamp(100 - f, 0, 100);
+
+  // ── 5. STRATEGIC POSITIONING SIGNAL (10%) ────────────────────────────────
+  // INS leading + ACS confirming + COS still lagging = smart money moving into
+  // position before the catalyst becomes broadly known. Pre-catalyst window.
+  let strategicScore: number;
+  if (i >= 62 && a >= 58 && c < 58) {
+    strategicScore = clamp(55 + (i - 62) * 0.85 + (a - 58) * 0.40, 0, 100);
+  } else if (i >= 55 && a >= 50) {
+    strategicScore = clamp(45 + (i - 55) * 0.55, 0, 100);
+  } else {
+    strategicScore = 35;
+  }
+
+  // ── COMPOSITE CPE ────────────────────────────────────────────────────────
+  const raw =
+    0.25 * narrativeScore   +
+    0.25 * accumScore       +
+    0.20 * attentionScore   +
+    0.20 * hypeFilterScore  +
+    0.10 * strategicScore;
+
+  return Math.round(clamp(raw, 1, 100));
+}
+
 // ── CSOS: Composite Stock Opportunity Score ───────────────────────────────────
 // A multi-layer institutional decision model for the watchlist tab ONLY.
 //
@@ -598,15 +698,17 @@ function computeSuperstock(ins: number, acs: number, fbrs: number): boolean {
 //   5. Signal Divergence      — conflicting signals penalty
 //   6. Signal Agreement       — all signals aligned bonus
 //   7. Regime Awareness       — SPY trend / volatility multiplier
+//   8. Catalyst Bonus         — CPE-driven small upside contribution
 //
 // Isolated to watchlist pipeline. Does NOT affect Scanner, Signal Tracker,
 // or any other module. Safely handles null/missing values via defaults.
 
 // Context-aware label — pattern of signals matters more than raw score level.
 // Priority order ensures the label reflects WHY the score is high/low, not
-// just THAT it is high/low (e.g. an established quality compounder at 80+
-// should not be labelled "EARLY BREAKOUT SETUP").
-function csosLabelText(s: number, v: number, i: number, a: number, c: number): string {
+// just THAT it is high/low. Checked in decreasing priority order.
+function csosLabelText(
+  s: number, v: number, i: number, a: number, c: number, cpe = 50,
+): string {
   // 1. Fundamental weakness overrides all positive signals
   if (v < 40) return "LOW QUALITY / AVOID";
   // 2. Move extended, leading signal fading — forward edge is poor
@@ -615,11 +717,15 @@ function csosLabelText(s: number, v: number, i: number, a: number, c: number): s
   if (i > 75 && c < 60) return "EARLY BREAKOUT SETUP";
   // 4. All major signals aligned — rare full-conviction setup
   if (i > 70 && a > 70 && c > 70 && v > 60) return "PRIME OPPORTUNITY";
-  // 5. Fundamentals-driven score — established quality leader
+  // 5. Quiet institutional building — high ACS, high CPE, no breakout yet
+  if (a >= 65 && c < 55 && cpe >= 60) return "STEALTH ACCUMULATION";
+  // 6. High catalyst probability unrecognized by momentum signals
+  if (cpe >= 70 && c < 55) return "HIDDEN CATALYST POTENTIAL";
+  // 7. Fundamentals-driven score — established quality leader
   if (v >= 65 && s >= 52) return "QUALITY COMPOUNDER";
-  // 6. Momentum confirmed with institutional backing
+  // 8. Momentum confirmed with institutional backing
   if (c >= 60 && i >= 50 && s >= 48) return "CONFIRMED TREND";
-  // 7. Signals building but no clear dominant pattern yet
+  // 9. Signals building but no clear dominant pattern yet
   if (s >= 35) return "DEVELOPING SETUP";
   return "LOW QUALITY / AVOID";
 }
@@ -631,6 +737,7 @@ export function calculateCSOS(
   acs: number,
   cos: number,
   regime: string,
+  cpe = 50,
 ): { csos: number; csosLabel: string } {
   // Guard against NaN inputs
   const v = isFinite(vqs) ? vqs : 50;
@@ -686,7 +793,15 @@ export function calculateCSOS(
     score += bonus;
   }
 
-  // ── 8. REGIME AWARENESS ───────────────────────────────────────────────────
+  // ── 8. CATALYST PROBABILITY BONUS ────────────────────────────────────────
+  // High CPE + COS not yet extended = market underpricing a real setup.
+  // Small additive bonus only — CPE is confirmatory, not a primary driver.
+  if (cpe > 72 && c < 65) {
+    const bonus = cpe > 85 ? 5 : cpe > 78 ? 3 : 2;
+    score += bonus;
+  }
+
+  // ── 9. REGIME AWARENESS ───────────────────────────────────────────────────
   // SPY trend and volatility adjust the final score directionally.
   let regimeMultiplier: number;
   if (regime === "RISK-ON MOMENTUM") {
@@ -706,7 +821,7 @@ export function calculateCSOS(
   score *= regimeMultiplier;
 
   const finalScore = Math.round(clamp(score, 1, 100));
-  return { csos: finalScore, csosLabel: csosLabelText(finalScore, v, i, a, c) };
+  return { csos: finalScore, csosLabel: csosLabelText(finalScore, v, i, a, c, cpe) };
 }
 
 // ── StockScore interface ───────────────────────────────────────────────────────
@@ -749,6 +864,8 @@ export interface StockScore {
   // ── CSOS — watchlist-only composite opportunity score ─────────────────────
   csos: number;
   csosLabel: string;
+  // ── CPE — Catalyst Probability Engine (watchlist-only) ───────────────────
+  cpe: number;
 }
 
 // ── Master score computation ───────────────────────────────────────────────────
@@ -833,10 +950,13 @@ export function computeScore(
   const convictionTier = computeConvictionTier(ins, cos, acs, fbrs);
   const isSuperstock   = computeSuperstock(ins, acs, fbrs);
 
+  // ── CPE — Catalyst Probability Engine (watchlist-only) ───────────────────
+  const cpe = calculateCPE(vqs, gvs, ins, acs, cos, fbrs);
+
   // ── CSOS — watchlist-only composite opportunity score ─────────────────────
   // Fetch the current market regime so CSOS can apply the regime multiplier.
   const { regime } = getMarketRegime();
-  const csosResult = calculateCSOS(vqs, gvs, ins, acs, cos, regime);
+  const csosResult = calculateCSOS(vqs, gvs, ins, acs, cos, regime, cpe);
 
   return {
     ticker,
@@ -866,5 +986,51 @@ export function computeScore(
     isSuperstock,
     csos:      csosResult.csos,
     csosLabel: csosResult.csosLabel,
+    cpe,
   };
+}
+
+// ── Cross-sectional normalization ─────────────────────────────────────────────
+// After all stocks in the universe are scored individually, this pass converts
+// CSOS and CPE to percentile ranks within the active watchlist universe.
+//
+// Purpose: prevent score inflation/deflation across regimes. Ensures that
+// 90+ CSOS scores remain rare (true elite setups) regardless of absolute
+// market conditions. Elite distribution enforced:
+//   90–100 = exceptional (top ~10%)
+//   75–89  = strong opportunity
+//   50–74  = solid / neutral
+//   <50    = weak edge
+//
+// Only CSOS and CPE are normalized. Underlying signals (VQS, GVS, INS, ACS,
+// COS) keep their absolute values so tooltips and individual thresholds are
+// not disrupted.
+
+export function normalizeScores(scores: StockScore[]): StockScore[] {
+  if (scores.length < 2) return scores;
+
+  const csosVals = scores.map(s => s.csos);
+  const cpeVals  = scores.map(s => s.cpe);
+
+  // Percentile rank: fraction of the universe strictly below this value,
+  // mapped to 1–100. Ties receive the same rank (first-occurrence wins).
+  function toPercentile(sorted: number[], val: number): number {
+    const rank = sorted.filter(v => v < val).length + 1;  // 1-indexed
+    return Math.round(clamp((rank / sorted.length) * 100, 1, 100));
+  }
+
+  const csosSorted = [...csosVals].sort((a, b) => a - b);
+  const cpeSorted  = [...cpeVals].sort((a, b) => a - b);
+
+  return scores.map(s => {
+    const normCsos = toPercentile(csosSorted, s.csos);
+    const normCpe  = toPercentile(cpeSorted,  s.cpe);
+    return {
+      ...s,
+      csos:      normCsos,
+      cpe:       normCpe,
+      // Recompute label using normalized CSOS + raw signals for accuracy
+      csosLabel: csosLabelText(normCsos, s.vqs, s.ins ?? 50, s.acs, s.cos, normCpe),
+    };
+  });
 }
