@@ -20,34 +20,106 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
-type FilterKey = "all" | "ins70" | "cos70" | "early" | "highConv";
+type FilterKey = "all" | "accumulation" | "rising" | "superstock" | "divergence" | "latecycle";
 
-const FILTERS: { key: FilterKey; label: string; color: string }[] = [
-  { key: "all",      label: "All Stocks",        color: "border-zinc-600 text-zinc-400 hover:border-zinc-400 hover:text-zinc-200" },
-  { key: "ins70",    label: "INS > 70",           color: "border-violet-600 text-violet-400 hover:border-violet-400 hover:text-violet-200" },
-  { key: "cos70",    label: "COS > 70",           color: "border-blue-600 text-blue-400 hover:border-blue-400 hover:text-blue-200" },
-  { key: "early",    label: "⚡ Early Opportunity", color: "border-yellow-600 text-yellow-400 hover:border-yellow-400 hover:text-yellow-200" },
-  { key: "highConv", label: "🔥 High Conviction",  color: "border-emerald-600 text-emerald-400 hover:border-emerald-400 hover:text-emerald-200" },
+const FILTERS: {
+  key:    FilterKey;
+  label:  string;
+  base:   string;
+  active: string;
+  tip:    { title: string; body: string; how: string };
+}[] = [
+  {
+    key:    "all",
+    label:  "All Stocks",
+    base:   "border-zinc-600 text-zinc-400 hover:border-zinc-400 hover:text-zinc-200",
+    active: "bg-zinc-700 border-zinc-500 text-white",
+    tip: {
+      title: "All Stocks",
+      body:  "Shows every stock across all 9 sectors. Use this as your starting view before narrowing down.",
+      how:   "Scroll through the categories to get a sector-level picture of where signals are strongest. The sector grouping reveals rotation patterns that a flat list cannot.",
+    },
+  },
+  {
+    key:    "accumulation",
+    label:  "Institutional Accumulation",
+    base:   "border-teal-700 text-teal-500 hover:border-teal-500 hover:text-teal-300",
+    active: "bg-teal-900/40 border-teal-500 text-teal-200",
+    tip: {
+      title: "Institutional Accumulation — ACS ≥ 65",
+      body:  "Stocks where the ACS (Accumulation Confidence Score) detects quiet institutional buying — up-volume pressure, price coiling, relative strength vs SPY, and high closing strength. ACS is completely independent of INS and COS, so it catches setups that pure momentum filters miss.",
+      how:   "Look at which sectors cluster here. If 3–4 stocks in the same sector all show ACS ≥ 65, that is a sector rotation signal worth acting on. Prioritise names where ACS is rising alongside a high CPE — that combination suggests smart money is positioning ahead of a catalyst.",
+    },
+  },
+  {
+    key:    "rising",
+    label:  "Momentum Rising",
+    base:   "border-violet-700 text-violet-500 hover:border-violet-500 hover:text-violet-300",
+    active: "bg-violet-900/40 border-violet-500 text-violet-200",
+    tip: {
+      title: "Momentum Rising — INS trend accelerating",
+      body:  "Stocks where the INS (Inflection Signal Score) trend is currently RISING or STRONGLY RISING based on signal history snapshots. This is a dynamic, directional filter — completely different from a static INS threshold. A stock at INS 55 with a strongly rising trend is often more interesting than one at INS 72 going flat.",
+      how:   "Requires at least one 30-minute snapshot to have been saved since the server last restarted. Use alongside the Watchlist tab's score badges — stocks with both a rising INS trend and a positive 1D delta chip are the highest-priority setups here.",
+    },
+  },
+  {
+    key:    "superstock",
+    label:  "Superstock",
+    base:   "border-amber-700 text-amber-500 hover:border-amber-500 hover:text-amber-300",
+    active: "bg-amber-900/40 border-amber-500 text-amber-200",
+    tip: {
+      title: "Superstock — Elite Triple Threshold",
+      body:  "Stocks simultaneously above all three elite thresholds: INS ≥ 72, ACS ≥ 68, and FBRS < 28. All three conditions must hold at once — momentum front-running, institutional confirmation, and low false-breakout risk. This filter typically returns 3–7 names across the entire 103-stock watchlist.",
+      how:   "If a stock appears here, treat it as the highest-priority setup in the entire watchlist. Scale in deliberately rather than chasing — Superstock status means the setup is already well-developed, not that the move has started. Watch FBRS: if it rises above 28, the Superstock flag drops and the risk profile changes.",
+    },
+  },
+  {
+    key:    "divergence",
+    label:  "Divergence Events",
+    base:   "border-orange-700 text-orange-500 hover:border-orange-600 hover:text-orange-300",
+    active: "bg-orange-900/40 border-orange-500 text-orange-200",
+    tip: {
+      title: "Divergence Events — Active Signal Flags",
+      body:  "Stocks with an active divergence flag from the signal history engine: EARLY IGNITION SETUP (INS rising while ACS is quiet — stealth breakout), INSTITUTIONAL ACCUMULATION (ACS leading INS), SPECULATIVE MOMENTUM (INS elevated but ACS weak), or LATE CYCLE / EXHAUSTION RISK (COS high but signals cooling). These are the highest-signal events the system produces.",
+      how:   "Divergence flags are time-sensitive. Check the flag label in the stock row tooltip to know which type it is — they have opposite action implications. EARLY IGNITION and INSTITUTIONAL ACCUMULATION are entry signals; LATE CYCLE / EXHAUSTION RISK is an exit warning. Requires snapshot history to have accumulated.",
+    },
+  },
+  {
+    key:    "latecycle",
+    label:  "Late Cycle Risk",
+    base:   "border-red-800 text-red-500 hover:border-red-600 hover:text-red-300",
+    active: "bg-red-900/40 border-red-600 text-red-200",
+    tip: {
+      title: "Late Cycle Risk — Consider Trimming",
+      body:  "Stocks labelled LATE STAGE MOVE by the CSOS engine, or where COS is above 78 but INS has dropped below 48 — a pattern where the fundamental/momentum blend looks extended while the leading indicator is fading. This is a risk management view, not a sell signal on its own.",
+      how:   "For stocks you hold, use this to identify where risk/reward has deteriorated. Consider taking partial profits or tightening stops. Do not initiate new positions here unless you see a fresh INS re-acceleration. Check back on these names via the Momentum Rising filter to catch any reversal setups.",
+    },
+  },
 ];
 
-const ACTIVE_COLORS: Record<FilterKey, string> = {
-  all:      "bg-zinc-700 border-zinc-500 text-white",
-  ins70:    "bg-violet-900/60 border-violet-500 text-violet-200",
-  cos70:    "bg-blue-900/60 border-blue-500 text-blue-200",
-  early:    "bg-yellow-900/60 border-yellow-500 text-yellow-200",
-  highConv: "bg-emerald-900/60 border-emerald-500 text-emerald-200",
-};
-
-function matchesFilter(score: StockScore | undefined, filter: FilterKey): boolean {
+function matchesFilter(
+  score: StockScore | undefined,
+  delta: SignalDelta | undefined,
+  filter: FilterKey,
+): boolean {
   if (filter === "all") return true;
   if (!score) return false;
-  const ins = score.ins ?? 0;
-  const cos = score.cos;
-  if (filter === "ins70")    return ins > 70;
-  if (filter === "cos70")    return cos > 70;
-  if (filter === "early")    return ins > 70 && cos < 60;
-  if (filter === "highConv") return ins > 70 && cos > 70;
-  return true;
+  switch (filter) {
+    case "accumulation":
+      return score.acs >= 65;
+    case "rising": {
+      const t = delta?.trends?.ins;
+      return t === "RISING" || t === "STRONGLY_RISING";
+    }
+    case "superstock":
+      return score.isSuperstock === true;
+    case "divergence":
+      return typeof delta?.divergence === "string" && delta.divergence.trim() !== "";
+    case "latecycle":
+      return score.csosLabel === "LATE STAGE MOVE" || (score.cos > 78 && (score.ins ?? 0) < 48);
+    default:
+      return true;
+  }
 }
 
 export function Watchlist() {
@@ -91,20 +163,40 @@ export function Watchlist() {
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground uppercase tracking-widest mr-1">Filter:</span>
         {FILTERS.map(f => (
-          <button
-            key={f.key}
-            onClick={() => setActiveFilter(f.key)}
-            className={cn(
-              "text-xs font-medium px-3 py-1 rounded border transition-colors duration-150",
-              activeFilter === f.key ? ACTIVE_COLORS[f.key] : f.color
-            )}
-          >
-            {f.label}
-          </button>
+          <Tooltip key={f.key}>
+            <TooltipTrigger asChild>
+              <button
+                onClick={() => setActiveFilter(f.key)}
+                className={cn(
+                  "text-xs font-medium px-3 py-1 rounded border transition-colors duration-150",
+                  activeFilter === f.key ? f.active : f.base,
+                )}
+              >
+                {f.label}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              align="start"
+              className="max-w-[300px] p-0 overflow-hidden border border-zinc-700 shadow-2xl rounded-lg z-50"
+              style={{ backgroundColor: "#000000" }}
+            >
+              <div style={{ backgroundColor: "#000000", color: "#ffffff" }}>
+                <div className="px-3 py-2 border-b border-zinc-800" style={{ backgroundColor: "#0f0f0f" }}>
+                  <div className="text-[10px] uppercase tracking-widest font-bold text-zinc-300 mb-1">{f.tip.title}</div>
+                  <div className="text-[11px] text-zinc-400 leading-snug">{f.tip.body}</div>
+                </div>
+                <div className="px-3 py-2">
+                  <div className="text-[9px] uppercase tracking-widest text-zinc-600 mb-1">How to use</div>
+                  <div className="text-[11px] text-zinc-300 leading-snug">{f.tip.how}</div>
+                </div>
+              </div>
+            </TooltipContent>
+          </Tooltip>
         ))}
         {activeFilter !== "all" && (
           <span className="text-xs text-muted-foreground ml-2">
-            {categories.flatMap(c => c.stocks).filter(s => matchesFilter(scoresMap.get(s.ticker), activeFilter)).length} matches
+            {categories.flatMap(c => c.stocks).filter(s => matchesFilter(scoresMap.get(s.ticker), deltasMap.get(s.ticker), activeFilter)).length} matches
           </span>
         )}
       </div>
@@ -113,7 +205,7 @@ export function Watchlist() {
       <div className="space-y-10">
         {categories.map((category) => {
           const visibleStocks = category.stocks.filter(s =>
-            matchesFilter(scoresMap.get(s.ticker), activeFilter)
+            matchesFilter(scoresMap.get(s.ticker), deltasMap.get(s.ticker), activeFilter)
           );
           if (activeFilter !== "all" && visibleStocks.length === 0) return null;
 
