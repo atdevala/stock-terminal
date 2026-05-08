@@ -320,91 +320,192 @@ function AcsTooltipContent({ score }: { score: StockScore }) {
 }
 
 function csosLabelStyle(label: string): string {
+  if (label === "PRIME OPPORTUNITY")    return "text-emerald-300";
   if (label === "EARLY BREAKOUT SETUP") return "text-amber-300";
+  if (label === "QUALITY COMPOUNDER")   return "text-sky-300";
   if (label === "CONFIRMED TREND")      return "text-amber-400";
-  if (label === "QUALITY COMPOUNDER")   return "text-yellow-400";
+  if (label === "DEVELOPING SETUP")     return "text-zinc-400";
   if (label === "LATE STAGE MOVE")      return "text-orange-400";
   return "text-red-400";
+}
+
+// ── CSOS tooltip helpers ───────────────────────────────────────────────────────
+
+function getCsosMainReason(
+  label: string,
+  vqs: number, ins: number, acs: number, cos: number,
+): { headline: string; detail: string } {
+  const gap = ins - cos;
+  if (label === "PRIME OPPORTUNITY")
+    return {
+      headline: "All 5 signals are strongly aligned",
+      detail: `INS (${ins}), ACS (${acs}), COS (${cos}), and VQS (${vqs}) are all elevated together — rare full-conviction setup where fundamentals, growth, momentum, and institutional accumulation are firing in unison.`,
+    };
+  if (label === "EARLY BREAKOUT SETUP")
+    return {
+      headline: `INS is leading COS by ${gap} points`,
+      detail: `INS (${ins}) is signaling early institutional positioning before the move shows up in COS (${cos}). This gap historically closes over 2–6 weeks as the broader market confirms the move.`,
+    };
+  if (label === "QUALITY COMPOUNDER")
+    return {
+      headline: `Fundamentals-anchored (VQS ${vqs})`,
+      detail: `VQS carries 40% weight and is the dominant driver here. This is an established, structurally strong business — the score is quality-anchored, not momentum-dependent, which makes it more durable.`,
+    };
+  if (label === "CONFIRMED TREND")
+    return {
+      headline: `Momentum confirmed across INS (${ins}) and COS (${cos})`,
+      detail: `Both the leading signal and the confirmation signal are elevated with ACS (${acs}) providing institutional support. The trend has backing and is not yet extended.`,
+    };
+  if (label === "LATE STAGE MOVE")
+    return {
+      headline: `COS (${cos}) is extended while INS (${ins}) is fading`,
+      detail: `The breakout signal (INS) is weakening while the confirmation signal (COS) is fully extended. This pattern suggests the bulk of the move has already occurred — risk/reward is deteriorating for new entries.`,
+    };
+  if (label === "DEVELOPING SETUP")
+    return {
+      headline: "Mixed signals — no dominant pattern yet",
+      detail: `Signals are building but haven't converged into a clear pattern. Watch INS and ACS for strengthening — a rise in INS with COS still lagging would upgrade this to Early Breakout.`,
+    };
+  return {
+    headline: `Fundamental floor override (VQS ${vqs})`,
+    detail: `VQS below 40 triggers a structural penalty that overrides positive momentum signals. CSOS hard-penalizes weak businesses regardless of price action — fundamentals must recover before the score can.`,
+  };
+}
+
+function getCsosEdgeInsights(
+  vqs: number, ins: number, acs: number, cos: number, fbrs?: number,
+): string[] {
+  const insights: string[] = [];
+  const gap = ins - cos;
+
+  if (gap > 20 && ins > 55)
+    insights.push(`INS leads COS by ${gap} pts — potential 2–6 week window before broad-market confirmation. Highest-edge entry zone.`);
+
+  if (acs > ins + 15 && acs > 60)
+    insights.push(`ACS (${acs}) is ahead of INS (${ins}) — quiet institutional accumulation before price momentum forms. Stealth-entry pattern.`);
+
+  if (ins >= 65 && acs >= 65 && Math.abs(ins - acs) < 15)
+    insights.push(`INS and ACS are co-elevated (${ins}/${acs}) — momentum and accumulation confirming each other simultaneously. Highest-quality signal combination.`);
+
+  if (vqs >= 70 && ins >= 60)
+    insights.push(`VQS ${vqs} + INS ${ins} — quality-growth alignment is rare and tends to compound. These are the setups that produce multi-year winners.`);
+
+  if (vqs < 45 && ins > 65)
+    insights.push(`⚠ Weak fundamentals (VQS ${vqs}) with strong momentum (INS ${ins}) — vulnerable to sharp reversal if sentiment shifts. Reduce position size.`);
+
+  if (cos > 70 && ins > 65)
+    insights.push(`COS (${cos}) confirmed with INS (${ins}) still elevated — trend has institutional conviction, not just price extension.`);
+
+  if (fbrs !== undefined && fbrs > 65)
+    insights.push(`⚠ FBRS ${fbrs} — elevated false-breakout risk. Verify volume is organic before sizing up.`);
+
+  if (cos > 80 && ins < 50)
+    insights.push(`COS (${cos}) fully extended while INS (${ins}) declining — the smart money is reducing, not adding. Late-cycle caution.`);
+
+  return insights.slice(0, 3);
 }
 
 function CsosTooltipContent({ score }: { score: StockScore }) {
   const csos  = score.csos ?? 0;
   const label = score.csosLabel ?? "—";
+  const ins   = score.ins ?? 0;
+  const acs   = score.acs;
+  const cos   = score.cos;
+  const vqs   = score.vqs;
+  const gvs   = score.gvs;
+
+  const reason   = getCsosMainReason(label, vqs, ins, acs, cos);
+  const insights = getCsosEdgeInsights(vqs, ins, acs, cos, score.fbrs);
 
   const components: [string, number, string][] = [
-    ["VQS", score.vqs,       "40%"],
-    ["GVS", score.gvs,       "25%"],
-    ["INS", score.ins ?? 0,  "15%"],
-    ["ACS", score.acs,       "12%"],
-    ["COS", score.cos,        "8%"],
+    ["VQS", vqs,  "40%"],
+    ["GVS", gvs,  "25%"],
+    ["INS", ins,  "15%"],
+    ["ACS", acs,  "12%"],
+    ["COS", cos,   "8%"],
   ];
+  const base = Math.round(vqs * 0.40 + gvs * 0.25 + ins * 0.15 + acs * 0.12 + cos * 0.08);
 
-  const base = components.reduce((sum, [, val, wt]) => sum + val * parseFloat(wt) / 100, 0);
-
-  // Detect which intelligence layers fired for the tooltip
-  const ins = score.ins ?? 0;
-  const acs = score.acs;
-  const cos = score.cos;
-  const vqs = score.vqs;
-
-  const layers: { label: string; color: string }[] = [];
-  if (ins > 75 && cos < 60)               layers.push({ label: "Early Breakout Edge (+bonus)",      color: "text-amber-300" });
-  if (cos > 80 && ins < 50)               layers.push({ label: "Late Stage Warning (−penalty)",     color: "text-red-400" });
-  if (vqs < 40)                            layers.push({ label: "Fundamental Floor (−override)",     color: "text-red-400" });
-  if (ins >= 65 && acs >= 65)             layers.push({ label: "Accumulation Boost (×multiplier)",  color: "text-teal-400" });
-  if (ins > 72 && acs < 45)              layers.push({ label: "Divergence Penalty (INS∅ACS)",       color: "text-orange-400" });
-  if (cos > 72 && ins < 45)              layers.push({ label: "Divergence Penalty (COS∅INS)",       color: "text-orange-400" });
-  if (acs > 68 && vqs < 38)             layers.push({ label: "Divergence Penalty (ACS∅VQS)",       color: "text-orange-400" });
-  if (ins > 70 && acs > 70 && cos > 70 && vqs > 60)
-                                           layers.push({ label: "Signal Agreement Bonus (+bonus)",   color: "text-emerald-400" });
+  const layers: { text: string; color: string }[] = [];
+  if (ins > 75 && cos < 60)                          layers.push({ text: "Early Breakout Edge (+bonus)",     color: "text-amber-300" });
+  if (cos > 80 && ins < 50)                          layers.push({ text: "Late Stage Warning (−penalty)",    color: "text-red-400"   });
+  if (vqs < 40)                                       layers.push({ text: "Fundamental Floor (−override)",    color: "text-red-400"   });
+  if (ins >= 65 && acs >= 65)                        layers.push({ text: "Accumulation Boost (×multiplier)", color: "text-teal-400"  });
+  if (ins > 72 && acs < 45)                         layers.push({ text: "Divergence Penalty: INS∅ACS",      color: "text-orange-400"});
+  if (cos > 72 && ins < 45)                         layers.push({ text: "Divergence Penalty: COS∅INS",      color: "text-orange-400"});
+  if (acs > 68 && vqs < 38)                        layers.push({ text: "Divergence Penalty: ACS∅VQS",      color: "text-orange-400"});
+  if (ins > 70 && acs > 70 && cos > 70 && vqs > 60) layers.push({ text: "Signal Agreement Bonus (+bonus)",  color: "text-emerald-400"});
 
   return (
-    <div className="text-xs" style={{ backgroundColor: "#000000", color: "#ffffff" }}>
-      {/* Header */}
-      <div className="px-3 py-2.5 border-b" style={{ borderColor: "#27272a", backgroundColor: "#140e00" }}>
+    <div className="text-xs" style={{ backgroundColor: "#000000", color: "#ffffff", minWidth: "280px" }}>
+
+      {/* ── Header: score + label ── */}
+      <div className="px-3 py-2.5 border-b" style={{ borderColor: "#27272a", backgroundColor: "#0d0a00" }}>
         <div className="flex items-center justify-between mb-1">
           <span className="uppercase tracking-widest text-[9px]" style={{ color: "#d97706" }}>CSOS — Composite Score</span>
-          <span className={cn("text-lg font-bold leading-none", csosColor(csos).split(" ")[0])}>{csos}</span>
+          <span className={cn("text-xl font-bold leading-none", csosColor(csos).split(" ")[0])}>{csos}</span>
         </div>
-        <div className={cn("text-[9px] font-semibold uppercase tracking-wide leading-tight", csosLabelStyle(label))}>{label}</div>
+        <div className={cn("text-[10px] font-bold uppercase tracking-wider", csosLabelStyle(label))}>{label}</div>
       </div>
 
-      {/* Component weights */}
-      <div className="px-3 py-2 space-y-1.5">
-        <div className="text-[9px] uppercase tracking-widest mb-1" style={{ color: "#52525b" }}>Signal Weights</div>
-        {components.map(([k, val, wt]) => (
-          <div key={k} className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-1.5">
-              <span className="font-mono text-[9px]" style={{ color: "#52525b" }}>{wt}</span>
-              <span style={{ color: "#71717a" }}>{k}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-16 h-1 rounded-full overflow-hidden" style={{ backgroundColor: "#27272a" }}>
-                <div className="h-full rounded-full" style={{ width: `${val}%`, backgroundColor: "#d97706" }} />
+      {/* ── Main reason ── */}
+      <div className="px-3 pt-2.5 pb-2 border-b" style={{ borderColor: "#1c1c1c" }}>
+        <div className="text-[9px] uppercase tracking-widest mb-1.5" style={{ color: "#52525b" }}>Primary Driver</div>
+        <div className="font-semibold text-[11px] leading-snug mb-1" style={{ color: "#e4e4e7" }}>{reason.headline}</div>
+        <div className="text-[10px] leading-relaxed" style={{ color: "#71717a" }}>{reason.detail}</div>
+      </div>
+
+      {/* ── Analytical edge ── */}
+      {insights.length > 0 && (
+        <div className="px-3 pt-2 pb-2 border-b" style={{ borderColor: "#1c1c1c" }}>
+          <div className="text-[9px] uppercase tracking-widest mb-1.5" style={{ color: "#52525b" }}>Analytical Edge</div>
+          <div className="space-y-1.5">
+            {insights.map((ins, idx) => (
+              <div key={idx} className="flex gap-1.5">
+                <span style={{ color: "#d97706" }} className="mt-0.5 shrink-0">›</span>
+                <span className="text-[10px] leading-snug" style={{ color: ins.startsWith("⚠") ? "#f87171" : "#a1a1aa" }}>{ins}</span>
               </div>
-              <span className="font-mono font-medium w-6 text-right" style={{ color: "#ffffff" }}>{val}</span>
-            </div>
+            ))}
           </div>
-        ))}
-        <div className="flex items-center justify-between gap-4 pt-1 border-t" style={{ borderColor: "#27272a" }}>
-          <span style={{ color: "#52525b" }}>Base (weighted)</span>
-          <span className="font-mono" style={{ color: "#a1a1aa" }}>{Math.round(base)}</span>
-        </div>
-      </div>
-
-      {/* Intelligence layers that fired */}
-      {layers.length > 0 && (
-        <div className="px-3 pb-2 border-t space-y-1" style={{ borderColor: "#27272a" }}>
-          <div className="text-[9px] uppercase tracking-widest mt-2 mb-1" style={{ color: "#52525b" }}>Active Adjustments</div>
-          {layers.map(l => (
-            <div key={l.label} className={cn("text-[9px] font-medium", l.color)}>{l.label}</div>
-          ))}
         </div>
       )}
 
-      <div className="px-3 pb-2 text-[9px] italic" style={{ color: "#52525b" }}>
-        Regime-adjusted. CSOS is NOT a simple average — it is a signal interaction model.
+      {/* ── Signal weight breakdown ── */}
+      <div className="px-3 pt-2 pb-2 border-b" style={{ borderColor: "#1c1c1c" }}>
+        <div className="text-[9px] uppercase tracking-widest mb-1.5" style={{ color: "#52525b" }}>Signal Weights</div>
+        <div className="space-y-1">
+          {components.map(([k, val, wt]) => (
+            <div key={k} className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 w-16">
+                <span className="font-mono text-[9px]" style={{ color: "#3f3f46" }}>{wt}</span>
+                <span className="text-[10px]" style={{ color: "#71717a" }}>{k}</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-1">
+                <div className="flex-1 h-[3px] rounded-full overflow-hidden" style={{ backgroundColor: "#1c1c1e" }}>
+                  <div className="h-full rounded-full" style={{ width: `${val}%`, backgroundColor: val >= 70 ? "#d97706" : val >= 50 ? "#a16207" : "#6b5d37" }} />
+                </div>
+                <span className="font-mono font-semibold text-[10px] w-5 text-right" style={{ color: "#e4e4e7" }}>{val}</span>
+              </div>
+            </div>
+          ))}
+          <div className="flex items-center justify-between pt-1 border-t mt-1" style={{ borderColor: "#27272a" }}>
+            <span className="text-[9px]" style={{ color: "#3f3f46" }}>Unweighted base</span>
+            <span className="font-mono text-[9px]" style={{ color: "#52525b" }}>{base}</span>
+          </div>
+        </div>
       </div>
+
+      {/* ── Active intelligence layers ── */}
+      {layers.length > 0 && (
+        <div className="px-3 pt-2 pb-2">
+          <div className="text-[9px] uppercase tracking-widest mb-1.5" style={{ color: "#52525b" }}>Active Adjustments</div>
+          <div className="space-y-1">
+            {layers.map(l => (
+              <div key={l.text} className={cn("text-[9px] font-medium", l.color)}>{l.text}</div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

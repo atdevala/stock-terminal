@@ -602,11 +602,25 @@ function computeSuperstock(ins: number, acs: number, fbrs: number): boolean {
 // Isolated to watchlist pipeline. Does NOT affect Scanner, Signal Tracker,
 // or any other module. Safely handles null/missing values via defaults.
 
-function csosLabelText(s: number): string {
-  if (s >= 78) return "EARLY BREAKOUT SETUP";
-  if (s >= 62) return "CONFIRMED TREND";
-  if (s >= 48) return "QUALITY COMPOUNDER";
-  if (s >= 35) return "LATE STAGE MOVE";
+// Context-aware label — pattern of signals matters more than raw score level.
+// Priority order ensures the label reflects WHY the score is high/low, not
+// just THAT it is high/low (e.g. an established quality compounder at 80+
+// should not be labelled "EARLY BREAKOUT SETUP").
+function csosLabelText(s: number, v: number, i: number, a: number, c: number): string {
+  // 1. Fundamental weakness overrides all positive signals
+  if (v < 40) return "LOW QUALITY / AVOID";
+  // 2. Move extended, leading signal fading — forward edge is poor
+  if (c > 80 && i < 50) return "LATE STAGE MOVE";
+  // 3. INS leading COS — specific early-stage institutional pattern
+  if (i > 75 && c < 60) return "EARLY BREAKOUT SETUP";
+  // 4. All major signals aligned — rare full-conviction setup
+  if (i > 70 && a > 70 && c > 70 && v > 60) return "PRIME OPPORTUNITY";
+  // 5. Fundamentals-driven score — established quality leader
+  if (v >= 65 && s >= 52) return "QUALITY COMPOUNDER";
+  // 6. Momentum confirmed with institutional backing
+  if (c >= 60 && i >= 50 && s >= 48) return "CONFIRMED TREND";
+  // 7. Signals building but no clear dominant pattern yet
+  if (s >= 35) return "DEVELOPING SETUP";
   return "LOW QUALITY / AVOID";
 }
 
@@ -692,7 +706,7 @@ export function calculateCSOS(
   score *= regimeMultiplier;
 
   const finalScore = Math.round(clamp(score, 1, 100));
-  return { csos: finalScore, csosLabel: csosLabelText(finalScore) };
+  return { csos: finalScore, csosLabel: csosLabelText(finalScore, v, i, a, c) };
 }
 
 // ── StockScore interface ───────────────────────────────────────────────────────
