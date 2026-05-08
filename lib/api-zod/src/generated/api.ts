@@ -270,6 +270,7 @@ export const GetSignalDeltasResponseItem = zod.object({
     ins: zod.number(),
     acs: zod.number(),
     csos: zod.number(),
+    cpe: zod.number(),
   }),
   delta1H: zod
     .object({
@@ -279,6 +280,7 @@ export const GetSignalDeltasResponseItem = zod.object({
       ins: zod.number(),
       acs: zod.number(),
       csos: zod.number(),
+      cpe: zod.number(),
     })
     .nullish()
     .describe(
@@ -292,6 +294,7 @@ export const GetSignalDeltasResponseItem = zod.object({
       ins: zod.number(),
       acs: zod.number(),
       csos: zod.number(),
+      cpe: zod.number(),
     })
     .nullish(),
   delta7D: zod
@@ -302,6 +305,7 @@ export const GetSignalDeltasResponseItem = zod.object({
       ins: zod.number(),
       acs: zod.number(),
       csos: zod.number(),
+      cpe: zod.number(),
     })
     .nullish(),
   deltaBaseline: zod
@@ -312,6 +316,7 @@ export const GetSignalDeltasResponseItem = zod.object({
       ins: zod.number(),
       acs: zod.number(),
       csos: zod.number(),
+      cpe: zod.number(),
     })
     .nullish()
     .describe(
@@ -331,6 +336,7 @@ export const GetSignalDeltasResponseItem = zod.object({
       ins: zod.number(),
       acs: zod.number(),
       csos: zod.number(),
+      cpe: zod.number(),
     })
     .nullish(),
   trends: zod.object({
@@ -339,6 +345,8 @@ export const GetSignalDeltasResponseItem = zod.object({
     cos: zod.string(),
     ins: zod.string(),
     acs: zod.string(),
+    csos: zod.string(),
+    cpe: zod.string(),
   }),
   divergence: zod
     .string()

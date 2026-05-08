@@ -510,17 +510,20 @@ components:
         ins:  { type: number }
         acs:  { type: number }
         csos: { type: number }
-      required: [vqs, gvs, cos, ins, acs, csos]
+        cpe:  { type: number }
+      required: [vqs, gvs, cos, ins, acs, csos, cpe]
 
     SignalTrends:
       type: object
       properties:
-        vqs: { type: string }
-        gvs: { type: string }
-        cos: { type: string }
-        ins: { type: string }
-        acs: { type: string }
-      required: [vqs, gvs, cos, ins, acs]
+        vqs:  { type: string }
+        gvs:  { type: string }
+        cos:  { type: string }
+        ins:  { type: string }
+        acs:  { type: string }
+        csos: { type: string }
+        cpe:  { type: string }
+      required: [vqs, gvs, cos, ins, acs, csos, cpe]
 
     SignalHistoryPoint:
       type: object

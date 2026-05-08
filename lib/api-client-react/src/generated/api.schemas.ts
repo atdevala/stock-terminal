@@ -213,6 +213,7 @@ export interface SignalValues {
   ins: number;
   acs: number;
   csos: number;
+  cpe: number;
 }
 
 export interface SignalTrends {
@@ -221,6 +222,8 @@ export interface SignalTrends {
   cos: string;
   ins: string;
   acs: string;
+  csos: string;
+  cpe: string;
 }
 
 export interface SignalHistoryPoint {

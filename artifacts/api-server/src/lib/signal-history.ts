@@ -14,6 +14,7 @@ export interface SignalSnapshot {
   ins:  number;
   acs:  number;
   csos: number;
+  cpe:  number;
 }
 
 export interface SignalValues {
@@ -23,6 +24,7 @@ export interface SignalValues {
   ins:  number;
   acs:  number;
   csos: number;
+  cpe:  number;
 }
 
 export type SignalTrend =
@@ -33,11 +35,13 @@ export type SignalTrend =
   | "STRONGLY_FALLING";
 
 export interface SignalTrends {
-  vqs: SignalTrend;
-  gvs: SignalTrend;
-  cos: SignalTrend;
-  ins: SignalTrend;
-  acs: SignalTrend;
+  vqs:  SignalTrend;
+  gvs:  SignalTrend;
+  cos:  SignalTrend;
+  ins:  SignalTrend;
+  acs:  SignalTrend;
+  csos: SignalTrend;
+  cpe:  SignalTrend;
 }
 
 export interface SignalDelta {
@@ -141,6 +145,7 @@ export function takeSnapshotIfDue(scores: StockScore[]): void {
       ins:  s.ins ?? 50,
       acs:  s.acs,
       csos: s.csos,
+      cpe:  s.cpe ?? 0,
     };
 
     const existing = store.get(s.ticker) ?? [];
@@ -176,6 +181,7 @@ function diffVals(current: SignalValues, snap: SignalSnapshot): SignalValues {
     ins:  Math.round(current.ins  - snap.ins),
     acs:  Math.round(current.acs  - snap.acs),
     csos: Math.round(current.csos - (snap.csos ?? 0)),
+    cpe:  Math.round(current.cpe  - (snap.cpe  ?? 0)),
   };
 }
 
@@ -188,6 +194,7 @@ function diffSnaps(a: SignalSnapshot, b: SignalSnapshot): SignalValues {
     ins:  Math.round(a.ins  - b.ins),
     acs:  Math.round(a.acs  - b.acs),
     csos: Math.round((a.csos ?? 0) - (b.csos ?? 0)),
+    cpe:  Math.round((a.cpe  ?? 0) - (b.cpe  ?? 0)),
   };
 }
 
@@ -200,13 +207,15 @@ function classifyTrend(delta: number): SignalTrend {
 }
 
 function computeTrends(delta: SignalValues | null): SignalTrends {
-  const d = delta ?? { vqs: 0, gvs: 0, cos: 0, ins: 0, acs: 0, csos: 0 };
+  const d = delta ?? { vqs: 0, gvs: 0, cos: 0, ins: 0, acs: 0, csos: 0, cpe: 0 };
   return {
-    vqs: classifyTrend(d.vqs),
-    gvs: classifyTrend(d.gvs),
-    cos: classifyTrend(d.cos),
-    ins: classifyTrend(d.ins),
-    acs: classifyTrend(d.acs),
+    vqs:  classifyTrend(d.vqs),
+    gvs:  classifyTrend(d.gvs),
+    cos:  classifyTrend(d.cos),
+    ins:  classifyTrend(d.ins),
+    acs:  classifyTrend(d.acs),
+    csos: classifyTrend(d.csos),
+    cpe:  classifyTrend(d.cpe),
   };
 }
 
@@ -250,8 +259,8 @@ export function getAllSignalDeltas(): SignalDelta[] {
 
     // "Current" values: prefer live score (real-time), fall back to latest snapshot
     const current: SignalValues = liveSc
-      ? { vqs: liveSc.vqs, gvs: liveSc.gvs, cos: liveSc.cos, ins: liveSc.ins ?? 50, acs: liveSc.acs, csos: liveSc.csos }
-      : { vqs: latestSn!.vqs, gvs: latestSn!.gvs, cos: latestSn!.cos, ins: latestSn!.ins, acs: latestSn!.acs, csos: latestSn!.csos ?? 0 };
+      ? { vqs: liveSc.vqs, gvs: liveSc.gvs, cos: liveSc.cos, ins: liveSc.ins ?? 50, acs: liveSc.acs, csos: liveSc.csos, cpe: liveSc.cpe ?? 0 }
+      : { vqs: latestSn!.vqs, gvs: latestSn!.gvs, cos: latestSn!.cos, ins: latestSn!.ins, acs: latestSn!.acs, csos: latestSn!.csos ?? 0, cpe: latestSn!.cpe ?? 0 };
 
     // 1H / 1D / 7D deltas: compare current to snapshots at each horizon
     const snap1H  = findSnapshotNear(snaps, now - 1  * 3600_000);
@@ -275,6 +284,7 @@ export function getAllSignalDeltas(): SignalDelta[] {
         ins:  delta1D.ins  - prev1D.ins,
         acs:  delta1D.acs  - prev1D.acs,
         csos: delta1D.csos - prev1D.csos,
+        cpe:  delta1D.cpe  - prev1D.cpe,
       };
     }
 

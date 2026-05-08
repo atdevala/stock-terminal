@@ -69,6 +69,13 @@ function scoreColor(s: number): string {
   return "text-red-400";
 }
 
+function cpeColor(s: number): string {
+  if (s >= 70) return "text-sky-300";
+  if (s >= 50) return "text-sky-400/80";
+  if (s >= 35) return "text-sky-500/70";
+  return "text-zinc-500";
+}
+
 // ── Trend arrows ───────────────────────────────────────────────────────────────
 
 const TREND_ARROW: Record<string, string> = {
@@ -113,7 +120,7 @@ function formatBaselineAge(ms: number): string {
   return `${Math.max(1, Math.round(ms / 60_000))}m`;
 }
 
-type SigKey = "ins" | "acs" | "cos" | "csos";
+type SigKey = "ins" | "acs" | "cos" | "csos" | "cpe";
 
 /** Best available single delta: 1D → 1H → baseline. Skips zeros. */
 function resolveDelta(
@@ -839,6 +846,28 @@ export function AlphaScannerPage() {
                   </ColHeader>
                 </th>
 
+                {/* CPE */}
+                <th className="px-3 py-2.5 text-center">
+                  <ColHeader tip={
+                    <TipBody
+                      title="CPE — Catalyst Probability Estimate"
+                      color="#38bdf8"
+                      desc="Measures the probability that a near-term catalyst will re-rate the stock. Combines accumulation intensity, valuation slack, EPS estimate trend, and institutional setup cleanliness. High CPE with low COS = market hasn't priced it yet. Best used alongside INS to confirm pre-breakout setups."
+                      levels={[
+                        ["70–100", "High catalyst probability. A re-rating event is plausible in the near term. Strongest when paired with rising INS and ACS."],
+                        ["50–69",  "Moderate. Setup is developing but not yet confirmed. Monitor for INS acceleration."],
+                        ["35–49",  "Low. Catalyst conditions are weak or absent. Do not act on CPE alone at this level."],
+                        ["0–34",   "No catalyst signal. Wait for conditions to improve before considering entry."],
+                        ["↑ trend", "Catalyst probability building. Combined with rising INS, this is a high-conviction pre-breakout signal."],
+                        ["+N 1D Δ", "CPE improved N points since last snapshot — conditions are improving in real time."],
+                      ]}
+                    />
+                  }>
+                    <span className="text-sky-400">CPE</span>
+                    <span className="text-zinc-700 ml-1 normal-case font-normal text-[9px]">trend · 1D</span>
+                  </ColHeader>
+                </th>
+
                 {/* INS */}
                 <th className="px-3 py-2.5 text-center">
                   <ColHeader tip={
@@ -962,6 +991,8 @@ export function AlphaScannerPage() {
                 const rdAcs      = resolveDelta(delta, "acs");
                 const rdCos      = resolveDelta(delta, "cos");
                 const csosChips  = resolveCsosChips(delta);
+                const cpe        = score.cpe ?? 50;
+                const rdCpe      = resolveDelta(delta, "cpe");
                 const history = (delta?.history ?? []) as { ts: number; ins: number; cos: number; acs: number }[];
                 const divFlag = delta?.divergence;
                 const dotColor = `#${row.categoryColor}`;
@@ -1044,9 +1075,12 @@ export function AlphaScannerPage() {
                     {/* CSOS — hero column */}
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-3">
-                        <span className={cn("font-black text-2xl tabular-nums leading-none", csosColor(csos))}>
-                          {csos}
-                        </span>
+                        <div className="flex items-center gap-1">
+                          <span className={cn("font-black text-2xl tabular-nums leading-none", csosColor(csos))}>
+                            {csos}
+                          </span>
+                          <TrendArrow trend={delta?.trends?.csos} />
+                        </div>
                         <div className="flex flex-col gap-0.5">
                           <span className={cn("text-[9px] font-bold uppercase tracking-wide leading-none", csosLabelStyle(label))}>
                             {label}
@@ -1062,6 +1096,17 @@ export function AlphaScannerPage() {
                             </div>
                           )}
                         </div>
+                      </div>
+                    </td>
+
+                    {/* CPE + trend arrow + best delta */}
+                    <td className="px-3 py-2.5 text-center">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <div className="flex items-center gap-1">
+                          <span className={cn("font-bold text-sm tabular-nums", cpeColor(cpe))}>{cpe}</span>
+                          <TrendArrow trend={delta?.trends?.cpe} />
+                        </div>
+                        <DeltaChip v={rdCpe.v} label={rdCpe.label} />
                       </div>
                     </td>
 

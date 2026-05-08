@@ -12,4 +12,6 @@ export interface SignalTrends {
   cos: string;
   ins: string;
   acs: string;
+  csos: string;
+  cpe: string;
 }

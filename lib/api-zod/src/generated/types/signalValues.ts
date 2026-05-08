@@ -13,4 +13,5 @@ export interface SignalValues {
   ins: number;
   acs: number;
   csos: number;
+  cpe: number;
 }
