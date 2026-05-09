@@ -765,9 +765,9 @@ export function calculateCSOS(
 
   // ── 8. CATALYST PROBABILITY BONUS ────────────────────────────────────────
   // High CPE + COS not yet extended = market underpricing a real setup.
-  // Small additive bonus only — CPE is confirmatory, not a primary driver.
+  // Meaningful additive bonus — rewards genuine pre-breakout positioning.
   if (cpe > 72 && c < 65) {
-    const bonus = cpe > 85 ? 5 : cpe > 78 ? 3 : 2;
+    const bonus = cpe > 85 ? 10 : cpe > 78 ? 7 : 5;
     score += bonus;
   }
 
