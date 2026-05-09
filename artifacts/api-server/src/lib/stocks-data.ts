@@ -69,6 +69,8 @@ export const CATEGORIES: StockCategory[] = [
       { ticker: "ACMR",  company: "ACM Research",           focus: "Semiconductor wet cleaning equipment",                risk: "High"      },
       { ticker: "PI",    company: "Impinj Inc",             focus: "RAIN RFID & IoT edge connectivity platform",          risk: "Med-High"  },
       { ticker: "COHU",  company: "Cohu Inc",               focus: "Semiconductor test handlers & contactors",            risk: "High"      },
+      { ticker: "MRAM",  company: "Everspin Technologies",  focus: "STT-MRAM chips for industrial, aerospace & storage",  risk: "High"      },
+      { ticker: "NVEC",  company: "NVE Corporation",        focus: "Spintronic sensors, couplers & MRAM technology",      risk: "High"      },
     ],
   },
   {
@@ -85,6 +87,7 @@ export const CATEGORIES: StockCategory[] = [
       { ticker: "VIAV",  company: "Viavi Solutions",         focus: "Fiber optic test, measurement & network tools",       risk: "Med-High" },
       { ticker: "ADTN",  company: "ADTRAN Holdings",         focus: "Optical networking & broadband access equipment",     risk: "High"     },
       { ticker: "CALX",  company: "Calix Networks",          focus: "Cloud & broadband access platforms",                  risk: "Med-High" },
+      { ticker: "NOK",   company: "Nokia Corp",              focus: "5G network equipment, IP routing & optical networking", risk: "Medium"   },
     ],
   },
   {
@@ -104,6 +107,7 @@ export const CATEGORIES: StockCategory[] = [
       { ticker: "EMR",   company: "Emerson Electric",        focus: "Industrial automation & HVAC control systems",        risk: "Low-Med" },
       { ticker: "SPXC",  company: "SPX Technologies",        focus: "HVAC, cooling & detection systems",                   risk: "Medium"  },
       { ticker: "J",     company: "Jacobs Solutions",        focus: "Engineering & construction services for DC projects", risk: "Low-Med" },
+      { ticker: "DELL",  company: "Dell Technologies",       focus: "AI servers, PowerEdge compute & enterprise storage",  risk: "Medium"  },
     ],
   },
   {
