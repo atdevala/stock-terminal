@@ -993,6 +993,19 @@ export function computeScore(
 // Only CSOS and CPE are normalized. Underlying signals (VQS, GVS, INS, ACS,
 // COS) keep their absolute values so tooltips and individual thresholds are
 // not disrupted.
+//
+// ── 90+ Quality Gate ─────────────────────────────────────────────────────────
+// A stock must clear a raw CSOS floor BEFORE normalization to be eligible for
+// 90+. This prevents "relatively best in a weak field" from reaching the elite
+// tier — a stock that is only top-ranked because everything else is mediocre
+// cannot score 90+. It must have genuine absolute signal strength.
+//
+// VQS is intentionally excluded from the gate: high-risk/momentum names
+// (quantum computing, early biotech, drones) may have weak VQS by design,
+// but VQS already contributes 40% of the raw CSOS base. If those stocks
+// can't clear the raw floor on signal composite alone, they don't belong at 90+.
+//
+const RAW_CSOS_FLOOR = 68; // minimum raw (pre-normalization) CSOS for 90+ eligibility
 
 export function normalizeScores(scores: StockScore[]): StockScore[] {
   if (scores.length < 2) return scores;
@@ -1011,8 +1024,15 @@ export function normalizeScores(scores: StockScore[]): StockScore[] {
   const cpeSorted  = [...cpeVals].sort((a, b) => a - b);
 
   return scores.map(s => {
-    const normCsos = toPercentile(csosSorted, s.csos);
-    const normCpe  = toPercentile(cpeSorted,  s.cpe);
+    let normCsos = toPercentile(csosSorted, s.csos);
+
+    // Quality gate: cap at 89 if raw score doesn't clear the absolute floor.
+    // Stocks that are only "relatively best" in a weak universe cannot reach 90+.
+    if (normCsos >= 90 && s.csos < RAW_CSOS_FLOOR) {
+      normCsos = 89;
+    }
+
+    const normCpe = toPercentile(cpeSorted, s.cpe);
     return {
       ...s,
       csos:      normCsos,

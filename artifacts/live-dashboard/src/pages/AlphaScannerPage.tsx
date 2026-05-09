@@ -26,8 +26,8 @@ import { formatPercent } from "@/lib/formatters";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
-type FilterKey = "all" | "accumulate" | "watch" | "caution" | "avoid";
-type SortKey   = "csos" | "ins" | "acs" | "insD1" | "acsD1";
+type FilterKey = "all" | "accumulate" | "watch" | "caution" | "avoid" | "prebreakout";
+type SortKey   = "csos" | "ins" | "acs" | "insD1" | "acsD1" | "cpe";
 
 // ── Color helpers ──────────────────────────────────────────────────────────────
 
@@ -621,8 +621,11 @@ const WATCH_ACTIONS      = new Set([
 ]);
 const AVOID_ACTIONS      = new Set(["AVOID", "TRIM / REDUCE", "PASS"]);
 
+const PRE_BREAKOUT_LABELS = new Set(["STEALTH ACCUMULATION", "HIDDEN CATALYST POTENTIAL"]);
+
 function matchesFilter(row: RowData, filter: FilterKey): boolean {
   if (filter === "all") return true;
+  if (filter === "prebreakout") return PRE_BREAKOUT_LABELS.has(row.score.csosLabel ?? "");
   const action = buildVerdict(row.score, row.delta).action;
   const isCAUTION = action.startsWith("CAUTION —");
   const base = isCAUTION ? action.slice("CAUTION — ".length) : action;
@@ -644,6 +647,7 @@ function sortRows(rows: RowData[], sortBy: SortKey): RowData[] {
       case "acs":   return b.score.acs - a.score.acs;
       case "insD1": return (b.delta?.delta1D?.ins ?? 0) - (a.delta?.delta1D?.ins ?? 0);
       case "acsD1": return (b.delta?.delta1D?.acs ?? 0) - (a.delta?.delta1D?.acs ?? 0);
+      case "cpe":   return (b.score.cpe ?? 50) - (a.score.cpe ?? 50);
       default:      return b.score.csos - a.score.csos;
     }
   });
@@ -713,12 +717,24 @@ const FILTERS: {
       how:   "Do not initiate new positions here. For stocks you already hold that show TRIM / REDUCE, consider taking partial profits or tightening your stop. Check back when INS and CSOS start recovering.",
     },
   },
+  {
+    key:    "prebreakout",
+    label:  "Pre-Breakout",
+    base:   "border-violet-700 text-violet-400 hover:border-violet-500 hover:text-violet-200",
+    active: "border-violet-500 bg-violet-900/40 text-violet-200",
+    tip: {
+      title: "Pre-Breakout — Hidden Catalyst & Stealth Accumulation",
+      body:  "Stocks labeled STEALTH ACCUMULATION or HIDDEN CATALYST POTENTIAL. These are pre-move setups: COS is still low (the market hasn't priced the move yet), but CPE, INS, or ACS signal something is building underneath. Sorted by CPE — highest catalyst probability first.",
+      how:   "These are your early-entry candidates. The lower COS means you're getting in before the crowd. Watch for INS starting to lift — that's the trigger. Keep position sizes moderate until COS confirms.",
+    },
+  },
 ];
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "csos",  label: "CSOS"    },
   { key: "ins",   label: "INS"     },
   { key: "acs",   label: "ACS"     },
+  { key: "cpe",   label: "CPE"     },
   { key: "insD1", label: "INS Δ1D" },
   { key: "acsD1", label: "ACS Δ1D" },
 ];
@@ -815,7 +831,14 @@ export function AlphaScannerPage() {
             <Tooltip key={f.key}>
               <TooltipTrigger asChild>
                 <button
-                  onClick={() => setFilter(f.key)}
+                  onClick={() => {
+                    setFilter(f.key);
+                    // Auto-sort by CPE when entering pre-breakout view so the
+                    // highest catalyst-probability stocks surface immediately.
+                    // Revert to CSOS when leaving (unless user manually changed sort).
+                    if (f.key === "prebreakout") setSortBy("cpe");
+                    else if (filter === "prebreakout") setSortBy("csos");
+                  }}
                   className={cn(
                     "text-xs font-medium px-3 py-1 rounded border transition-colors duration-150",
                     filter === f.key ? f.active : f.base,
