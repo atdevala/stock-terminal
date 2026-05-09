@@ -9,6 +9,11 @@ import {
   getCachedRecs,         setCachedRecs,
   getCachedEarnings,     setCachedEarnings,
   getCachedSpy,          setCachedSpy,
+  getCachedFundamentalsRaw,
+  getCachedCandlesRaw,
+  getCachedRecsRaw,
+  getCachedEarningsRaw,
+  getCachedSpyRaw,
   type FundamentalsPayload,
   type CandlesPayload,
 } from "./ext-cache";
@@ -391,6 +396,55 @@ async function fetchSpyCandles(): Promise<void> {
   }
 }
 
+// ── Instant prewarm from on-disk ext-cache ────────────────────────────────────
+// Called synchronously right after loadExtCache() so that /api/scores can serve
+// results immediately on boot, before the 7-phase async refresh completes.
+
+function prewarmExtMetricsCache(): void {
+  let count = 0;
+  for (const ticker of ALL_TICKERS) {
+    // Use raw (TTL-bypassing) getters — stale fundamentals beat empty scores.
+    // Phases 1-7 will refresh everything in the background.
+    const fundamentals = getCachedFundamentalsRaw(ticker);
+    const candles      = getCachedCandlesRaw(ticker);
+    const recs         = getCachedRecsRaw(ticker);
+    const earnings     = getCachedEarningsRaw(ticker);
+
+    if (!fundamentals && !candles && !recs && !earnings) continue;
+
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, {
+      ...ext,
+      ticker,
+      ...(fundamentals ? {
+        revenueGrowthYoy: fundamentals.revenueGrowthYoy,
+        revenueGrowthQoQ: fundamentals.revenueGrowthQoQ,
+        grossMargin:      fundamentals.grossMargin,
+        operatingMargin:  fundamentals.operatingMargin,
+        fcfMargin:        fundamentals.fcfMargin,
+        debtToEquity:     fundamentals.debtToEquity,
+        pe:               fundamentals.pe,
+        evSales:          fundamentals.evSales,
+      } : {}),
+      ...(candles ? {
+        ma50:       candles.ma50,
+        ma200:      candles.ma200,
+        closes60d:  candles.closes60d,
+        volumes60d: candles.volumes60d,
+      } : {}),
+      ...(recs    ? { earningsRevisionsUp: recs.earningsRevisionsUp }  : {}),
+      ...(earnings? { epsSurprises:        earnings.epsSurprises }     : {}),
+    });
+    count++;
+  }
+
+  // Also prewarm SPY closes so market-regime and INS relative-strength work immediately
+  const spy = getCachedSpyRaw();
+  if (spy) spyCloses60d = spy.closes60d;
+
+  logger.info(`Ext-cache prewarm complete — ${count} tickers ready for scoring`);
+}
+
 // ── Sequential startup phases ─────────────────────────────────────────────────
 // All phases run one after the other — no concurrent bursts.
 // All calls go through the rate-limit queue so 429s can't accumulate.
@@ -641,6 +695,7 @@ export async function startFinnhubService(): Promise<void> {
     return;
   }
   loadExtCache();
+  prewarmExtMetricsCache();
   await loadInitialData();
   connectWebSocket();
   void refreshMarketStatus();

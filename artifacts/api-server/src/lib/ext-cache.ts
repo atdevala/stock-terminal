@@ -137,6 +137,9 @@ export function getCachedFundamentals(ticker: string): FundamentalsPayload | nul
   const e = store.fundamentals[ticker];
   return e && isFresh(e.ts, TTL_H24) ? e.data : null;
 }
+export function getCachedFundamentalsRaw(ticker: string): FundamentalsPayload | null {
+  return store.fundamentals[ticker]?.data ?? null;
+}
 export function setCachedFundamentals(ticker: string, data: FundamentalsPayload): void {
   store.fundamentals[ticker] = { data, ts: Date.now() };
   scheduleSave();
@@ -159,6 +162,9 @@ export function getCachedCandles(ticker: string): CandlesPayload | null {
   const e = store.candles[ticker];
   return e && isFresh(e.ts, TTL_H6) ? e.data : null;
 }
+export function getCachedCandlesRaw(ticker: string): CandlesPayload | null {
+  return store.candles[ticker]?.data ?? null;
+}
 export function setCachedCandles(ticker: string, data: CandlesPayload): void {
   store.candles[ticker] = { data, ts: Date.now() };
   scheduleSave();
@@ -169,6 +175,9 @@ export function setCachedCandles(ticker: string, data: CandlesPayload): void {
 export function getCachedRecs(ticker: string): RecsPayload | null {
   const e = store.recs[ticker];
   return e && isFresh(e.ts, TTL_H24) ? e.data : null;
+}
+export function getCachedRecsRaw(ticker: string): RecsPayload | null {
+  return store.recs[ticker]?.data ?? null;
 }
 export function setCachedRecs(ticker: string, data: RecsPayload): void {
   store.recs[ticker] = { data, ts: Date.now() };
@@ -181,6 +190,9 @@ export function getCachedEarnings(ticker: string): EarningsPayload | null {
   const e = store.earnings[ticker];
   return e && isFresh(e.ts, TTL_H24) ? e.data : null;
 }
+export function getCachedEarningsRaw(ticker: string): EarningsPayload | null {
+  return store.earnings[ticker]?.data ?? null;
+}
 export function setCachedEarnings(ticker: string, data: EarningsPayload): void {
   store.earnings[ticker] = { data, ts: Date.now() };
   scheduleSave();
@@ -191,6 +203,9 @@ export function setCachedEarnings(ticker: string, data: EarningsPayload): void {
 export function getCachedSpy(): SpyPayload | null {
   const e = store.spy;
   return e && isFresh(e.ts, TTL_H6) ? e.data : null;
+}
+export function getCachedSpyRaw(): SpyPayload | null {
+  return store.spy?.data ?? null;
 }
 export function setCachedSpy(data: SpyPayload): void {
   store.spy = { data, ts: Date.now() };
