@@ -43,6 +43,32 @@ function csosColor(s: number): string {
   return "text-zinc-500 border-zinc-700/40 bg-zinc-800/30";
 }
 
+// Text-only color helpers for the mobile score strip (no bg/border side-effects)
+function scoreTextColor(s: number): string {
+  if (s >= 75) return "text-emerald-400";
+  if (s >= 55) return "text-yellow-400";
+  if (s >= 35) return "text-orange-400";
+  return "text-red-400";
+}
+function insTextColor(s: number): string {
+  if (s >= 75) return "text-violet-300";
+  if (s >= 55) return "text-violet-400";
+  if (s >= 35) return "text-violet-500";
+  return "text-zinc-500";
+}
+function acsTextColor(s: number): string {
+  if (s >= 75) return "text-teal-300";
+  if (s >= 55) return "text-teal-400";
+  if (s >= 35) return "text-teal-500";
+  return "text-zinc-500";
+}
+function csosTextColor(s: number): string {
+  if (s >= 75) return "text-amber-300";
+  if (s >= 55) return "text-amber-400";
+  if (s >= 35) return "text-orange-400";
+  return "text-zinc-500";
+}
+
 function divergenceStyle(tag: string): string {
   if (tag === "EARLY OPPORTUNITY")  return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
   if (tag === "LATE STAGE RISK")    return "bg-red-500/15 text-red-300 border-red-500/30";
@@ -664,6 +690,39 @@ export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
             ⚠ CAUTION: HYPE-DRIVEN MOVE
           </div>
         )}
+        {/* Mobile score strip — shown below xl where full score columns are hidden.
+            Each label+value pair is a non-wrapping unit so they never orphan. */}
+        {score && (() => {
+          const insD1 = getDeltaChips(signalDelta, "ins").find(c => c.period === "1D")?.delta ?? 0;
+          return (
+            <div className="xl:hidden flex items-center gap-2 mt-1.5 flex-wrap">
+              <div className="flex items-center gap-1 flex-nowrap">
+                <span className="text-[9px] text-zinc-600 font-medium">COS</span>
+                <span className={cn("text-[10px] font-bold tabular-nums", scoreTextColor(score.cos))}>{score.cos}</span>
+              </div>
+              <span className="text-zinc-700 text-[9px]">·</span>
+              <div className="flex items-center gap-1 flex-nowrap">
+                <span className="text-[9px] text-zinc-600 font-medium">INS</span>
+                <span className={cn("text-[10px] font-bold tabular-nums", insTextColor(score.ins ?? 0))}>{score.ins ?? "—"}</span>
+                {insD1 !== 0 && (
+                  <span className={cn("text-[8px] font-semibold tabular-nums", insD1 > 0 ? "text-emerald-400" : "text-red-400")}>
+                    {insD1 > 0 ? "+" : ""}{insD1}
+                  </span>
+                )}
+              </div>
+              <span className="text-zinc-700 text-[9px]">·</span>
+              <div className="flex items-center gap-1 flex-nowrap">
+                <span className="text-[9px] text-zinc-600 font-medium">ACS</span>
+                <span className={cn("text-[10px] font-bold tabular-nums", acsTextColor(score.acs))}>{score.acs}</span>
+              </div>
+              <span className="text-zinc-700 text-[9px]">·</span>
+              <div className="flex items-center gap-1 flex-nowrap">
+                <span className="text-[9px] text-zinc-600 font-medium">CSOS</span>
+                <span className={cn("text-[10px] font-bold tabular-nums", csosTextColor(score.csos ?? 0))}>{score.csos ?? "—"}</span>
+              </div>
+            </div>
+          );
+        })()}
       </td>
       <td className="py-2.5 px-4 text-right align-top">
         <PriceCell

@@ -902,15 +902,15 @@ export function AlphaScannerPage() {
       {/* ── Main ranked table ── */}
       {hasScores && (
         <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse min-w-[820px]">
+          <table className="w-full text-sm border-collapse min-w-[600px] sm:min-w-[820px]">
             <thead>
               <tr className="text-[10px] uppercase tracking-widest text-zinc-500 border-b border-zinc-800">
-                <th className="px-3 py-2.5 text-center w-10">#</th>
+                <th className="px-3 py-2.5 text-center w-10 hidden sm:table-cell">#</th>
                 <th className="px-4 py-2.5 text-left min-w-[170px]">Ticker</th>
                 <th className="px-3 py-2.5 text-right">Price</th>
 
                 {/* CSOS */}
-                <th className="px-4 py-2.5 text-left min-w-[210px]">
+                <th className="px-4 py-2.5 text-left min-w-[160px] sm:min-w-[210px]">
                   <ColHeader align="left" tip={
                     <TipBody
                       title="CSOS — Composite Signal Opportunity Score"
@@ -1096,7 +1096,7 @@ export function AlphaScannerPage() {
                     )}
                   >
                     {/* Rank */}
-                    <td className="px-3 py-2.5 text-center">
+                    <td className="px-3 py-2.5 text-center hidden sm:table-cell">
                       <span className={cn(
                         "font-bold tabular-nums text-sm",
                         row.rank === 1 ? "text-amber-400" :
@@ -1174,7 +1174,7 @@ export function AlphaScannerPage() {
                           <span className={cn("text-[9px] font-bold uppercase tracking-wide leading-none", csosLabelStyle(label))}>
                             {label}
                           </span>
-                          <span className="text-[9px] text-zinc-600 leading-none tabular-nums">
+                          <span className="hidden sm:inline text-[9px] text-zinc-600 leading-none tabular-nums">
                             VQS {score.vqs} · GVS {score.gvs}
                           </span>
                           {csosChips.length > 0 && (
