@@ -351,7 +351,13 @@ components:
         cpe:
           type: number
           description: "Catalyst Probability Engine (1–100) — estimates probability the market is underpricing a future major catalyst. Percentile-ranked within universe."
-      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, trendLabel, convictionTier, isSuperstock, csos, csosLabel, cpe]
+        bps:
+          type: number
+          description: "Breakout Probability Score (1–100) — near-term setup detector. High = INS+ACS aligned, clean setup, trending structure. Percentile-ranked within universe."
+        lqs:
+          type: number
+          description: "Long-term Quality Score (1–100) — fundamentals compounder quality. Rewards revenue consistency, margin strength, balance sheet health, and fair valuation. Percentile-ranked within universe."
+      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, trendLabel, convictionTier, isSuperstock, csos, csosLabel, cpe, bps, lqs]
 
     MoverStock:
       type: object

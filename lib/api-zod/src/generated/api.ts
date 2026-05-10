@@ -145,6 +145,16 @@ export const GetScoresResponseItem = zod.object({
     .describe(
       "Catalyst Probability Engine (1–100) — estimates probability the market is underpricing a future major catalyst. Percentile-ranked within universe.",
     ),
+  bps: zod
+    .number()
+    .describe(
+      "Breakout Probability Score (1–100) — near-term setup detector. High = INS+ACS aligned, clean setup, trending structure. Percentile-ranked within universe.",
+    ),
+  lqs: zod
+    .number()
+    .describe(
+      "Long-term Quality Score (1–100) — fundamentals compounder quality. Rewards revenue consistency, margin strength, balance sheet health, and fair valuation. Percentile-ranked within universe.",
+    ),
 });
 export const GetScoresResponse = zod.array(GetScoresResponseItem);
 

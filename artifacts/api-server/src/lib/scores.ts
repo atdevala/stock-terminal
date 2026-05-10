@@ -794,6 +794,182 @@ export function calculateCSOS(
   return { csos: finalScore, csosLabel: csosLabelText(finalScore, v, i, a, c, cpe) };
 }
 
+// ── BPS: Breakout Probability Score ──────────────────────────────────────────
+// Near-term setup detector. Answers "is this about to move?"
+// Weights: 35% INS | 25% ACS | 20% inverse FBRS | 15% momentum | 5% EPS proxy
+//
+// Cross-sectionally normalized like CSOS so the score reflects percentile rank
+// within the active universe rather than an absolute value.
+
+export function calculateBPS(
+  ins: number,
+  acs: number,
+  fbrs: number,
+  trendLabel: string,
+  priceAbove50MA: boolean,
+  priceAbove200MA: boolean,
+  revenueGrowthYoy: number,
+  revenueGrowthQoQ: number,
+): number {
+  const i = isFinite(ins)  ? ins  : 50;
+  const a = isFinite(acs)  ? acs  : 50;
+  const f = isFinite(fbrs) ? fbrs : 50;
+
+  // 1. INS — leading signal component (35%)
+  const insComponent = clamp(i, 0, 100);
+
+  // 2. ACS — smart-money accumulation component (25%)
+  const acsComponent = clamp(a, 0, 100);
+
+  // 3. Inverse FBRS — setup cleanliness (20%)
+  // Low FBRS = clean institutional setup; high FBRS = hype-driven noise
+  const cleanComponent = clamp(100 - f, 0, 100);
+
+  // 4. Momentum slope component (15%)
+  // Combines trend label + MA stack quality
+  let momentumBase: number;
+  switch (trendLabel) {
+    case "LONG-TERM LEADER":   momentumBase = 85; break;
+    case "MID-TERM BREAKOUT":  momentumBase = 70; break;
+    case "SHORT-TERM IGNITION": momentumBase = 60; break;
+    default:                   momentumBase = 35; break;
+  }
+  if (priceAbove50MA  && priceAbove200MA) momentumBase += 10;
+  else if (priceAbove50MA)               momentumBase += 5;
+  else if (priceAbove200MA)              momentumBase += 2;
+  const momentumComponent = clamp(momentumBase, 0, 100);
+
+  // 5. EPS / revenue acceleration proxy (5%)
+  // QoQ accelerating above YoY = fundamental tailwind building
+  const yoy = isFinite(revenueGrowthYoy) ? revenueGrowthYoy : 0;
+  const qoq = isFinite(revenueGrowthQoQ) ? revenueGrowthQoQ : 0;
+  let epsProxy = 50;
+  if (yoy > 0 && qoq > yoy)       epsProxy = clamp(55 + (qoq - yoy) * 0.8, 0, 100); // accelerating
+  else if (yoy > 0)                epsProxy = clamp(45 + yoy * 0.3, 0, 100);           // positive but not accelerating
+  else if (yoy < 0)                epsProxy = clamp(50 + yoy * 0.4, 0, 100);           // declining
+  const epsComponent = epsProxy;
+
+  // Composite BPS (raw — cross-sectional normalization applied later)
+  const raw =
+    0.35 * insComponent     +
+    0.25 * acsComponent     +
+    0.20 * cleanComponent   +
+    0.15 * momentumComponent +
+    0.05 * epsComponent;
+
+  return Math.round(clamp(raw, 1, 100));
+}
+
+// ── LQS: Long-term Quality Score ─────────────────────────────────────────────
+// Pure fundamentals-quality score. Answers "is this a genuinely great company
+// at a fair or better price?" Rewards consistent revenue growth, strong margins,
+// clean balance sheet, and reasonable valuation relative to growth.
+//
+// Weights: 30% Revenue growth consistency | 25% Margin profile
+//         | 20% Balance sheet health | 15% Valuation reasonableness
+//         | 10% Earnings quality
+//
+// Cross-sectionally normalized like CSOS.
+
+export function calculateLQS(
+  revenueGrowthYoy: number,
+  revenueGrowthQoQ: number,
+  grossMargin: number,
+  operatingMargin: number,
+  fcfMargin: number,
+  debtToEquity: number,
+  pe: number | undefined,
+  evSales: number | undefined,
+  epsSurprises: number[],
+  earningsRevisionsUp: boolean,
+): number {
+  const yoy = isFinite(revenueGrowthYoy) ? revenueGrowthYoy : 0;
+  const qoq = isFinite(revenueGrowthQoQ) ? revenueGrowthQoQ : 0;
+  const gm  = isFinite(grossMargin)      ? grossMargin      : 0;
+  const opM = isFinite(operatingMargin)  ? operatingMargin  : 0;
+  const fcf = isFinite(fcfMargin)        ? fcfMargin        : 0;
+  const de  = isFinite(debtToEquity)     ? debtToEquity     : 0;
+
+  // 1. REVENUE GROWTH CONSISTENCY (30%)
+  // Strong YoY base + QoQ alignment shows consistency, not one-quarter luck
+  const revBase = clamp(50 + yoy * 0.5, 0, 100);
+  // Consistency bonus: QoQ ≥ 80% of YoY means growth is holding
+  let revConsistency = 0;
+  if (yoy > 0 && qoq > 0 && qoq >= yoy * 0.8) revConsistency = clamp(10 + (yoy / 10), 0, 20);
+  else if (yoy > 0 && qoq >= 0)                revConsistency = 5;
+  else if (yoy < 0 || qoq < -5)               revConsistency = -10;
+  const revScore = clamp(revBase + revConsistency, 0, 100);
+
+  // 2. MARGIN PROFILE (25%)
+  // Gross margin = structural advantage; operating = efficiency; FCF = real cash
+  const grossScore   = clamp(20 + gm * 0.65, 0, 100);
+  const opScore      = opM > 0 ? clamp(45 + opM * 1.0, 0, 100) : clamp(50 + opM * 0.5, 0, 100);
+  const fcfScore     = fcf > 0 ? clamp(50 + fcf * 1.2, 0, 100) : clamp(50 + fcf * 0.6, 0, 100);
+  const marginScore  = clamp(0.40 * grossScore + 0.35 * opScore + 0.25 * fcfScore, 0, 100);
+
+  // 3. BALANCE SHEET HEALTH (20%)
+  // Low leverage + FCF positive = durable compounder. High debt + burning cash = risk.
+  let bsScore = 70;
+  if (de > 3.0)      bsScore -= 30;
+  else if (de > 2.0) bsScore -= 20;
+  else if (de > 1.5) bsScore -= 12;
+  else if (de > 1.0) bsScore -= 5;
+  else if (de < 0.3) bsScore += 10; // fortress balance sheet
+
+  if (fcf < -15)     bsScore -= 20;
+  else if (fcf < -5) bsScore -= 12;
+  else if (fcf < 0)  bsScore -= 5;
+  else if (fcf > 15) bsScore += 12;
+  else if (fcf > 5)  bsScore += 6;
+
+  if (yoy < 0) bsScore -= 8; // declining revenue strains balance sheet
+  const balanceScore = clamp(bsScore, 0, 100);
+
+  // 4. VALUATION REASONABLENESS (15%)
+  // PEG-like: cheap relative to growth is quality. Expensive relative to no growth = red flag.
+  let valScore = 50;
+  if (pe && pe > 0 && yoy > 0) {
+    const peg = pe / Math.max(yoy, 1);
+    if (peg < 0.5)      valScore = 95;
+    else if (peg < 1.0) valScore = 85;
+    else if (peg < 1.5) valScore = 72;
+    else if (peg < 2.0) valScore = 58;
+    else if (peg < 3.0) valScore = 42;
+    else                valScore = 25;
+  } else if (evSales && evSales > 0 && yoy > 0) {
+    const evRev = evSales / Math.max(yoy / 100, 0.01);
+    if (evRev < 5)       valScore = 90;
+    else if (evRev < 10) valScore = 72;
+    else if (evRev < 20) valScore = 52;
+    else if (evRev < 30) valScore = 38;
+    else                 valScore = 22;
+  } else if (pe && pe > 0) {
+    // No growth data: penalise high PE
+    valScore = clamp(100 - (pe - 15) * 1.2, 15, 80);
+  }
+
+  // 5. EARNINGS QUALITY (10%)
+  // EPS beat consistency + analyst revisions signal = forward-looking quality
+  let epsQualScore = 50;
+  if (epsSurprises.length > 0) {
+    const avg = epsSurprises.reduce((s, v) => s + v, 0) / epsSurprises.length;
+    epsQualScore = clamp(50 + avg * 0.8, 0, 100);
+    if (epsSurprises.length >= 3 && epsSurprises.every(e => e > 0)) epsQualScore = clamp(epsQualScore + 12, 0, 100);
+    if (epsSurprises.length >= 2 && epsSurprises[0]! < -5) epsQualScore = clamp(epsQualScore - 15, 0, 100);
+  }
+  if (earningsRevisionsUp) epsQualScore = clamp(epsQualScore + 10, 0, 100);
+
+  // Composite LQS (raw — normalized later)
+  const raw =
+    0.30 * revScore     +
+    0.25 * marginScore  +
+    0.20 * balanceScore +
+    0.15 * valScore     +
+    0.10 * epsQualScore;
+
+  return Math.round(clamp(raw, 1, 100));
+}
+
 // ── StockScore interface ───────────────────────────────────────────────────────
 
 export interface StockScore {
@@ -836,6 +1012,10 @@ export interface StockScore {
   csosLabel: string;
   // ── CPE — Catalyst Probability Engine (watchlist-only) ───────────────────
   cpe: number;
+  // ── BPS — Breakout Probability Score (near-term setup) ───────────────────
+  bps: number;
+  // ── LQS — Long-term Quality Score (fundamentals compounder) ──────────────
+  lqs: number;
 }
 
 // ── Master score computation ───────────────────────────────────────────────────
@@ -929,6 +1109,21 @@ export function computeScore(
   const { regime } = getMarketRegime();
   const csosResult = calculateCSOS(vqs, gvs, ins, acs, cos, regime, cpe, fbrs);
 
+  // ── BPS — Breakout Probability Score (raw; normalized cross-sectionally) ──
+  const bps = calculateBPS(
+    ins, acs, fbrs, trendLabel,
+    priceAbove50MA, priceAbove200MA,
+    rg, rgQ,
+  );
+
+  // ── LQS — Long-term Quality Score (raw; normalized cross-sectionally) ─────
+  const lqs = calculateLQS(
+    rg, rgQ, gm, opM, fcfM, de,
+    pe, evS,
+    ext.epsSurprises ?? [],
+    revisionsUp,
+  );
+
   return {
     ticker,
     vqs, gvs, cos,
@@ -958,6 +1153,8 @@ export function computeScore(
     csos:      csosResult.csos,
     csosLabel: csosResult.csosLabel,
     cpe,
+    bps,
+    lqs,
   };
   } catch (err) {
     logger.error({ ticker, err }, "computeScore threw unexpectedly — returning safe defaults");
@@ -974,6 +1171,8 @@ export function computeScore(
       csos: 0,
       csosLabel: "LOW QUALITY / AVOID",
       cpe: 0,
+      bps: 0,
+      lqs: 0,
     };
   }
 }
@@ -1012,6 +1211,8 @@ export function normalizeScores(scores: StockScore[]): StockScore[] {
 
   const csosVals = scores.map(s => s.csos);
   const cpeVals  = scores.map(s => s.cpe);
+  const bpsVals  = scores.map(s => s.bps);
+  const lqsVals  = scores.map(s => s.lqs);
 
   // Percentile rank: fraction of the universe strictly below this value,
   // mapped to 1–100. Ties receive the same rank (first-occurrence wins).
@@ -1022,6 +1223,8 @@ export function normalizeScores(scores: StockScore[]): StockScore[] {
 
   const csosSorted = [...csosVals].sort((a, b) => a - b);
   const cpeSorted  = [...cpeVals].sort((a, b) => a - b);
+  const bpsSorted  = [...bpsVals].sort((a, b) => a - b);
+  const lqsSorted  = [...lqsVals].sort((a, b) => a - b);
 
   return scores.map(s => {
     let normCsos = toPercentile(csosSorted, s.csos);
@@ -1033,10 +1236,15 @@ export function normalizeScores(scores: StockScore[]): StockScore[] {
     }
 
     const normCpe = toPercentile(cpeSorted, s.cpe);
+    const normBps = toPercentile(bpsSorted, s.bps);
+    const normLqs = toPercentile(lqsSorted, s.lqs);
+
     return {
       ...s,
       csos:      normCsos,
       cpe:       normCpe,
+      bps:       normBps,
+      lqs:       normLqs,
       // Recompute label using normalized CSOS + raw signals for accuracy
       csosLabel: csosLabelText(normCsos, s.vqs, s.ins ?? 50, s.acs, s.cos, normCpe),
     };

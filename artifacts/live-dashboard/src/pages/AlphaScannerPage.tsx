@@ -27,7 +27,7 @@ import { formatPercent } from "@/lib/formatters";
 // ── Types ──────────────────────────────────────────────────────────────────────
 
 type FilterKey = "all" | "accumulate" | "watch" | "caution" | "avoid" | "prebreakout";
-type SortKey   = "csos" | "ins" | "acs" | "insD1" | "acsD1" | "cpe";
+type SortKey   = "csos" | "bps" | "lqs" | "ins" | "acs" | "insD1" | "acsD1" | "cpe";
 
 // ── Color helpers ──────────────────────────────────────────────────────────────
 
@@ -77,6 +77,36 @@ function cpeColor(s: number): string {
   if (s >= 50) return "text-sky-400/80";
   if (s >= 35) return "text-sky-500/70";
   return "text-zinc-500";
+}
+
+function bpsColor(s: number): string {
+  if (s >= 75) return "text-amber-300";
+  if (s >= 55) return "text-amber-400";
+  if (s >= 35) return "text-orange-400";
+  return "text-red-400";
+}
+
+function lqsColor(s: number): string {
+  if (s >= 75) return "text-emerald-300";
+  if (s >= 55) return "text-emerald-400";
+  if (s >= 35) return "text-yellow-500";
+  return "text-red-400";
+}
+
+function bpsLabel(s: number): string {
+  if (s >= 80) return "STRONG SETUP";
+  if (s >= 65) return "BUILDING";
+  if (s >= 50) return "DEVELOPING";
+  if (s >= 35) return "WEAK";
+  return "NO SETUP";
+}
+
+function lqsLabel(s: number): string {
+  if (s >= 80) return "ELITE COMPOUNDER";
+  if (s >= 65) return "HIGH QUALITY";
+  if (s >= 50) return "SOLID";
+  if (s >= 35) return "MIXED";
+  return "LOW QUALITY";
 }
 
 // ── Trend arrows ───────────────────────────────────────────────────────────────
@@ -364,13 +394,22 @@ function SectorRotationPanel() {
 // ── Per-stock analytical verdict ──────────────────────────────────────────────
 
 interface Verdict {
-  action:      string;
-  actionStyle: string;
-  actionBg:    string;
-  confidence:  "HIGH" | "MEDIUM" | "LOW";
-  reasons:     string[];
-  risks:       string[];
-  entryNote:   string | null;
+  action:          string;
+  actionStyle:     string;
+  actionBg:        string;
+  confidence:      "HIGH" | "MEDIUM" | "LOW";
+  reasons:         string[];
+  risks:           string[];
+  entryNote:       string | null;
+  // Enhanced quant briefing fields
+  setupClass:      string;
+  setupStage:      string;
+  bpsInterpret:    string;
+  lqsInterpret:    string;
+  alignedSignals:  string[];
+  conflictSignals: string[];
+  riskRewardTag:   string;
+  regimeFit:       string;
 }
 
 function confColor(c: "HIGH" | "MEDIUM" | "LOW"): string {
@@ -384,14 +423,21 @@ function buildVerdict(score: StockScore, delta: SignalDelta | undefined): Verdic
   const acs      = score.acs;
   const cos      = score.cos;
   const vqs      = score.vqs;
+  const gvs      = score.gvs;
   const fbrs     = score.fbrs ?? 50;
   const csos     = score.csos;
-  const cpe      = (score as unknown as Record<string, unknown>).cpe as number | undefined ?? 50;
+  const cpe      = score.cpe ?? 50;
+  const bps      = score.bps ?? 50;
+  const lqs      = score.lqs ?? 50;
   const label    = score.csosLabel ?? "";
   const insD1    = (delta?.delta1D as Record<string, number> | null | undefined)?.ins ?? 0;
   const acsD1    = (delta?.delta1D as Record<string, number> | null | undefined)?.acs ?? 0;
+  const cosD1    = (delta?.delta1D as Record<string, number> | null | undefined)?.cos ?? 0;
   const insTrend = delta?.trends?.ins ?? "FLAT";
+  const acsTrend = delta?.trends?.acs ?? "FLAT";
+  const divFlag  = delta?.divergence ?? "";
 
+  // ── Action classification ─────────────────────────────────────────────────
   let action:      string;
   let actionStyle: string;
   let actionBg:    string;
@@ -405,7 +451,7 @@ function buildVerdict(score: StockScore, delta: SignalDelta | undefined): Verdic
   } else if (label === "LATE STAGE MOVE" || (cos > 78 && ins < 48)) {
     action = "TRIM / REDUCE"; actionStyle = "text-orange-300"; actionBg = "bg-orange-900/40 border-orange-700";
     confidence = cos > 82 ? "HIGH" : "MEDIUM";
-    entryNote = "The easy money has already been made. Risk/reward is poor for new entries.";
+    entryNote = "The easy money has been made. Risk/reward is poor for new entries — COS extended, INS fading.";
   } else if (label === "PRIME OPPORTUNITY" || score.isSuperstock) {
     action = "BUILD POSITION"; actionStyle = "text-emerald-300"; actionBg = "bg-emerald-900/40 border-emerald-700";
     confidence = "HIGH";
@@ -413,35 +459,35 @@ function buildVerdict(score: StockScore, delta: SignalDelta | undefined): Verdic
   } else if (label === "EARLY BREAKOUT SETUP" || (ins >= 72 && acs >= 60 && fbrs < 50 && cos < 65)) {
     action = "ACCUMULATE"; actionStyle = "text-amber-300"; actionBg = "bg-amber-900/40 border-amber-700";
     confidence = ins >= 80 && acs >= 65 ? "HIGH" : "MEDIUM";
-    entryNote = "INS is front-running COS. Build a starter position now; add as COS confirms the move.";
+    entryNote = "INS front-running COS — pre-consensus entry window. Build starter now; add as COS confirms.";
   } else if (label === "STEALTH ACCUMULATION") {
     action = "INITIATE / MONITOR"; actionStyle = "text-teal-300"; actionBg = "bg-teal-900/40 border-teal-700";
     confidence = "MEDIUM";
-    entryNote = "Smart money is loading quietly. Initiate small; full commitment on INS breakout above 70.";
+    entryNote = "Smart money loading quietly. Small starter — full commitment on INS breakout above 70.";
   } else if (label === "HIDDEN CATALYST POTENTIAL") {
     action = "INITIATE / MONITOR"; actionStyle = "text-sky-300"; actionBg = "bg-sky-900/40 border-sky-700";
     confidence = "MEDIUM";
-    entryNote = "Elevated catalyst signal unconfirmed by momentum. Small starter; wait for INS or ACS to follow.";
+    entryNote = "Elevated catalyst probability, no momentum confirmation yet. Small starter; wait for INS or ACS.";
   } else if (label === "CONFIRMED TREND" && cos < 78) {
     action = "HOLD / ADD"; actionStyle = "text-sky-300"; actionBg = "bg-sky-900/40 border-sky-700";
     confidence = ins >= 60 ? "MEDIUM" : "LOW";
-    entryNote = "Move confirmed, mid-stage. Existing positions: hold. New: small size with stop under structure.";
+    entryNote = "Move confirmed, mid-stage. Existing: hold. New entries: small size, stop under structure.";
   } else if (label === "QUALITY COMPOUNDER — ACTIVATING") {
     action = "ACCUMULATE"; actionStyle = "text-amber-300"; actionBg = "bg-amber-900/40 border-amber-700";
     confidence = "MEDIUM";
-    entryNote = "Strong fundamentals with INS signal now live. Use VQS as your fundamental anchor — quality gives you a margin of safety on the entry.";
+    entryNote = "Strong fundamentals + INS now live. VQS is your margin of safety on entry risk.";
   } else if (label === "QUALITY COMPOUNDER — DORMANT") {
     action = "WATCHLIST — AWAIT INS"; actionStyle = "text-blue-300"; actionBg = "bg-blue-900/40 border-blue-700";
     confidence = "LOW";
-    entryNote = "High-quality business — no timing signal yet. Add to watchlist; wait for INS to break above 60 before committing capital.";
+    entryNote = "High-quality business, no timing signal yet. Wait for INS to break above 60.";
   } else if (csos >= 35 && (insD1 > 0 || acsD1 > 0 || cpe >= 65)) {
     action = "MONITOR — SIGNALS BUILDING"; actionStyle = "text-zinc-300"; actionBg = "bg-zinc-800 border-zinc-600";
     confidence = "LOW";
-    entryNote = "Signals are starting to move. Watch the next 2–3 snapshots for acceleration before committing.";
+    entryNote = "Signals starting to move. Watch 2–3 more snapshots for acceleration before committing.";
   } else if (csos >= 35) {
     action = "MONITOR"; actionStyle = "text-zinc-400"; actionBg = "bg-zinc-800 border-zinc-700";
     confidence = "LOW";
-    entryNote = "No actionable entry signal yet. Revisit if INS, ACS, or CPE start to move.";
+    entryNote = "No actionable entry signal. Revisit if INS, ACS, or BPS start to climb.";
   } else {
     action = "PASS"; actionStyle = "text-red-400"; actionBg = "bg-zinc-900 border-zinc-700";
     confidence = "LOW";
@@ -453,61 +499,192 @@ function buildVerdict(score: StockScore, delta: SignalDelta | undefined): Verdic
     actionStyle = "text-orange-300";
     actionBg    = "bg-orange-900/40 border-orange-700";
     confidence  = confidence === "HIGH" ? "MEDIUM" : "LOW";
-    entryNote   = "⚠ High false-breakout risk (FBRS " + fbrs + "). Size smaller and keep stops tight. " + (entryNote ?? "");
+    entryNote   = `⚠ High false-breakout risk (FBRS ${fbrs}). Size half-normal, keep stops tight. ` + (entryNote ?? "");
   }
 
+  // ── Signal alignment ──────────────────────────────────────────────────────
+  const alignedSignals:  string[] = [];
+  const conflictSignals: string[] = [];
+
+  if (ins >= 65)  alignedSignals.push(`INS ${ins} — strong breakout signal`);
+  else if (ins >= 50) alignedSignals.push(`INS ${ins} — developing`);
+  else            conflictSignals.push(`INS ${ins} — weak leading indicator`);
+
+  if (acs >= 60)  alignedSignals.push(`ACS ${acs} — institutional accumulation confirmed`);
+  else if (acs >= 45) alignedSignals.push(`ACS ${acs} — accumulation building`);
+  else            conflictSignals.push(`ACS ${acs} — no institutional backing`);
+
+  if (bps >= 65)  alignedSignals.push(`BPS ${bps} — breakout setup well-formed`);
+  else if (bps >= 50) alignedSignals.push(`BPS ${bps} — setup developing`);
+  else            conflictSignals.push(`BPS ${bps} — setup not yet in place`);
+
+  if (lqs >= 65)  alignedSignals.push(`LQS ${lqs} — strong quality foundation`);
+  else if (lqs >= 50) alignedSignals.push(`LQS ${lqs} — adequate quality`);
+  else            conflictSignals.push(`LQS ${lqs} — below-average business quality`);
+
+  if (fbrs < 40)  alignedSignals.push(`FBRS ${fbrs} — clean institutional setup (low hype risk)`);
+  else if (fbrs > 65) conflictSignals.push(`FBRS ${fbrs} — elevated false-breakout risk`);
+
+  // ── Setup classification ──────────────────────────────────────────────────
+  let setupClass = "Developing Setup";
+  if (score.isSuperstock) {
+    setupClass = "Superstock Candidate · All-Signal Alignment";
+  } else if (label === "PRIME OPPORTUNITY") {
+    setupClass = "Full Convergence · Highest Conviction";
+  } else if (label === "EARLY BREAKOUT SETUP") {
+    setupClass = "Pre-Consensus Breakout · INS Leading";
+  } else if (label === "STEALTH ACCUMULATION") {
+    setupClass = "Smart-Money Build · Pre-Public Entry";
+  } else if (label === "HIDDEN CATALYST POTENTIAL") {
+    setupClass = "Asymmetric Setup · Catalyst Unpriced";
+  } else if (label.startsWith("QUALITY COMPOUNDER")) {
+    setupClass = "Fundamentals-Driven · LQS Anchor";
+  } else if (label === "CONFIRMED TREND") {
+    setupClass = "Breakout Confirmed · Mid-Stage";
+  } else if (label === "LATE STAGE MOVE") {
+    setupClass = "Late-Cycle · Risk/Reward Degraded";
+  } else if (label === "LOW QUALITY / AVOID") {
+    setupClass = "Fundamental Override · No Edge";
+  }
+
+  // ── Setup stage ───────────────────────────────────────────────────────────
+  let setupStage = "—";
+  if (ins > cos + 15 && cos < 65)     setupStage = "EARLY — Pre-Consensus Window";
+  else if (ins >= 60 && cos >= 55 && cos < 75) setupStage = "MID — Breakout Confirming";
+  else if (cos >= 75 && ins >= 55)    setupStage = "LATE-MID — Extended, Watch Closely";
+  else if (cos > 78 && ins < 52)      setupStage = "LATE — Overextended, Exit Risk";
+  else if (ins < 50 && cos < 50)      setupStage = "RESET — No Active Setup";
+  else if (ins >= 50 && cos < 50)     setupStage = "IGNITION — Very Early Stage";
+
+  // ── BPS interpretation ────────────────────────────────────────────────────
+  let bpsInterpret: string;
+  if (bps >= 80) {
+    bpsInterpret = `BPS ${bps} — Breakout conditions are excellent. INS, ACS, and trend structure all confirm a high-probability near-term move.`;
+  } else if (bps >= 65) {
+    bpsInterpret = `BPS ${bps} — Solid breakout setup. Most signal components aligned — watch for INS to cross 70 as the trigger.`;
+  } else if (bps >= 50) {
+    bpsInterpret = `BPS ${bps} — Developing. Setup is not yet mature — some components aligned, others lagging. Monitor for acceleration.`;
+  } else if (bps >= 35) {
+    bpsInterpret = `BPS ${bps} — Weak near-term setup. INS and/or ACS below the threshold needed to justify a breakout trade.`;
+  } else {
+    bpsInterpret = `BPS ${bps} — No breakout setup present. Signals are absent or conflicting — avoid timing-based entries here.`;
+  }
+
+  // ── LQS interpretation ────────────────────────────────────────────────────
+  let lqsInterpret: string;
+  if (lqs >= 80) {
+    lqsInterpret = `LQS ${lqs} — Elite compounder quality. Strong revenue growth, wide margins, clean balance sheet, and reasonable valuation. This is a business worth owning for years.`;
+  } else if (lqs >= 65) {
+    lqsInterpret = `LQS ${lqs} — High-quality business. Above-average fundamentals provide a strong margin of safety on any entry.`;
+  } else if (lqs >= 50) {
+    lqsInterpret = `LQS ${lqs} — Adequate quality. Business is solid but not exceptional — higher conviction required on timing signals.`;
+  } else if (lqs >= 35) {
+    lqsInterpret = `LQS ${lqs} — Mixed fundamentals. Some weak areas (margins, growth, or balance sheet) reduce long-term holding confidence.`;
+  } else {
+    lqsInterpret = `LQS ${lqs} — Low business quality. Weak margins, inconsistent growth, or leverage concerns make this a speculative hold only.`;
+  }
+
+  // ── Risk / reward tag ─────────────────────────────────────────────────────
+  let riskRewardTag: string;
+  if (bps >= 70 && lqs >= 65 && fbrs < 45) {
+    riskRewardTag = "Excellent — high breakout probability with quality anchor";
+  } else if (bps >= 60 && lqs >= 55 && fbrs < 60) {
+    riskRewardTag = "Favorable — setup developing with reasonable fundamentals";
+  } else if (fbrs > 65) {
+    riskRewardTag = "Skewed by hype risk — reduce size, tighten stop";
+  } else if (cos > 75 && ins < 55) {
+    riskRewardTag = "Poor — late-stage, chasing a move already made";
+  } else if (lqs < 40) {
+    riskRewardTag = "Speculative — no fundamental safety net";
+  } else {
+    riskRewardTag = "Neutral — wait for cleaner signal convergence";
+  }
+
+  // ── Regime fit ────────────────────────────────────────────────────────────
+  let regimeFit: string;
+  const tl = score.trendLabel ?? "";
+  if (tl === "LONG-TERM LEADER") {
+    regimeFit = "Long-term leader with multi-timeframe trend confirmed — holds well in most regimes";
+  } else if (tl === "MID-TERM BREAKOUT") {
+    regimeFit = "Mid-term breakout — best in RISK-ON or QUALITY GROWTH regime; requires caution in volatile markets";
+  } else if (tl === "SHORT-TERM IGNITION") {
+    regimeFit = "Short-term ignition — high-risk, high-reward; works best in RISK-ON; fade quickly in DEFENSIVE";
+  } else {
+    regimeFit = "No trend structure — regime fit is poor; avoid momentum entries";
+  }
+
+  // ── Supporting signals ────────────────────────────────────────────────────
   const reasons: string[] = [];
 
   if (ins >= 70) {
-    reasons.push(`INS ${ins} — strong breakout signal${insD1 > 0 ? `, +${insD1} today` : ""}`);
+    reasons.push(`INS ${ins}${insD1 > 0 ? ` (+${insD1} today)` : ""} — strong breakout signal leading the crowd`);
   } else if (ins >= 55) {
-    reasons.push(`INS ${ins} — momentum building${insD1 > 0 ? `, +${insD1} today` : ""}`);
+    reasons.push(`INS ${ins}${insD1 > 0 ? ` (+${insD1} today)` : ""} — momentum building, watch for >70 cross`);
   } else if (insTrend === "STRONGLY_RISING" || insTrend === "RISING") {
-    reasons.push(`INS ${ins} — rising from low base${insD1 > 0 ? `, +${insD1} today` : ""}`);
+    reasons.push(`INS ${ins} rising from low base${insD1 > 0 ? ` (+${insD1} today)` : ""} — early inflection`);
   }
 
   if (acs >= 65) {
-    reasons.push(`ACS ${acs} — institutional accumulation detected${acsD1 > 0 ? `, +${acsD1} today` : ""}`);
-  } else if (acs >= 50 && acsD1 > 0) {
-    reasons.push(`ACS ${acs} rising (+${acsD1} today) — buying pressure building`);
+    reasons.push(`ACS ${acs}${acsD1 > 0 ? ` (+${acsD1} today)` : ""} — institutional accumulation: smart money loading`);
+  } else if (acs >= 50 && (acsD1 > 0 || acsTrend === "RISING" || acsTrend === "STRONGLY_RISING")) {
+    reasons.push(`ACS ${acs} rising${acsD1 > 0 ? ` (+${acsD1} today)` : ""} — accumulation trend building`);
   }
 
   if (ins > cos + 10 && cos < 72) {
-    reasons.push(`INS (${ins}) leads COS (${cos}) by ${ins - cos} pts — pre-consensus entry window`);
+    reasons.push(`INS (${ins}) leads COS (${cos}) by ${ins - cos} pts — pre-consensus window, crowd not yet pricing this`);
   } else if (cos >= 65 && ins >= 60) {
-    reasons.push(`INS ${ins} + COS ${cos} co-elevated — breakout confirmed`);
+    reasons.push(`INS ${ins} + COS ${cos} co-elevated — breakout confirmed and holding`);
   }
 
-  if (vqs >= 65) reasons.push(`VQS ${vqs} — ${score.vqsLabel}`);
-  if (cpe >= 65)  reasons.push(`CPE ${cpe} — elevated catalyst probability`);
-  if (score.isSuperstock) reasons.push("Superstock candidate — INS · ACS · FBRS all at elite thresholds");
+  if (vqs >= 65) reasons.push(`VQS ${vqs} — ${score.vqsLabel}: strong fundamental base`);
+  if (gvs >= 65) reasons.push(`GVS ${gvs} — ${score.gvsLabel}`);
+  if (cpe >= 65) reasons.push(`CPE ${cpe} — elevated catalyst probability: market likely underpricing a re-rating`);
+  if (score.isSuperstock) reasons.push("Superstock candidate — INS, ACS, FBRS all at elite thresholds simultaneously");
 
-  const divFlag = delta?.divergence;
   if (divFlag === "EARLY IGNITION SETUP") {
-    reasons.push("Early Ignition flag: INS + ACS moving before COS");
+    reasons.push("Signal flag: EARLY IGNITION — INS and ACS both accelerating before COS confirms");
   } else if (divFlag === "INSTITUTIONAL ACCUMULATION BEFORE REPRICING") {
-    reasons.push("Institutional Accumulation flag: quiet smart-money build-up");
+    reasons.push("Signal flag: INSTITUTIONAL ACCUMULATION — quiet smart-money positioning before public catalyst");
   }
 
+  if (cosD1 > 0 && insD1 > 0) {
+    reasons.push(`Both INS and COS moving up today (+${insD1} / +${cosD1}) — multi-signal acceleration`);
+  }
+
+  // ── Risks & concerns ─────────────────────────────────────────────────────
   const risks: string[] = [];
 
   if (fbrs > 50) {
-    risks.push(`FBRS ${fbrs} — ${fbrs > 70 ? "high" : "moderate"} false-breakout risk; verify with ACS before sizing up`);
+    risks.push(`FBRS ${fbrs} — ${fbrs > 70 ? "high" : "moderate"} false-breakout risk: ${fbrs > 70 ? "hype-driven move likely to reverse; ACS confirmation is mandatory before sizing up" : "verify with ACS before adding to position"}`);
   }
   if (cos > 72 && ins < 55) {
-    risks.push(`COS (${cos}) has run ahead of INS (${ins}) — late-stage positioning risk`);
+    risks.push(`Late-stage pattern: COS (${cos}) has run ahead of INS (${ins}) — the crowd is now in, edge is gone`);
   }
   if (vqs < 55 && vqs >= 40) {
-    risks.push(`VQS ${vqs} — below-average fundamentals; reduces margin of safety`);
+    risks.push(`VQS ${vqs} — below-average fundamentals reduce margin of safety; be selective on entry`);
   }
   if (insTrend === "FALLING" || insTrend === "STRONGLY_FALLING") {
-    risks.push("INS trend is falling — momentum may be rolling over");
+    risks.push(`INS trend is ${insTrend === "STRONGLY_FALLING" ? "sharply" : ""} falling — breakout signal weakening; review thesis`);
   }
   if (acs < 45 && ins >= 65) {
-    risks.push(`ACS ${acs} not confirming INS — watch for false breakout`);
+    risks.push(`ACS ${acs} absent despite INS ${ins} — signal divergence: no institutional confirmation of the move`);
+  }
+  if (lqs < 40) {
+    risks.push(`LQS ${lqs} — low business quality: speculative hold only, no fundamental safety net`);
+  }
+  if (score.debtToEquity && score.debtToEquity > 2.5) {
+    risks.push(`Leverage risk: D/E ${score.debtToEquity.toFixed(1)}x — high debt amplifies downside in a rate-rising or revenue-miss scenario`);
+  }
+  if (score.fcfMargin && score.fcfMargin < -10) {
+    risks.push(`FCF margin ${score.fcfMargin.toFixed(0)}% — burning cash; runway matters, especially if growth decelerates`);
+  }
+  if (divFlag === "LATE CYCLE / EXHAUSTION RISK") {
+    risks.push("Signal flag: LATE CYCLE / EXHAUSTION — COS extended + INS declining; avoid new entries, consider exit plan");
+  } else if (divFlag === "SPECULATIVE MOMENTUM (UNCONFIRMED)") {
+    risks.push("Signal flag: SPECULATIVE MOMENTUM — INS moved but no ACS or COS confirmation; size conservatively");
   }
   if (cpe < 30) {
-    risks.push(`CPE ${cpe} — low near-term catalyst probability`);
+    risks.push(`CPE ${cpe} — very low catalyst probability: no evidence of an approaching re-rating event`);
   }
 
   if (risks.length === 0 && !["AVOID", "PASS", "TRIM / REDUCE", "MONITOR"].includes(action)) {
@@ -517,11 +694,20 @@ function buildVerdict(score: StockScore, delta: SignalDelta | undefined): Verdic
     risks.push("No actionable entry signal yet — signals are present but below conviction thresholds");
   }
 
-  return { action, actionStyle, actionBg, confidence, reasons, risks, entryNote };
+  return {
+    action, actionStyle, actionBg, confidence, reasons, risks, entryNote,
+    setupClass, setupStage, bpsInterpret, lqsInterpret,
+    alignedSignals, conflictSignals, riskRewardTag, regimeFit,
+  };
 }
 
 function AnalysisTooltip({ row }: { row: RowData }) {
   const verdict = buildVerdict(row.score, row.delta);
+  const bps = row.score.bps ?? 0;
+  const lqs = row.score.lqs ?? 0;
+  const alignOk  = verdict.alignedSignals.length;
+  const alignFail = verdict.conflictSignals.length;
+  const totalSig  = alignOk + alignFail;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -533,29 +719,83 @@ function AnalysisTooltip({ row }: { row: RowData }) {
         side="right"
         align="start"
         sideOffset={10}
-        className="p-0 overflow-hidden border border-zinc-700 shadow-2xl rounded-lg text-left z-50 w-[310px]"
+        className="p-0 overflow-hidden border border-zinc-700 shadow-2xl rounded-lg text-left z-50 w-[360px]"
         style={{ backgroundColor: "#000000" }}
       >
+        {/* ── Header: action + confidence ── */}
         <div className="px-3 pt-2.5 pb-2 border-b border-zinc-800" style={{ backgroundColor: "#0f0f0f" }}>
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-              {row.ticker} · Analysis
+              {row.ticker} · Quant Briefing
             </span>
             <span className={cn("text-[8px] font-bold uppercase tracking-wide", confColor(verdict.confidence))}>
               {verdict.confidence} CONF.
             </span>
           </div>
-          <div className={cn(
-            "text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded border inline-block leading-none mb-1.5",
-            verdict.actionBg, verdict.actionStyle,
-          )}>
-            {verdict.action}
+          <div className="flex items-start gap-2 flex-wrap mb-1.5">
+            <div className={cn(
+              "text-[10px] font-black uppercase tracking-wider px-2 py-1 rounded border inline-block leading-none shrink-0",
+              verdict.actionBg, verdict.actionStyle,
+            )}>
+              {verdict.action}
+            </div>
+            <span className="text-[9px] text-zinc-500 leading-snug self-center">{verdict.setupClass}</span>
           </div>
           {verdict.entryNote && (
             <p className="text-[10px] text-zinc-400 leading-snug">{verdict.entryNote}</p>
           )}
         </div>
 
+        {/* ── BPS + LQS score panel ── */}
+        <div className="px-3 py-2 border-b border-zinc-800/60 grid grid-cols-2 gap-3">
+          <div>
+            <div className="text-[8px] uppercase tracking-widest text-zinc-600 mb-1 font-bold">Breakout Probability</div>
+            <div className="flex items-baseline gap-1.5 mb-0.5">
+              <span className={cn("font-black text-xl tabular-nums leading-none", bpsColor(bps))}>{bps}</span>
+              <span className={cn("text-[8px] font-bold uppercase", bpsColor(bps))}>{bpsLabel(bps)}</span>
+            </div>
+            <p className="text-[9px] text-zinc-500 leading-snug">{verdict.bpsInterpret}</p>
+          </div>
+          <div>
+            <div className="text-[8px] uppercase tracking-widest text-zinc-600 mb-1 font-bold">Quality Foundation</div>
+            <div className="flex items-baseline gap-1.5 mb-0.5">
+              <span className={cn("font-black text-xl tabular-nums leading-none", lqsColor(lqs))}>{lqs}</span>
+              <span className={cn("text-[8px] font-bold uppercase", lqsColor(lqs))}>{lqsLabel(lqs)}</span>
+            </div>
+            <p className="text-[9px] text-zinc-500 leading-snug">{verdict.lqsInterpret}</p>
+          </div>
+        </div>
+
+        {/* ── Setup intelligence: stage + regime fit + risk/reward ── */}
+        <div className="px-3 py-2 border-b border-zinc-800/60 space-y-1.5">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-600 font-bold">Setup Intelligence</div>
+          {verdict.setupStage !== "—" && (
+            <div className="flex items-start gap-1.5">
+              <span className="text-[8px] text-zinc-600 shrink-0 w-[60px] leading-snug font-medium">STAGE</span>
+              <span className="text-[9px] text-zinc-300 leading-snug">{verdict.setupStage}</span>
+            </div>
+          )}
+          <div className="flex items-start gap-1.5">
+            <span className="text-[8px] text-zinc-600 shrink-0 w-[60px] leading-snug font-medium">R/R</span>
+            <span className="text-[9px] text-zinc-300 leading-snug">{verdict.riskRewardTag}</span>
+          </div>
+          <div className="flex items-start gap-1.5">
+            <span className="text-[8px] text-zinc-600 shrink-0 w-[60px] leading-snug font-medium">REGIME</span>
+            <span className="text-[9px] text-zinc-300 leading-snug">{verdict.regimeFit}</span>
+          </div>
+          {totalSig > 0 && (
+            <div className="flex items-start gap-1.5">
+              <span className="text-[8px] text-zinc-600 shrink-0 w-[60px] leading-snug font-medium">ALIGN</span>
+              <span className={cn("text-[9px] font-semibold leading-snug",
+                alignOk >= 4 ? "text-emerald-400" : alignOk >= 3 ? "text-yellow-400" : "text-orange-400"
+              )}>
+                {alignOk}/{totalSig} signals aligned
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* ── Supporting signals ── */}
         {verdict.reasons.length > 0 && (
           <div className="px-3 py-2 border-b border-zinc-800/60">
             <div className="text-[8px] uppercase tracking-widest text-zinc-600 mb-1.5 font-bold">
@@ -570,15 +810,22 @@ function AnalysisTooltip({ row }: { row: RowData }) {
           </div>
         )}
 
-        {verdict.risks.length > 0 && (
+        {/* ── Conflicts + risks ── */}
+        {(verdict.conflictSignals.length > 0 || verdict.risks.length > 0) && (
           <div className="px-3 py-2">
             <div className="text-[8px] uppercase tracking-widest text-zinc-600 mb-1.5 font-bold">
-              Risks & Concerns
+              Risks & Signal Conflicts
             </div>
+            {verdict.conflictSignals.map((r, i) => (
+              <div key={`c${i}`} className="flex items-start gap-1.5 mb-1">
+                <span className="text-yellow-500 text-[9px] shrink-0 mt-px font-bold">⚡</span>
+                <span className="text-[10px] text-zinc-400 leading-snug">{r}</span>
+              </div>
+            ))}
             {verdict.risks.map((r, i) => {
               const isClean = r.startsWith("No major");
               return (
-                <div key={i} className="flex items-start gap-1.5 mb-1 last:mb-0">
+                <div key={`r${i}`} className="flex items-start gap-1.5 mb-1 last:mb-0">
                   <span className={cn(
                     "text-[9px] shrink-0 mt-px font-bold",
                     isClean ? "text-emerald-500" : "text-orange-400",
@@ -643,6 +890,8 @@ function matchesFilter(row: RowData, filter: FilterKey): boolean {
 function sortRows(rows: RowData[], sortBy: SortKey): RowData[] {
   return [...rows].sort((a, b) => {
     switch (sortBy) {
+      case "bps":   return (b.score.bps ?? 0) - (a.score.bps ?? 0);
+      case "lqs":   return (b.score.lqs ?? 0) - (a.score.lqs ?? 0);
       case "ins":   return (b.score.ins ?? 0) - (a.score.ins ?? 0);
       case "acs":   return b.score.acs - a.score.acs;
       case "insD1": return (b.delta?.delta1D?.ins ?? 0) - (a.delta?.delta1D?.ins ?? 0);
@@ -732,6 +981,8 @@ const FILTERS: {
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
   { key: "csos",  label: "CSOS"    },
+  { key: "bps",   label: "BPS"     },
+  { key: "lqs",   label: "LQS"     },
   { key: "ins",   label: "INS"     },
   { key: "acs",   label: "ACS"     },
   { key: "cpe",   label: "CPE"     },
@@ -909,29 +1160,40 @@ export function AlphaScannerPage() {
                 <th className="px-4 py-2.5 text-left min-w-[170px]">Ticker</th>
                 <th className="px-3 py-2.5 text-right">Price</th>
 
-                {/* CSOS */}
-                <th className="px-4 py-2.5 text-left min-w-[160px] sm:min-w-[210px]">
+                {/* BPS + LQS hero column */}
+                <th className="px-4 py-2.5 text-left min-w-[190px] sm:min-w-[230px]">
                   <ColHeader align="left" tip={
-                    <TipBody
-                      title="CSOS — Composite Signal Opportunity Score"
-                      color="#f59e0b"
-                      desc="Blends VQS (fundamentals), INS (breakout signal), ACS (accumulation), and COS (momentum) into a single ranked number. The label is context-aware — it reflects the dominant signal pattern, not just the raw score. Sort by CSOS to rank all 103 stocks by overall opportunity."
-                      levels={[
-                        ["PRIME OPP.", "All signals co-elevated — INS, ACS, and COS all >70 with strong VQS. Rare and highest-conviction. Multiple independent signals pointing the same direction at once."],
-                        ["EARLY BRK.", "INS >75 leading COS by a wide margin. The signal is front-running the crowd — early entries before the move becomes consensus."],
-                        ["STEALTH ACCUM.", "ACS ≥65 with CPE ≥60 and COS still below 55. Institutions quietly positioning before a public breakout — classic pre-announcement accumulation."],
-                        ["HIDDEN CATALYST", "CPE ≥70 with COS below 55. Market hasn't priced in an improving story yet. Quality and accumulation signals suggest a re-rating event approaching."],
-                        ["QUALITY — ACTIVATING", "VQS ≥65 dominant driver + INS ≥60 now live. Established quality business entering an active setup phase — accumulate on the fundamental anchor."],
-                        ["QUALITY — DORMANT", "VQS ≥65 dominant driver, INS below 60. Strong business with no timing signal yet — watchlist only, wait for INS to cross 60."],
-                        ["CONFIRMED", "COS and INS both elevated with ACS support. The move has started and is confirmed. Still actionable but no longer an early entry."],
-                        ["DEVELOPING", "Signals building but not yet converged. Monitor for INS or ACS acceleration before committing capital."],
-                        ["LATE STAGE", "COS is extended but INS is fading. Risk/reward is deteriorating — the easy money has been made. Size down or wait for a full reset."],
-                        ["LOW QUALITY", "VQS <40 fundamental override. Weak business quality negates price action. Do not chase regardless of momentum."],
-                      ]}
-                    />
+                    <div style={{ backgroundColor: "#000000", color: "#ffffff" }}>
+                      <div className="px-3 py-2.5 border-b border-zinc-800" style={{ backgroundColor: "#0f0f0f" }}>
+                        <div className="text-[10px] uppercase tracking-widest font-bold mb-1" style={{ color: "#f59e0b" }}>BPS · LQS — Dual Opportunity Lens</div>
+                        <div className="text-[11px] text-zinc-300 leading-snug">
+                          Two independent scores replace the single CSOS number. <strong className="text-amber-300">BPS</strong> answers "is this about to move?" — a near-term breakout setup detector. <strong className="text-emerald-300">LQS</strong> answers "is this a genuinely great business?" — a long-term fundamentals quality anchor. The contextual label below them (CSOS pattern) tells you WHY.
+                        </div>
+                      </div>
+                      <div className="px-3 py-2 space-y-1.5">
+                        {[
+                          ["BPS 80+", "Excellent breakout setup: INS + ACS both elevated, clean FBRS, trending structure. High probability near-term move — highest-conviction entry window."],
+                          ["BPS 65–79", "Good setup: most components aligned. Watch for INS to cross 70 as the trigger to size up."],
+                          ["BPS 50–64", "Developing: signals building but not yet converged. Monitor, don't commit."],
+                          ["BPS <50", "No setup: insufficient signal energy for a breakout trade."],
+                          ["LQS 80+", "Elite compounder: strong revenue growth, wide margins, clean balance sheet, reasonable valuation. A business worth owning for years — BPS failure here is just a timing issue."],
+                          ["LQS 65–79", "High quality: above-average fundamentals, meaningful margin of safety on any entry. Prioritise these when BPS is also elevated."],
+                          ["LQS 50–64", "Adequate: solid but not exceptional — requires higher conviction on timing signals."],
+                          ["LQS <50", "Speculative: fundamental weakness reduces holding confidence — trade only, don't invest."],
+                          ["Label", "CSOS pattern label — context-aware description of the dominant signal regime. Read the tooltip on the ticker for full quant briefing."],
+                        ].map(([band, meaning]) => (
+                          <div key={band} className="flex items-start gap-2.5 text-[10px]">
+                            <span className="font-mono text-zinc-500 shrink-0 w-[72px] leading-snug">{band}</span>
+                            <span className="text-zinc-300 leading-snug">{meaning}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   }>
-                    <span className="text-amber-500">CSOS</span>
-                    <span className="text-zinc-700 ml-1 normal-case font-normal">opportunity score</span>
+                    <span className="text-amber-400">BPS</span>
+                    <span className="text-zinc-600 mx-1">·</span>
+                    <span className="text-emerald-400">LQS</span>
+                    <span className="text-zinc-700 ml-1 normal-case font-normal text-[9px]">breakout · quality</span>
                   </ColHeader>
                 </th>
 
@@ -1161,16 +1423,27 @@ export function AlphaScannerPage() {
                       </div>
                     </td>
 
-                    {/* CSOS — hero column */}
+                    {/* BPS + LQS — hero column */}
                     <td className="px-4 py-2.5">
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center gap-1">
-                          <span className={cn("font-black text-2xl tabular-nums leading-none", csosColor(csos))}>
-                            {csos}
-                          </span>
-                          <TrendArrow trend={delta?.trends?.csos} />
+                        {/* BPS + LQS scores side-by-side */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex flex-col items-center">
+                            <span className="text-[8px] uppercase text-zinc-600 font-bold tracking-wide leading-none mb-0.5">BPS</span>
+                            <span className={cn("font-black text-xl tabular-nums leading-none", bpsColor(score.bps ?? 0))}>
+                              {score.bps ?? "—"}
+                            </span>
+                          </div>
+                          <span className="text-zinc-700 text-sm">·</span>
+                          <div className="flex flex-col items-center">
+                            <span className="text-[8px] uppercase text-zinc-600 font-bold tracking-wide leading-none mb-0.5">LQS</span>
+                            <span className={cn("font-black text-xl tabular-nums leading-none", lqsColor(score.lqs ?? 0))}>
+                              {score.lqs ?? "—"}
+                            </span>
+                          </div>
                         </div>
-                        <div className="flex flex-col gap-0.5">
+                        {/* Label + VQS/GVS subline + CSOS chips */}
+                        <div className="flex flex-col gap-0.5 min-w-0">
                           <span className={cn("text-[9px] font-bold uppercase tracking-wide leading-none", csosLabelStyle(label))}>
                             {label}
                           </span>
