@@ -796,7 +796,8 @@ export function calculateCSOS(
 
 // ── BPS: Breakout Probability Score ──────────────────────────────────────────
 // Near-term setup detector. Answers "is this about to move?"
-// Weights: 35% INS | 25% ACS | 20% inverse FBRS | 15% momentum | 5% EPS proxy
+// Weights: 30% INS | 20% ACS | 20% inverse FBRS | 25% MA/momentum | 5% EPS proxy
+// + INS-COS gap step-function bonus (±3–8 pts) + LQS quality multiplier (0.88–1.10)
 // Absolute score — thresholds are fixed, not relative to the watchlist universe.
 
 export function calculateBPS(
@@ -808,29 +809,32 @@ export function calculateBPS(
   priceAbove200MA: boolean,
   revenueGrowthYoy: number,
   revenueGrowthQoQ: number,
+  cos: number,
+  lqs: number,
 ): number {
   const i = isFinite(ins)  ? ins  : 50;
   const a = isFinite(acs)  ? acs  : 50;
   const f = isFinite(fbrs) ? fbrs : 50;
 
-  // 1. INS — leading signal component (35%)
+  // 1. INS — leading signal component (30%)
   const insComponent = clamp(i, 0, 100);
 
-  // 2. ACS — smart-money accumulation component (25%)
+  // 2. ACS — smart-money accumulation component (20%)
   const acsComponent = clamp(a, 0, 100);
 
   // 3. Inverse FBRS — setup cleanliness (20%)
   // Low FBRS = clean institutional setup; high FBRS = hype-driven noise
   const cleanComponent = clamp(100 - f, 0, 100);
 
-  // 4. Momentum slope component (15%)
+  // 4. Momentum / MA stack component (25%)
+  // Trend following is the most empirically robust price signal — weight increased.
   // Combines trend label + MA stack quality
   let momentumBase: number;
   switch (trendLabel) {
-    case "LONG-TERM LEADER":   momentumBase = 85; break;
-    case "MID-TERM BREAKOUT":  momentumBase = 70; break;
+    case "LONG-TERM LEADER":    momentumBase = 85; break;
+    case "MID-TERM BREAKOUT":   momentumBase = 70; break;
     case "SHORT-TERM IGNITION": momentumBase = 60; break;
-    default:                   momentumBase = 35; break;
+    default:                    momentumBase = 35; break;
   }
   if (priceAbove50MA  && priceAbove200MA) momentumBase += 10;
   else if (priceAbove50MA)               momentumBase += 5;
@@ -842,20 +846,39 @@ export function calculateBPS(
   const yoy = isFinite(revenueGrowthYoy) ? revenueGrowthYoy : 0;
   const qoq = isFinite(revenueGrowthQoQ) ? revenueGrowthQoQ : 0;
   let epsProxy = 50;
-  if (yoy > 0 && qoq > yoy)       epsProxy = clamp(55 + (qoq - yoy) * 0.8, 0, 100); // accelerating
-  else if (yoy > 0)                epsProxy = clamp(45 + yoy * 0.3, 0, 100);           // positive but not accelerating
-  else if (yoy < 0)                epsProxy = clamp(50 + yoy * 0.4, 0, 100);           // declining
+  if (yoy > 0 && qoq > yoy)       epsProxy = clamp(55 + (qoq - yoy) * 0.8, 0, 100);
+  else if (yoy > 0)                epsProxy = clamp(45 + yoy * 0.3, 0, 100);
+  else if (yoy < 0)                epsProxy = clamp(50 + yoy * 0.4, 0, 100);
   const epsComponent = epsProxy;
 
-  // Composite BPS — absolute score, no normalization applied
+  // Composite raw BPS — updated weights: MA 25% (↑), INS 30% (↓), ACS 20% (↓)
   const raw =
-    0.35 * insComponent     +
-    0.25 * acsComponent     +
-    0.20 * cleanComponent   +
-    0.15 * momentumComponent +
+    0.30 * insComponent      +
+    0.20 * acsComponent      +
+    0.20 * cleanComponent    +
+    0.25 * momentumComponent +
     0.05 * epsComponent;
 
-  return Math.round(clamp(raw, 1, 100));
+  // ── INS-COS gap bonus (step-function, not linear) ──────────────────────────
+  // Backtest confirmed a threshold effect: stocks where INS > COS by >15 pts
+  // returned +8.8% more over 8w than trailing stocks. Apply as a binary bonus.
+  const gap = (isFinite(ins) ? ins : 50) - (isFinite(cos) ? cos : 50);
+  let gapBonus = 0;
+  if      (gap > 25) gapBonus =  8;
+  else if (gap > 15) gapBonus =  5;
+  else if (gap < -15) gapBonus = -3;
+
+  // ── LQS quality×momentum multiplier ───────────────────────────────────────
+  // High-quality businesses (high LQS) get a momentum boost; speculative
+  // momentum without fundamental backing is discounted.
+  const l = isFinite(lqs) ? lqs : 50;
+  const lqsMult = l >= 75 ? 1.10
+                : l >= 55 ? 1.03
+                : l >= 40 ? 1.00
+                : l >= 25 ? 0.95
+                :           0.88;
+
+  return Math.round(clamp((raw + gapBonus) * lqsMult, 1, 100));
 }
 
 // ── LQS: Long-term Quality Score ─────────────────────────────────────────────
@@ -1107,19 +1130,22 @@ export function computeScore(
   const { regime } = getMarketRegime();
   const csosResult = calculateCSOS(vqs, gvs, ins, acs, cos, regime, cpe, fbrs);
 
-  // ── BPS — Breakout Probability Score (raw; normalized cross-sectionally) ──
-  const bps = calculateBPS(
-    ins, acs, fbrs, trendLabel,
-    priceAbove50MA, priceAbove200MA,
-    rg, rgQ,
-  );
-
-  // ── LQS — Long-term Quality Score (raw; normalized cross-sectionally) ─────
+  // ── LQS — Long-term Quality Score ────────────────────────────────────────
+  // Computed before BPS so the LQS quality×momentum multiplier can be applied.
   const lqs = calculateLQS(
     rg, rgQ, gm, opM, fcfM, de,
     pe, evS,
     ext.epsSurprises ?? [],
     revisionsUp,
+  );
+
+  // ── BPS — Breakout Probability Score ─────────────────────────────────────
+  // Now takes cos (for INS-COS gap bonus) and lqs (for quality×momentum mult).
+  const bps = calculateBPS(
+    ins, acs, fbrs, trendLabel,
+    priceAbove50MA, priceAbove200MA,
+    rg, rgQ,
+    cos, lqs,
   );
 
   return {

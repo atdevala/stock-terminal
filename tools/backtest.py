@@ -211,16 +211,26 @@ def ma_stack_score(close: pd.Series, idx: int) -> float:
     return clamp(score)
 
 
-def bps_proxy(close: pd.Series, volume: pd.Series, spy: pd.Series, idx: int) -> float:
+def bps_proxy(close: pd.Series, volume: pd.Series, spy: pd.Series, idx: int,
+              cos_val: float | None = None) -> float:
     """
-    BPS proxy — full reconstruction.
-    Weights: 35% INS | 25% ACS | 20% inv-FBRS | 15% MA stack | 5% growth (neutral)
+    BPS proxy — updated weights matching live formula (v2).
+    Weights: 30% INS | 20% ACS | 20% inv-FBRS | 25% MA stack (↑) | 5% growth (neutral)
+    + INS-COS gap step-function bonus: >25 pts gap → +8, >15 → +5, <-15 → -3
+    NOTE: LQS multiplier (0.88–1.10) is omitted — no historical fundamentals available.
     """
-    i  = ins_proxy(close, volume, spy, idx)
-    a  = acs_proxy(close, volume, spy, idx)
-    f  = inv_fbrs_proxy(close, idx)
-    ma = ma_stack_score(close, idx)
-    return round(clamp(0.35 * i + 0.25 * a + 0.20 * f + 0.15 * ma + 0.05 * 50.0), 1)
+    i   = ins_proxy(close, volume, spy, idx)
+    a   = acs_proxy(close, volume, spy, idx)
+    f   = inv_fbrs_proxy(close, idx)
+    ma  = ma_stack_score(close, idx)
+    raw = 0.30 * i + 0.20 * a + 0.20 * f + 0.25 * ma + 0.05 * 50.0
+
+    # INS-COS gap step-function bonus (backtest-derived threshold effect)
+    c   = cos_val if cos_val is not None else cos_proxy(close, spy, idx)
+    gap = i - c
+    bonus = 8.0 if gap > 25 else 5.0 if gap > 15 else -3.0 if gap < -15 else 0.0
+
+    return round(clamp(raw + bonus), 1)
 
 
 def cos_proxy(close: pd.Series, spy: pd.Series, idx: int) -> float:
@@ -293,10 +303,10 @@ def run_backtest(
                 if "4w" not in fwds:
                     continue
 
-                bps  = bps_proxy(close, volume, spy_close, spy_idx)
                 ins  = ins_proxy(close, volume, spy_close, spy_idx)
                 cos  = cos_proxy(close, spy_close, spy_idx)
                 gap  = round(ins - cos, 1)
+                bps  = bps_proxy(close, volume, spy_close, spy_idx, cos_val=cos)
 
                 base = {
                     "date":   rebal.date(),
