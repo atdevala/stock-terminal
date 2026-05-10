@@ -61,7 +61,7 @@ TICKERS = [
     "GEV", "PWR", "BE", "OKLO", "CEG", "SMR", "NNE", "AMPX", "VST",
     "BWXT", "TLN", "NEE", "D",
     # Neoclouds & AI Software
-    "MSFT", "NBIS", "PLTR", "RBRK", "NET", "SNOW", "SOUN", "BB",
+    "MSFT", "NOW", "NBIS", "PLTR", "RBRK", "NET", "SNOW", "SOUN", "BB",
     "RDDT", "DDOG", "GTLB", "PATH", "MDB", "CRWD",
     # Defense & Drones
     "ONDS", "KTOS", "RCAT", "ACHR", "KRKNF", "AXON", "JOBY", "LDOS", "BAH", "SAIC",
