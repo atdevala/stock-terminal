@@ -9,7 +9,7 @@ import {
   isWsConnected,
   getMarketRegime,
 } from "../lib/finnhub";
-import { computeScore, normalizeScores, mean } from "../lib/scores";
+import { computeScore, mean } from "../lib/scores";
 import { getScannerState, triggerScan } from "../lib/scanner";
 import { takeSnapshotIfDue, setCurrentScores, getAllSignalDeltas } from "../lib/signal-history";
 
@@ -39,9 +39,10 @@ router.get("/scores", (_req, res) => {
       const q = getQuote(ext.ticker);
       return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0, q);
     });
-    // Cross-sectional normalization: convert CSOS + CPE to percentile ranks within
-    // the universe so scores are relative (90+ is truly rare), not absolute.
-    const scores = normalizeScores(rawScores);
+    // Scores are absolute — no cross-sectional normalization applied.
+    // Each formula outputs a 0–100 value anchored to fixed signal thresholds,
+    // so a score means the same thing regardless of watchlist size or composition.
+    const scores = rawScores;
     // Keep live scores in memory so /api/signal-deltas can use them as "current"
     setCurrentScores(scores);
     // Take a snapshot for the signal history tracker (debounced to 30 min)

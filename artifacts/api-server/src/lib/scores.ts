@@ -797,9 +797,7 @@ export function calculateCSOS(
 // ── BPS: Breakout Probability Score ──────────────────────────────────────────
 // Near-term setup detector. Answers "is this about to move?"
 // Weights: 35% INS | 25% ACS | 20% inverse FBRS | 15% momentum | 5% EPS proxy
-//
-// Cross-sectionally normalized like CSOS so the score reflects percentile rank
-// within the active universe rather than an absolute value.
+// Absolute score — thresholds are fixed, not relative to the watchlist universe.
 
 export function calculateBPS(
   ins: number,
@@ -849,7 +847,7 @@ export function calculateBPS(
   else if (yoy < 0)                epsProxy = clamp(50 + yoy * 0.4, 0, 100);           // declining
   const epsComponent = epsProxy;
 
-  // Composite BPS (raw — cross-sectional normalization applied later)
+  // Composite BPS — absolute score, no normalization applied
   const raw =
     0.35 * insComponent     +
     0.25 * acsComponent     +
@@ -869,7 +867,7 @@ export function calculateBPS(
 //         | 20% Balance sheet health | 15% Valuation reasonableness
 //         | 10% Earnings quality
 //
-// Cross-sectionally normalized like CSOS.
+// Absolute score — thresholds are fixed, not relative to the watchlist universe.
 
 export function calculateLQS(
   revenueGrowthYoy: number,
@@ -959,7 +957,7 @@ export function calculateLQS(
   }
   if (earningsRevisionsUp) epsQualScore = clamp(epsQualScore + 10, 0, 100);
 
-  // Composite LQS (raw — normalized later)
+  // Composite LQS — absolute score, no normalization applied
   const raw =
     0.30 * revScore     +
     0.25 * marginScore  +
@@ -1177,76 +1175,6 @@ export function computeScore(
   }
 }
 
-// ── Cross-sectional normalization ─────────────────────────────────────────────
-// After all stocks in the universe are scored individually, this pass converts
-// CSOS and CPE to percentile ranks within the active watchlist universe.
-//
-// Purpose: prevent score inflation/deflation across regimes. Ensures that
-// 90+ CSOS scores remain rare (true elite setups) regardless of absolute
-// market conditions. Elite distribution enforced:
-//   90–100 = exceptional (top ~10%)
-//   75–89  = strong opportunity
-//   50–74  = solid / neutral
-//   <50    = weak edge
-//
-// Only CSOS and CPE are normalized. Underlying signals (VQS, GVS, INS, ACS,
-// COS) keep their absolute values so tooltips and individual thresholds are
-// not disrupted.
-//
-// ── 90+ Quality Gate ─────────────────────────────────────────────────────────
-// A stock must clear a raw CSOS floor BEFORE normalization to be eligible for
-// 90+. This prevents "relatively best in a weak field" from reaching the elite
-// tier — a stock that is only top-ranked because everything else is mediocre
-// cannot score 90+. It must have genuine absolute signal strength.
-//
-// VQS is intentionally excluded from the gate: high-risk/momentum names
-// (quantum computing, early biotech, drones) may have weak VQS by design,
-// but VQS already contributes 40% of the raw CSOS base. If those stocks
-// can't clear the raw floor on signal composite alone, they don't belong at 90+.
-//
-const RAW_CSOS_FLOOR = 68; // minimum raw (pre-normalization) CSOS for 90+ eligibility
-
-export function normalizeScores(scores: StockScore[]): StockScore[] {
-  if (scores.length < 2) return scores;
-
-  const csosVals = scores.map(s => s.csos);
-  const cpeVals  = scores.map(s => s.cpe);
-  const bpsVals  = scores.map(s => s.bps);
-  const lqsVals  = scores.map(s => s.lqs);
-
-  // Percentile rank: fraction of the universe strictly below this value,
-  // mapped to 1–100. Ties receive the same rank (first-occurrence wins).
-  function toPercentile(sorted: number[], val: number): number {
-    const rank = sorted.filter(v => v < val).length + 1;  // 1-indexed
-    return Math.round(clamp((rank / sorted.length) * 100, 1, 100));
-  }
-
-  const csosSorted = [...csosVals].sort((a, b) => a - b);
-  const cpeSorted  = [...cpeVals].sort((a, b) => a - b);
-  const bpsSorted  = [...bpsVals].sort((a, b) => a - b);
-  const lqsSorted  = [...lqsVals].sort((a, b) => a - b);
-
-  return scores.map(s => {
-    let normCsos = toPercentile(csosSorted, s.csos);
-
-    // Quality gate: cap at 89 if raw score doesn't clear the absolute floor.
-    // Stocks that are only "relatively best" in a weak universe cannot reach 90+.
-    if (normCsos >= 90 && s.csos < RAW_CSOS_FLOOR) {
-      normCsos = 89;
-    }
-
-    const normCpe = toPercentile(cpeSorted, s.cpe);
-    const normBps = toPercentile(bpsSorted, s.bps);
-    const normLqs = toPercentile(lqsSorted, s.lqs);
-
-    return {
-      ...s,
-      csos:      normCsos,
-      cpe:       normCpe,
-      bps:       normBps,
-      lqs:       normLqs,
-      // Recompute label using normalized CSOS + raw signals for accuracy
-      csosLabel: csosLabelText(normCsos, s.vqs, s.ins ?? 50, s.acs, s.cos, normCpe),
-    };
-  });
-}
+// All scores (CSOS, CPE, BPS, LQS) are absolute — anchored to fixed signal
+// thresholds within each formula. A score of 75 means the same thing whether
+// the watchlist has 50 stocks or 500. No cross-sectional normalization is applied.
