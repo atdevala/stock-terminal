@@ -95,6 +95,21 @@ Phase 4 adds reusable options analytics and AI context services without changing
 - AI context packets include explicit constraints so future AI output can explain signals without inventing missing data.
 - Options reasoning explicitly remains provider-gated until normalized options-chain data exists.
 
+## Phase 5 Workstation And Performance Foundation
+
+Phase 5 starts the institutional UX migration without changing live API contracts.
+
+- `WorkstationShell` gives the dashboard a durable panel structure for watchlist, scanner, future chart, signal inspector, options, alert, and AI review workflows.
+- The watchlist keeps the same data sources and rows, but now memoizes quote, score, delta, filter, and category view models to reduce repeated work during frequent quote refreshes.
+- A compact signal summary strip surfaces visible names, accumulation candidates, rising INS names, and superstocks before the user scrolls into the table.
+- The right-side intelligence rail documents platform readiness in-product without introducing fake chart, options, or AI functionality.
+
+Deferred by design:
+
+- Full row virtualization remains a later step because the current table rows are dense and tooltip-heavy.
+- Workspace persistence remains a future domain once user settings and storage are formalized.
+- Chart and options panels should be added after normalized market event and options chain data are available.
+
 ## Migration Order
 
 1. Keep the live Render deployment stable.
@@ -105,6 +120,7 @@ Phase 4 adds reusable options analytics and AI context services without changing
 6. Introduce contract tests for provider normalization and signal outputs.
 7. Add persistent database schemas after event and signal models are stable.
 8. Introduce workstation UX panels once data boundaries are cleaner.
+9. Add virtualized tables, persistent layouts, and keyboard command workflows as the workstation grows.
 
 ## Target Architecture
 
