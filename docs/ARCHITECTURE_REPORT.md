@@ -104,6 +104,15 @@ Phase 5 starts the institutional UX migration without changing live API contract
 - A compact signal summary strip surfaces visible names, accumulation candidates, rising INS names, and superstocks before the user scrolls into the table.
 - The right-side intelligence rail documents platform readiness in-product without introducing fake chart, options, or AI functionality.
 
+## Phase 5B Signal Command Center
+
+Phase 5B makes the workstation visually obvious while staying frontend-only.
+
+- `SignalCommandCenter` turns existing stocks, quotes, scores, and deltas into a first-screen trading terminal view.
+- The command layer surfaces opportunity leaders, late-cycle risk names, sector rotation, and breadth metrics before the dense watchlist table.
+- Command-center actions reuse existing watchlist filters instead of creating new backend endpoints or changing public payloads.
+- This is still not a chart workspace or options panel; those remain gated on normalized chart/options data.
+
 Deferred by design:
 
 - Full row virtualization remains a later step because the current table rows are dense and tooltip-heavy.
