@@ -36,6 +36,12 @@ export interface FactorDefinition {
   compute(input: SignalInput): number;
 }
 
+export interface FactorRegistry {
+  registerFactor(factor: FactorDefinition): void;
+  getFactor(id: string): FactorDefinition | undefined;
+  listFactors(): FactorDefinition[];
+}
+
 export interface StrategyDefinition {
   id: string;
   label: string;
@@ -44,10 +50,20 @@ export interface StrategyDefinition {
   rank(outputs: SignalOutput[]): number;
 }
 
+export interface StrategyRegistry {
+  registerStrategy(strategy: StrategyDefinition): void;
+  getStrategy(id: string): StrategyDefinition | undefined;
+  listStrategies(): StrategyDefinition[];
+}
+
 export interface SignalRegistry {
   registerSignal(signal: SignalDefinition): void;
   registerFactor(factor: FactorDefinition): void;
   registerStrategy(strategy: StrategyDefinition): void;
   getSignal(id: string): SignalDefinition | undefined;
   listSignals(): SignalDefinition[];
+  getFactor(id: string): FactorDefinition | undefined;
+  listFactors(): FactorDefinition[];
+  getStrategy(id: string): StrategyDefinition | undefined;
+  listStrategies(): StrategyDefinition[];
 }
