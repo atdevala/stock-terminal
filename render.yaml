@@ -3,7 +3,7 @@ services:
     name: stock-terminal
     runtime: node
     plan: free
-    buildCommand: pnpm install --no-frozen-lockfile && pnpm run build
+    buildCommand: npx --yes pnpm@9.15.9 install --no-frozen-lockfile && npx --yes pnpm@9.15.9 run build
     startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/health
     envVars:
