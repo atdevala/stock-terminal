@@ -162,6 +162,33 @@ server {
 ---
 
 ## 7. Platform-specific notes
+### Render Free Web Service
+
+This repository includes `render.yaml` for a free single-service deployment.
+The Express API serves both `/api/*` and the built React dashboard in production.
+
+Render settings:
+
+- Service type: Web Service
+- Runtime: Node
+- Plan: Free
+- Build command: `corepack enable && corepack prepare pnpm@9.15.9 --activate && pnpm install --frozen-lockfile && pnpm run build`
+- Start command: `node --enable-source-maps artifacts/api-server/dist/index.mjs`
+
+Required environment variables:
+
+```text
+FINNHUB_API_KEY=your_key_here
+NODE_ENV=production
+DATA_DIR=/tmp/atdevala
+```
+
+Notes:
+
+- Render provides `PORT` automatically.
+- Free services sleep after inactivity and may take about a minute to wake.
+- `/tmp/atdevala` is temporary storage, so signal history may reset after restarts or redeploys.
+- Health checks can use `/api/health` or `/api/healthz`.
 
 ### Railway / Render / Fly.io
 - Set all env vars in the platform dashboard
