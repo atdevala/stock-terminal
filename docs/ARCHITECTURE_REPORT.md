@@ -86,6 +86,15 @@ Phase 3 begins the market-data and signal-engine foundation without changing pub
 - `signal-engine-service` registers legacy VQS/GVS/COS/INS/ACS/CSOS/CPE/BPS/LQS factors as composable `FactorDefinition` adapters over current `computeScore` output.
 - `score-service` now publishes internal `signal.updated` events after score computation while preserving the existing `/api/scores` payload.
 
+## Phase 4 Options And AI Foundation
+
+Phase 4 adds reusable options analytics and AI context services without changing the current dashboard or public API payloads.
+
+- `options-analytics-service` implements baseline Greeks, volatility, dealer exposure, flow detection, and strategy payoff service boundaries.
+- `ai-context-service` creates structured AI context packets for ticker, watchlist, and options reasoning workflows.
+- AI context packets include explicit constraints so future AI output can explain signals without inventing missing data.
+- Options reasoning explicitly remains provider-gated until normalized options-chain data exists.
+
 ## Migration Order
 
 1. Keep the live Render deployment stable.
