@@ -13,6 +13,7 @@ import {
 import { StockRow } from "./StockRow";
 import { stripEmoji } from "@/lib/formatters";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SignalCommandCenter } from "@/components/workstation/SignalCommandCenter";
 import {
   Tooltip,
   TooltipContent,
@@ -235,6 +236,15 @@ export function Watchlist() {
     <div className="flex-1 overflow-auto p-6 space-y-6">
 
       {/* ── Filter bar ── */}
+      <SignalCommandCenter
+        categories={categories}
+        quotesMap={quotesMap}
+        scoresMap={scoresMap}
+        deltasMap={deltasMap}
+        activeFilter={activeFilter}
+        onSelectFilter={filter => setActiveFilter(filter)}
+      />
+
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-muted-foreground uppercase tracking-widest mr-1">Filter:</span>
         {FILTERS.map(f => (
