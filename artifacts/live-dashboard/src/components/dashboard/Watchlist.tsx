@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useGetStocks,
   useGetQuotes,
@@ -21,6 +21,30 @@ import {
 import { cn } from "@/lib/utils";
 
 type FilterKey = "all" | "accumulation" | "rising" | "superstock" | "divergence" | "latecycle";
+
+function WatchlistMetric({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: number;
+  tone?: "neutral" | "teal" | "amber" | "violet";
+}) {
+  const toneClass = {
+    neutral: "text-zinc-100",
+    teal: "text-teal-200",
+    amber: "text-amber-200",
+    violet: "text-violet-200",
+  }[tone];
+
+  return (
+    <div className="rounded-md border border-zinc-800/80 bg-black/20 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className={cn("mt-1 text-lg font-semibold tabular-nums", toneClass)}>{value}</div>
+    </div>
+  );
+}
 
 const FILTERS: {
   key:    FilterKey;
@@ -138,6 +162,61 @@ export function Watchlist() {
   const { data: deltasData } = useGetSignalDeltas({
     query: { refetchInterval: 60_000, queryKey: getGetSignalDeltasQueryKey() },
   });
+  const categoryList = categories ?? [];
+
+  const quotesMap = useMemo(
+    () => new Map(quotesData?.quotes?.map(q => [q.ticker, q]) ?? []),
+    [quotesData?.quotes],
+  );
+
+  const scoresMap = useMemo(
+    () => new Map(scoresData?.map(s => [s.ticker, s]) ?? []),
+    [scoresData],
+  );
+
+  const deltasMap = useMemo(
+    () => new Map<string, SignalDelta>(deltasData?.map(d => [d.ticker, d]) ?? []),
+    [deltasData],
+  );
+
+  const flatStocks = useMemo(
+    () => categoryList.flatMap(category => category.stocks),
+    [categoryList],
+  );
+
+  const visibleCategories = useMemo(
+    () => categoryList
+      .map(category => ({
+        category,
+        visibleStocks: category.stocks.filter(stock =>
+          matchesFilter(scoresMap.get(stock.ticker), deltasMap.get(stock.ticker), activeFilter),
+        ),
+      }))
+      .filter(view => activeFilter === "all" || view.visibleStocks.length > 0),
+    [activeFilter, categoryList, deltasMap, scoresMap],
+  );
+
+  const matchCount = useMemo(
+    () => flatStocks.filter(stock =>
+      matchesFilter(scoresMap.get(stock.ticker), deltasMap.get(stock.ticker), activeFilter),
+    ).length,
+    [activeFilter, deltasMap, flatStocks, scoresMap],
+  );
+
+  const accumulationCount = useMemo(
+    () => flatStocks.filter(stock => matchesFilter(scoresMap.get(stock.ticker), deltasMap.get(stock.ticker), "accumulation")).length,
+    [deltasMap, flatStocks, scoresMap],
+  );
+
+  const risingCount = useMemo(
+    () => flatStocks.filter(stock => matchesFilter(scoresMap.get(stock.ticker), deltasMap.get(stock.ticker), "rising")).length,
+    [deltasMap, flatStocks, scoresMap],
+  );
+
+  const superstockCount = useMemo(
+    () => flatStocks.filter(stock => matchesFilter(scoresMap.get(stock.ticker), deltasMap.get(stock.ticker), "superstock")).length,
+    [deltasMap, flatStocks, scoresMap],
+  );
 
   if (isLoadingStocks || !categories) {
     return (
@@ -151,10 +230,6 @@ export function Watchlist() {
       </div>
     );
   }
-
-  const quotesMap  = new Map(quotesData?.quotes?.map(q => [q.ticker, q]) ?? []);
-  const scoresMap  = new Map(scoresData?.map(s => [s.ticker, s]) ?? []);
-  const deltasMap  = new Map<string, SignalDelta>(deltasData?.map(d => [d.ticker, d]) ?? []);
 
   return (
     <div className="flex-1 overflow-auto p-6 space-y-6">
@@ -196,19 +271,21 @@ export function Watchlist() {
         ))}
         {activeFilter !== "all" && (
           <span className="text-xs text-muted-foreground ml-2">
-            {categories.flatMap(c => c.stocks).filter(s => matchesFilter(scoresMap.get(s.ticker), deltasMap.get(s.ticker), activeFilter)).length} matches
+            {matchCount} matches
           </span>
         )}
       </div>
 
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <WatchlistMetric label="Visible" value={matchCount} />
+        <WatchlistMetric label="Accumulation" value={accumulationCount} tone="teal" />
+        <WatchlistMetric label="Rising INS" value={risingCount} tone="violet" />
+        <WatchlistMetric label="Superstock" value={superstockCount} tone="amber" />
+      </div>
+
       {/* ── Category tables ── */}
       <div className="space-y-10">
-        {categories.map((category) => {
-          const visibleStocks = category.stocks.filter(s =>
-            matchesFilter(scoresMap.get(s.ticker), deltasMap.get(s.ticker), activeFilter)
-          );
-          if (activeFilter !== "all" && visibleStocks.length === 0) return null;
-
+        {visibleCategories.map(({ category, visibleStocks }) => {
           return (
             <section key={category.name} className="space-y-4" data-testid={`category-${category.name}`}>
               <div className="flex items-center gap-3">
