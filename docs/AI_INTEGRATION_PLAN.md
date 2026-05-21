@@ -17,6 +17,13 @@ Implemented foundation:
 
 Every AI workflow should receive structured facts, provenance, timestamps, and warnings. This is the guardrail against vague or hallucinated market commentary.
 
+Phase 4 implementation status:
+
+- `ai-context-service` now builds structured context packets for ticker signal explanations, watchlist briefs, and options reasoning.
+- `StructuredAIContextBuilder` renders deterministic context text from structured packets.
+- `InMemoryMarketMemoryStore` provides a local retrieval-memory port that can later be replaced with a vector database.
+- No generic chatbot has been added.
+
 ### Explainability Targets
 
 Initial AI workflows should explain:
@@ -134,3 +141,10 @@ Output:
 4. Add deterministic explanation tests with fixed inputs.
 5. Add retrieval-backed summaries only after source data is persistent.
 
+## Phase 4 Service Boundary
+
+AI remains an intelligence layer over deterministic market data, not a free-form chat surface.
+
+- Ticker context packets include quote facts, legacy signal scores, trend labels, conviction tier, and explicit constraints.
+- Watchlist context packets include market regime, market session, and top signal outputs.
+- Options reasoning packets explicitly mark options data as unavailable until a provider is connected, preventing invented Greeks, flow, IV rank, or exposure.
