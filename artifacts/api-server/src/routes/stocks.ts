@@ -2,16 +2,11 @@ import { Router } from "express";
 import { logger } from "../lib/logger";
 import { CATEGORIES } from "../lib/stocks-data";
 import {
-  getAllQuotes,
-  getAllExtendedMetrics,
-  getQuote,
-  getMarketStatus,
-  isWsConnected,
-  getMarketRegime,
-} from "../lib/finnhub";
-import { computeScore, mean } from "../lib/scores";
-import { getScannerState, triggerScan } from "../lib/scanner";
-import { takeSnapshotIfDue, setCurrentScores, getAllSignalDeltas } from "../lib/signal-history";
+  marketDataService,
+  scannerService,
+  scoreService,
+  signalHistoryService,
+} from "../services";
 
 const router = Router();
 
@@ -20,34 +15,16 @@ router.get("/stocks", (_req, res) => {
 });
 
 router.get("/quotes", (_req, res) => {
-  res.json({
-    quotes: getAllQuotes(),
-    connected: isWsConnected(),
-    lastRefreshed: Date.now(),
-  });
+  res.json(marketDataService.getQuotesResponse());
 });
 
 router.get("/market-status", (_req, res) => {
-  const s = getMarketStatus();
-  res.json({ isOpen: s.isOpen, exchange: s.exchange, timezone: s.timezone, session: s.session });
+  res.json(marketDataService.getMarketStatusResponse());
 });
 
 router.get("/scores", (_req, res) => {
   try {
-    const metrics = getAllExtendedMetrics();
-    const rawScores = metrics.map(ext => {
-      const q = getQuote(ext.ticker);
-      return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0, q);
-    });
-    // Scores are absolute — no cross-sectional normalization applied.
-    // Each formula outputs a 0–100 value anchored to fixed signal thresholds,
-    // so a score means the same thing regardless of watchlist size or composition.
-    const scores = rawScores;
-    // Keep live scores in memory so /api/signal-deltas can use them as "current"
-    setCurrentScores(scores);
-    // Take a snapshot for the signal history tracker (debounced to 30 min)
-    takeSnapshotIfDue(scores);
-    res.json(scores);
+    res.json(scoreService.computeScoresAndRecordSnapshot());
   } catch (err) {
     logger.error({ err }, "/scores route failed");
     res.status(500).json({ error: "Score computation failed" });
@@ -55,84 +32,33 @@ router.get("/scores", (_req, res) => {
 });
 
 router.get("/movers", (_req, res) => {
-  const quotes = getAllQuotes().filter(q => q.price > 0);
-  const sorted = [...quotes].sort((a, b) => b.changePercent - a.changePercent);
-  const gainers = sorted.slice(0, 5).map(q => ({
-    ticker: q.ticker, company: q.ticker, price: q.price, changePercent: q.changePercent,
-  }));
-  const losers = sorted.slice(-5).reverse().map(q => ({
-    ticker: q.ticker, company: q.ticker, price: q.price, changePercent: q.changePercent,
-  }));
-  res.json({ gainers, losers });
+  res.json(marketDataService.getTopMovers());
 });
 
 router.get("/scanner", (_req, res) => {
-  res.json(getScannerState());
+  res.json(scannerService.getState());
 });
 
 router.post("/scanner/refresh", (_req, res) => {
-  triggerScan();
+  scannerService.triggerRefresh();
   res.json({ message: "Scan triggered" });
 });
 
-// ── Sector Rotation Engine ─────────────────────────────────────────────────────
-
 router.get("/sectors", (_req, res) => {
   try {
-    const metrics = getAllExtendedMetrics();
-    const qMap    = new Map(getAllQuotes().map(q => [q.ticker, q]));
-
-    type CatEntry = { name: string; color: string; ins: number[]; cos: number[]; acs: number[] };
-    const catMap  = new Map<string, CatEntry>();
-    for (const cat of CATEGORIES) {
-      catMap.set(cat.name, { name: cat.name, color: cat.color, ins: [], cos: [], acs: [] });
-    }
-
-    for (const ext of metrics) {
-      const q = qMap.get(ext.ticker);
-      if (!q || q.price === 0) continue;
-      const scored = computeScore(ext.ticker, ext, q.price, q.changePercent, q);
-      const cat    = CATEGORIES.find(c => c.stocks.some(s => s.ticker === ext.ticker));
-      if (!cat) continue;
-      const entry  = catMap.get(cat.name)!;
-      entry.ins.push(scored.ins ?? 0);
-      entry.cos.push(scored.cos);
-      entry.acs.push(scored.acs);
-    }
-
-    const sectors = [...catMap.values()]
-      .filter(c => c.ins.length > 0)
-      .map(c => ({
-        name:       c.name,
-        color:      c.color,
-        avgIns:     Math.round(mean(c.ins)),
-        avgCos:     Math.round(mean(c.cos)),
-        avgAcs:     Math.round(mean(c.acs)),
-        stockCount: c.ins.length,
-        hotRank:    0,
-      }))
-      .sort((a, b) => b.avgIns - a.avgIns)
-      .map((s, i) => ({ ...s, hotRank: i + 1 }));
-
-    res.json(sectors);
+    res.json(scoreService.computeSectorRotation());
   } catch (err) {
     logger.error({ err }, "/sectors route failed");
     res.status(500).json({ error: "Sector computation failed" });
   }
 });
 
-// ── Market Regime Detection ────────────────────────────────────────────────────
-
 router.get("/market-regime", (_req, res) => {
-  res.json(getMarketRegime());
+  res.json(marketDataService.getMarketRegime());
 });
 
-// ── Signal Movement Tracker ────────────────────────────────────────────────────
-// Returns per-ticker signal deltas, trend classifications, divergence flags,
-// and sparkline history points. Populated from the rolling snapshot store.
-
 router.get("/signal-deltas", (_req, res) => {
-  res.json(getAllSignalDeltas());
+  res.json(signalHistoryService.getAllSignalDeltas());
 });
 
 export default router;
