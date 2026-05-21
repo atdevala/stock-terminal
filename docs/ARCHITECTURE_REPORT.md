@@ -76,6 +76,16 @@ Deferred by design:
 - Persistent database migration remains a later step.
 - Dashboard UX is unchanged in this phase.
 
+## Phase 3 Engine Foundation
+
+Phase 3 begins the market-data and signal-engine foundation without changing public API responses.
+
+- `market-data-bus` provides an in-memory `MarketDataBus` for normalized quote, signal, provider, news, and future options events.
+- `cache-service` provides a `CacheProvider` implementation for short-lived in-process state and future Redis replacement.
+- `provider-router-service` routes capabilities to the active Finnhub provider and creates a stable place for future provider failover.
+- `signal-engine-service` registers legacy VQS/GVS/COS/INS/ACS/CSOS/CPE/BPS/LQS factors as composable `FactorDefinition` adapters over current `computeScore` output.
+- `score-service` now publishes internal `signal.updated` events after score computation while preserving the existing `/api/scores` payload.
+
 ## Migration Order
 
 1. Keep the live Render deployment stable.
