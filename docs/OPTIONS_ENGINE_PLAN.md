@@ -40,6 +40,12 @@ Implemented foundation:
 
 These are contracts only. The next step is provider normalization and tests.
 
+Phase 4 implementation status:
+
+- `options-analytics-service` now provides baseline backend implementations for Greeks, volatility surface construction, expected move, dealer exposure, unusual activity detection, and strategy payoff shells.
+- The implementation is provider-ready but not wired to a live options vendor yet.
+- Outputs are internal only until normalized options-chain provider data and tests are added.
+
 ### Data Quality Rules
 
 Options analytics are dangerous when stale or sparse. Every options response should expose:
@@ -110,10 +116,22 @@ Options analytics are dangerous when stale or sparse. Every options response sho
 7. Add Greeks and payoff engine.
 8. Add dealer exposure and flow analytics.
 
+## Phase 4 Service Boundary
+
+The options engine is now represented by reusable backend services:
+
+- `BlackScholesGreeksCalculator`
+- `BasicVolatilityEngine`
+- `BasicDealerExposureEngine`
+- `BasicFlowAnalysisEngine`
+- `BasicStrategyBuilder`
+- `BasicOptionsAnalyticsEngine`
+
+These classes are intentionally conservative. They create a stable analytical boundary for future options data providers without pretending the current Finnhub deployment has complete options-chain data.
+
 ## Risks
 
 - Free data providers may not include sufficient options depth.
 - Real-time options chains are payload-heavy.
 - Incorrect Greeks or stale IV can mislead users.
 - Dealer exposure models require clear assumptions and should never be presented as certainty.
-
