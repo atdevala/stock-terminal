@@ -1,13 +1,15 @@
 import type {
+  FactorRegistry,
   FactorDefinition,
   IndicatorDefinition,
   IndicatorRegistry,
   SignalDefinition,
   SignalRegistry,
+  StrategyRegistry,
   StrategyDefinition,
 } from "@workspace/market-platform";
 
-export class InMemorySignalRegistry implements SignalRegistry {
+export class InMemorySignalRegistry implements SignalRegistry, FactorRegistry, StrategyRegistry {
   private readonly signals = new Map<string, SignalDefinition>();
   private readonly factors = new Map<string, FactorDefinition>();
   private readonly strategies = new Map<string, StrategyDefinition>();
@@ -67,22 +69,3 @@ export class InMemoryIndicatorRegistry implements IndicatorRegistry {
 
 export const signalRegistry = new InMemorySignalRegistry();
 export const indicatorRegistry = new InMemoryIndicatorRegistry();
-
-for (const factor of [
-  ["vqs", "Velocity Quality Score"],
-  ["gvs", "Growth Vector Score"],
-  ["cos", "Conviction Overlay Score"],
-  ["ins", "Inflection Signal"],
-  ["acs", "Accumulation Composite Score"],
-  ["csos", "Catalyst Signal Opportunity Score"],
-  ["cpe", "Catalyst Probability Engine"],
-  ["bps", "Breakout Probability Score"],
-  ["lqs", "Liquidity Quality Score"],
-] as const) {
-  signalRegistry.registerFactor({
-    id: factor[0],
-    label: factor[1],
-    weight: 1,
-    compute: () => 50,
-  });
-}
