@@ -2,6 +2,7 @@ import { CATEGORIES } from "../lib/stocks-data";
 import { computeScore, mean, type StockScore } from "../lib/scores";
 import { marketDataService } from "./market-data-service";
 import { signalHistoryService } from "./signal-history-service";
+import { publishLegacyScoreEvents } from "./signal-engine-service";
 import { toSignalOutput } from "./normalizers";
 
 export interface SectorRotationRow {
@@ -28,6 +29,7 @@ export const scoreService = {
   computeScoresAndRecordSnapshot(): StockScore[] {
     const scores = computeScores();
     signalHistoryService.observeScores(scores);
+    void publishLegacyScoreEvents(scores);
     return scores;
   },
   computeSectorRotation(): SectorRotationRow[] {
