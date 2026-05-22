@@ -1,6 +1,6 @@
 import { finnhubGet, getSpyCloses60d, getAllExtendedMetrics, getQuote } from "./finnhub";
 import type { ExtendedMetrics, QuoteData } from "./finnhub";
-import { computeScore } from "./scores";
+import { computeScore, type StockScore } from "./scores";
 import { getInsLabel } from "./ins";
 import { TICKER_TO_COMPANY } from "./stocks-data";
 import { logger } from "./logger";
@@ -104,6 +104,32 @@ export interface ScannerResponse {
   results: ScanResult[];
 }
 
+export interface SymbolScanSuccess {
+  ok: true;
+  source: "on-demand";
+  cached: boolean;
+  result: {
+    ticker: string;
+    company: string;
+    score: StockScore;
+    quote: {
+      ticker: string;
+      price: number;
+      changePercent: number;
+    };
+    scannedAt: number;
+  };
+}
+
+export interface SymbolScanFailure {
+  ok: false;
+  status: 400 | 404 | 502;
+  error: string;
+  reason: "INVALID_SYMBOL" | "NO_DATA" | "PROVIDER_ERROR";
+}
+
+export type SymbolScanResponse = SymbolScanSuccess | SymbolScanFailure;
+
 // ── Internal state ─────────────────────────────────────────────────────────────
 
 const scannerExtCache  = new Map<string, ExtendedMetrics>();
@@ -118,6 +144,12 @@ let scannerState: ScannerResponse = {
 let scanRunning = false;
 
 const CACHE_TTL_MS = 15 * 60 * 1000;
+const SYMBOL_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+let usSymbolCache: {
+  loadedAt: number;
+  symbols: Map<string, string>;
+} | undefined;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -132,6 +164,30 @@ function nv(v: unknown): number | undefined {
 
 function sleep(ms: number): Promise<void> {
   return new Promise(r => setTimeout(r, ms));
+}
+
+function normalizeTicker(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const ticker = value.trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9.-]{0,14}$/.test(ticker)) return undefined;
+  return ticker;
+}
+
+function quoteFromScannerCache(ticker: string, price: number, changePercent: number): QuoteData {
+  const prevClose = changePercent !== -100
+    ? price / (1 + changePercent / 100)
+    : price;
+  return {
+    ticker,
+    price,
+    change: price - prevClose,
+    changePercent,
+    prevClose,
+    high: price,
+    low: price,
+    open: prevClose,
+    lastUpdated: Date.now(),
+  };
 }
 
 // ── Per-ticker fetches (3 calls per scanner-only ticker) ──────────────────────
@@ -213,6 +269,48 @@ async function fetchScannerFundamentals(ticker: string): Promise<void> {
     const ext = scannerExtCache.get(ticker) ?? { ticker };
     scannerExtCache.set(ticker, { ...ext, ticker, ...payload });
   } catch { /* ignore */ }
+}
+
+async function loadUsSymbolUniverse(): Promise<Map<string, string> | undefined> {
+  if (usSymbolCache && Date.now() - usSymbolCache.loadedAt < SYMBOL_CACHE_TTL_MS) {
+    return usSymbolCache.symbols;
+  }
+
+  try {
+    const data = await finnhubGet("/stock/symbol?exchange=US") as Array<Record<string, unknown>>;
+    if (!Array.isArray(data)) return usSymbolCache?.symbols;
+
+    const symbols = new Map<string, string>();
+    for (const item of data) {
+      const rawSymbol = String(item["symbol"] ?? item["displaySymbol"] ?? "").toUpperCase();
+      const displaySymbol = String(item["displaySymbol"] ?? rawSymbol).toUpperCase();
+      const description = String(item["description"] ?? rawSymbol);
+      const type = String(item["type"] ?? "").toLowerCase();
+
+      if (!rawSymbol || rawSymbol.includes(".")) continue;
+      if (!/^[A-Z][A-Z0-9-]{0,14}$/.test(rawSymbol)) continue;
+      if (displaySymbol !== rawSymbol) continue;
+      if (type && !/(common|stock|adr|etf|fund|reit|unit|equity)/i.test(type)) continue;
+
+      symbols.set(rawSymbol, description || rawSymbol);
+    }
+
+    usSymbolCache = { loadedAt: Date.now(), symbols };
+    logger.info(`Scanner symbol universe cached: ${symbols.size} U.S. symbols`);
+    return symbols;
+  } catch (err) {
+    logger.warn({ err }, "Scanner symbol universe fetch failed");
+    return usSymbolCache?.symbols;
+  }
+}
+
+async function resolveCompanyName(ticker: string): Promise<string | undefined> {
+  if (TICKER_TO_COMPANY[ticker]) return TICKER_TO_COMPANY[ticker];
+  if (SCANNER_UNIVERSE[ticker]) return SCANNER_UNIVERSE[ticker];
+
+  const symbols = await loadUsSymbolUniverse();
+  if (!symbols) return ticker;
+  return symbols.get(ticker);
 }
 
 // ── Score helpers ─────────────────────────────────────────────────────────────
@@ -356,6 +454,82 @@ export function triggerScan(): void {
     return;
   }
   void runScan();
+}
+
+export async function scanSymbol(rawTicker: unknown): Promise<SymbolScanResponse> {
+  const ticker = normalizeTicker(rawTicker);
+  if (!ticker) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Enter a valid U.S. ticker symbol.",
+      reason: "INVALID_SYMBOL",
+    };
+  }
+
+  const company = await resolveCompanyName(ticker);
+  if (!company) {
+    return {
+      ok: false,
+      status: 404,
+      error: `${ticker} is not in Finnhub's U.S. symbol universe.`,
+      reason: "INVALID_SYMBOL",
+    };
+  }
+
+  const existingExt = getAllExtendedMetrics().find(ext => ext.ticker === ticker) ?? scannerExtCache.get(ticker);
+  const existingQuote = getQuote(ticker);
+  const existingScannerQuote = scannerPriceCache.get(ticker);
+  const cached = Boolean(existingExt && (existingQuote || existingScannerQuote));
+
+  if (!cached) {
+    await fetchScannerQuote(ticker);
+    await fetchScannerCandles(ticker);
+    await fetchScannerFundamentals(ticker);
+  }
+
+  const ext = getAllExtendedMetrics().find(item => item.ticker === ticker) ?? scannerExtCache.get(ticker);
+  const q = getQuote(ticker);
+  const scannerQuote = scannerPriceCache.get(ticker);
+
+  if (!ext || (!q && !scannerQuote)) {
+    return {
+      ok: false,
+      status: 404,
+      error: `No usable quote and fundamentals data is available for ${ticker}.`,
+      reason: "NO_DATA",
+    };
+  }
+
+  try {
+    const quote = q ?? quoteFromScannerCache(ticker, scannerQuote!.price, scannerQuote!.changePercent);
+    const score = computeScore(ticker, ext, quote.price, quote.changePercent, quote);
+
+    return {
+      ok: true,
+      source: "on-demand",
+      cached,
+      result: {
+        ticker,
+        company,
+        score,
+        quote: {
+          ticker,
+          price: quote.price,
+          changePercent: quote.changePercent,
+        },
+        scannedAt: Date.now(),
+      },
+    };
+  } catch (err) {
+    logger.warn({ ticker, err }, "On-demand scanner symbol failed");
+    return {
+      ok: false,
+      status: 502,
+      error: `Provider data could not be scored for ${ticker}.`,
+      reason: "PROVIDER_ERROR",
+    };
+  }
 }
 
 export async function startScannerService(): Promise<void> {
