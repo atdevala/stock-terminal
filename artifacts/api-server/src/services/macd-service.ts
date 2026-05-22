@@ -43,6 +43,11 @@ const CACHE_TTL_MS = 6 * 60 * 60 * 1_000;
 const WATCHLIST_TICKERS = new Set(ALL_TICKERS);
 const macdCache = new Map<string, { response: MacdResponse; ts: number }>();
 
+interface CandleSeries {
+  timestamps: number[];
+  closes: number[];
+}
+
 function normalizeTicker(value: unknown): string {
   return typeof value === "string" ? value.trim().toUpperCase() : "";
 }
@@ -119,6 +124,53 @@ function buildMacdPoints(timestamps: number[], closes: number[]): MacdPoint[] {
   });
 }
 
+function normalizeCandles(rawTimestamps: number[], rawCloses: number[]): CandleSeries {
+  const candles = rawCloses
+    .map((close, index) => ({ close, timestamp: rawTimestamps[index] }))
+    .filter((item): item is { close: number; timestamp: number } =>
+      Number.isFinite(item.close) && Number.isFinite(item.timestamp),
+    );
+
+  return {
+    closes: candles.map(item => item.close),
+    timestamps: candles.map(item => item.timestamp),
+  };
+}
+
+async function fetchFinnhubCandles(ticker: string): Promise<CandleSeries | null> {
+  const to = Math.floor(Date.now() / 1000);
+  const from = to - 220 * 86400;
+  const data = await finnhubGet(`/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}`) as Record<string, unknown>;
+
+  if (data["s"] !== "ok" || !Array.isArray(data["c"]) || !Array.isArray(data["t"])) {
+    return null;
+  }
+
+  return normalizeCandles(data["t"] as number[], data["c"] as number[]);
+}
+
+async function fetchYahooCandles(ticker: string): Promise<CandleSeries | null> {
+  const response = await fetch(
+    `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=6mo&interval=1d`,
+    { signal: AbortSignal.timeout(10_000) },
+  );
+  if (!response.ok) return null;
+
+  const payload = await response.json() as {
+    chart?: {
+      result?: Array<{
+        timestamp?: number[];
+        indicators?: { quote?: Array<{ close?: Array<number | null> }> };
+      }>;
+    };
+  };
+
+  const result = payload.chart?.result?.[0];
+  const timestamps = result?.timestamp ?? [];
+  const closes = result?.indicators?.quote?.[0]?.close ?? [];
+  return normalizeCandles(timestamps, closes.map(value => value ?? Number.NaN));
+}
+
 export const macdService = {
   async getMacd(rawTicker: unknown): Promise<MacdResult> {
     const ticker = normalizeTicker(rawTicker);
@@ -141,23 +193,11 @@ export const macdService = {
     }
 
     try {
-      const to = Math.floor(Date.now() / 1000);
-      const from = to - 220 * 86400;
-      const data = await finnhubGet(`/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}`) as Record<string, unknown>;
-
-      if (data["s"] !== "ok" || !Array.isArray(data["c"]) || !Array.isArray(data["t"])) {
-        return { ok: false, status: 404, error: "No candle data is available for this ticker.", reason: "NO_CANDLE_DATA" };
-      }
-
-      const rawCloses = data["c"] as number[];
-      const rawTimestamps = data["t"] as number[];
-      const candles = rawCloses
-        .map((close, index) => ({ close, timestamp: rawTimestamps[index] }))
-        .filter((item): item is { close: number; timestamp: number } =>
-          Number.isFinite(item.close) && Number.isFinite(item.timestamp),
-        );
-      const closes = candles.map(item => item.close);
-      const timestamps = candles.map(item => item.timestamp);
+      const candles = await fetchFinnhubCandles(ticker)
+        .catch(() => null)
+        ?? await fetchYahooCandles(ticker).catch(() => null);
+      const closes = candles?.closes ?? [];
+      const timestamps = candles?.timestamps ?? [];
       if (closes.length < 35 || timestamps.length < closes.length) {
         return { ok: false, status: 404, error: "Not enough candle data is available for this ticker.", reason: "NO_CANDLE_DATA" };
       }
