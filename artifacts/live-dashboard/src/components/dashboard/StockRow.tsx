@@ -1,3 +1,4 @@
+import type { KeyboardEvent } from "react";
 import type { Quote, StockInfo, StockScore, SignalDelta } from "@workspace/api-client-react";
 import { PriceCell } from "./PriceCell";
 import { formatCurrency, formatPercent } from "@/lib/formatters";
@@ -13,6 +14,8 @@ interface StockRowProps {
   quote?: Quote;
   score?: StockScore;
   signalDelta?: SignalDelta;
+  isSelected?: boolean;
+  onSelect?: (ticker: string) => void;
 }
 
 function scoreColor(s: number): string {
@@ -627,10 +630,28 @@ function CsosTooltipContent({ score }: { score: StockScore }) {
 
 // ── Row ────────────────────────────────────────────────────────────────────────
 
-export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
+export function StockRow({ stock, quote, score, signalDelta, isSelected = false, onSelect }: StockRowProps) {
+  const handleSelect = () => onSelect?.(stock.ticker);
+  const handleKeyDown = (event: KeyboardEvent<HTMLTableRowElement>) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleSelect();
+    }
+  };
+
   if (!quote) {
     return (
-      <tr className="border-b border-border/50 hover:bg-muted/50 transition-colors">
+      <tr
+        className={cn(
+          "border-b border-border/50 transition-colors",
+          onSelect && "cursor-pointer hover:bg-muted/50",
+          isSelected && "bg-blue-500/10 ring-1 ring-inset ring-blue-500/30",
+        )}
+        data-testid={`stock-row-${stock.ticker}`}
+        tabIndex={onSelect ? 0 : undefined}
+        onClick={handleSelect}
+        onKeyDown={handleKeyDown}
+      >
         <td className="py-2.5 px-4">
           <div className="font-bold text-sm">{stock.ticker}</div>
           <div className="text-xs text-muted-foreground truncate max-w-[150px]">{stock.company}</div>
@@ -657,7 +678,17 @@ export function StockRow({ stock, quote, score, signalDelta }: StockRowProps) {
   const tier = score?.convictionTier ?? 0;
 
   return (
-    <tr className="border-b border-border/50 hover:bg-muted/50 transition-colors group" data-testid={`stock-row-${stock.ticker}`}>
+    <tr
+      className={cn(
+        "border-b border-border/50 transition-colors group",
+        onSelect && "cursor-pointer hover:bg-muted/50",
+        isSelected && "bg-blue-500/10 ring-1 ring-inset ring-blue-500/30",
+      )}
+      data-testid={`stock-row-${stock.ticker}`}
+      tabIndex={onSelect ? 0 : undefined}
+      onClick={handleSelect}
+      onKeyDown={handleKeyDown}
+    >
       <td className="py-2.5 px-4 align-top">
         <div className="flex items-center gap-1.5">
           <span className="font-bold text-sm" data-testid={`stock-ticker-${stock.ticker}`}>{stock.ticker}</span>
