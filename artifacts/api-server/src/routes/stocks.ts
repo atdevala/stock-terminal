@@ -44,6 +44,23 @@ router.post("/scanner/refresh", (_req, res) => {
   res.json({ message: "Scan triggered" });
 });
 
+router.post("/scanner/symbol", async (req, res) => {
+  try {
+    const result = await scannerService.scanSymbol(req.body?.ticker);
+    if (!result.ok) {
+      res.status(result.status).json({
+        error: result.error,
+        reason: result.reason,
+      });
+      return;
+    }
+    res.json(result);
+  } catch (err) {
+    logger.error({ err }, "/scanner/symbol route failed");
+    res.status(500).json({ error: "Symbol scan failed", reason: "PROVIDER_ERROR" });
+  }
+});
+
 router.get("/sectors", (_req, res) => {
   try {
     res.json(scoreService.computeSectorRotation());
