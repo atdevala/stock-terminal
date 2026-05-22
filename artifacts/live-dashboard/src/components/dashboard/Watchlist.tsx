@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useGetStocks,
   useGetQuotes,
@@ -11,6 +11,7 @@ import {
   type SignalDelta,
 } from "@workspace/api-client-react";
 import { StockRow } from "./StockRow";
+import { WatchlistMacdInspector } from "./WatchlistMacdInspector";
 import { stripEmoji } from "@/lib/formatters";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SignalCommandCenter } from "@/components/workstation/SignalCommandCenter";
@@ -149,6 +150,7 @@ function matchesFilter(
 
 export function Watchlist() {
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
+  const [selectedTicker, setSelectedTicker] = useState<string | null>(null);
 
   const { data: categories, isLoading: isLoadingStocks } = useGetStocks();
 
@@ -197,6 +199,22 @@ export function Watchlist() {
     [activeFilter, categoryList, deltasMap, scoresMap],
   );
 
+  const visibleStocks = useMemo(
+    () => visibleCategories.flatMap(view => view.visibleStocks),
+    [visibleCategories],
+  );
+
+  useEffect(() => {
+    if (visibleStocks.length === 0) {
+      setSelectedTicker(null);
+      return;
+    }
+
+    if (!selectedTicker || !visibleStocks.some(stock => stock.ticker === selectedTicker)) {
+      setSelectedTicker(visibleStocks[0]!.ticker);
+    }
+  }, [selectedTicker, visibleStocks]);
+
   const matchCount = useMemo(
     () => flatStocks.filter(stock =>
       matchesFilter(scoresMap.get(stock.ticker), deltasMap.get(stock.ticker), activeFilter),
@@ -217,6 +235,11 @@ export function Watchlist() {
   const superstockCount = useMemo(
     () => flatStocks.filter(stock => matchesFilter(scoresMap.get(stock.ticker), deltasMap.get(stock.ticker), "superstock")).length,
     [deltasMap, flatStocks, scoresMap],
+  );
+
+  const selectedStock = useMemo(
+    () => flatStocks.find(stock => stock.ticker === selectedTicker) ?? visibleStocks[0],
+    [flatStocks, selectedTicker, visibleStocks],
   );
 
   if (isLoadingStocks || !categories) {
@@ -293,8 +316,17 @@ export function Watchlist() {
         <WatchlistMetric label="Superstock" value={superstockCount} tone="amber" />
       </div>
 
+      <div className="lg:hidden">
+        <WatchlistMacdInspector
+          stock={selectedStock}
+          quote={selectedStock ? quotesMap.get(selectedStock.ticker) : undefined}
+          score={selectedStock ? scoresMap.get(selectedStock.ticker) : undefined}
+        />
+      </div>
+
       {/* ── Category tables ── */}
-      <div className="space-y-10">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_390px]">
+        <div className="min-w-0 space-y-10">
         {visibleCategories.map(({ category, visibleStocks }) => {
           return (
             <section key={category.name} className="space-y-4" data-testid={`category-${category.name}`}>
@@ -309,8 +341,8 @@ export function Watchlist() {
                 <div className="h-px flex-1 bg-border/50 ml-4" />
               </div>
 
-              <div className="rounded-lg border border-border bg-card overflow-hidden shadow-sm">
-                <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
+                <table className="min-w-[1280px] w-full text-left border-collapse">
                   <thead>
                     <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       <th className="py-3 px-4 font-medium">Symbol/Company</th>
@@ -481,6 +513,8 @@ export function Watchlist() {
                         quote={quotesMap.get(stock.ticker)}
                         score={scoresMap.get(stock.ticker)}
                         signalDelta={deltasMap.get(stock.ticker)}
+                        isSelected={stock.ticker === selectedTicker}
+                        onSelect={setSelectedTicker}
                       />
                     ))}
                   </tbody>
@@ -489,6 +523,17 @@ export function Watchlist() {
             </section>
           );
         })}
+        </div>
+
+        <div className="hidden lg:block">
+          <div className="sticky top-6">
+            <WatchlistMacdInspector
+              stock={selectedStock}
+              quote={selectedStock ? quotesMap.get(selectedStock.ticker) : undefined}
+              score={selectedStock ? scoresMap.get(selectedStock.ticker) : undefined}
+            />
+          </div>
+        </div>
       </div>
     </div>
   );
