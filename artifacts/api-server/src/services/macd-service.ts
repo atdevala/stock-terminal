@@ -1,4 +1,5 @@
 import { finnhubGet } from "../lib/finnhub";
+import { getExtendedMetrics } from "../lib/finnhub";
 import { ALL_TICKERS } from "../lib/stocks-data";
 
 export type MacdMarker = "buy" | "sell";
@@ -171,6 +172,17 @@ async function fetchYahooCandles(ticker: string): Promise<CandleSeries | null> {
   return normalizeCandles(timestamps, closes.map(value => value ?? Number.NaN));
 }
 
+function getCachedMetricCandles(ticker: string): CandleSeries | null {
+  const closes = getExtendedMetrics(ticker)?.closes60d ?? [];
+  if (closes.length < 35) return null;
+
+  const today = Math.floor(Date.now() / 1000);
+  return {
+    closes,
+    timestamps: closes.map((_, index) => today - (closes.length - 1 - index) * 86400),
+  };
+}
+
 export const macdService = {
   async getMacd(rawTicker: unknown): Promise<MacdResult> {
     const ticker = normalizeTicker(rawTicker);
@@ -195,7 +207,8 @@ export const macdService = {
     try {
       const candles = await fetchFinnhubCandles(ticker)
         .catch(() => null)
-        ?? await fetchYahooCandles(ticker).catch(() => null);
+        ?? await fetchYahooCandles(ticker).catch(() => null)
+        ?? getCachedMetricCandles(ticker);
       const closes = candles?.closes ?? [];
       const timestamps = candles?.timestamps ?? [];
       if (closes.length < 35 || timestamps.length < closes.length) {
