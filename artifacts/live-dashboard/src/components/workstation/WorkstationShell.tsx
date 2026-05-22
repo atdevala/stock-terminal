@@ -117,7 +117,7 @@ export function WorkstationShell({
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
+        <div className="flex min-h-0 flex-1 overflow-hidden">{children}</div>
       </section>
 
       <aside className="hidden w-[312px] flex-none border-l border-border/70 bg-zinc-950/45 xl:flex xl:flex-col">
