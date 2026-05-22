@@ -6,6 +6,7 @@ import {
   Cell,
   ComposedChart,
   Line,
+  LineChart,
   ReferenceLine,
   ResponsiveContainer,
   Scatter,
@@ -184,41 +185,75 @@ export function WatchlistMacdInspector({ stock, quote, score }: WatchlistMacdIns
         )}
 
         {status === "success" && chartPoints.length > 0 && (
-          <div className="h-[260px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartPoints} margin={{ top: 8, right: 8, bottom: 0, left: -18 }}>
-                <CartesianGrid stroke="#27272a" strokeDasharray="2 4" vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  tick={{ fill: "#71717a", fontSize: 10 }}
-                  tickFormatter={value => String(value).slice(5)}
-                  minTickGap={26}
-                  axisLine={false}
-                  tickLine={false}
-                />
-                <YAxis
-                  tick={{ fill: "#71717a", fontSize: 10 }}
-                  width={42}
-                  axisLine={false}
-                  tickLine={false}
-                  domain={["auto", "auto"]}
-                />
-                <ReferenceLine y={0} stroke="#52525b" strokeDasharray="3 3" />
-                <ReTooltip content={<MacdTooltip />} cursor={{ stroke: "#3f3f46", strokeDasharray: "3 3" }} />
-                <Bar dataKey="histogram" barSize={3} radius={[1, 1, 0, 0]}>
-                  {chartPoints.map(point => (
-                    <Cell
-                      key={point.date}
-                      fill={(point.histogram ?? 0) >= 0 ? "rgba(16,185,129,0.34)" : "rgba(248,113,113,0.34)"}
-                    />
-                  ))}
-                </Bar>
-                <Line type="monotone" dataKey="macd" dot={false} stroke="#6478ff" strokeWidth={2} connectNulls />
-                <Line type="monotone" dataKey="signal" dot={false} stroke="#ff6b6b" strokeWidth={2} connectNulls />
-                <Scatter data={buyMarkers} dataKey="macd" fill="#22c55e" shape="triangle" />
-                <Scatter data={sellMarkers} dataKey="macd" fill="#f87171" shape="triangle" />
-              </ComposedChart>
-            </ResponsiveContainer>
+          <div className="space-y-2">
+            <div className="h-[112px] rounded border border-zinc-900/80 bg-black/20 px-1 pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartPoints} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                  <CartesianGrid stroke="#27272a" strokeDasharray="2 4" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    hide
+                  />
+                  <YAxis
+                    yAxisId="price"
+                    tick={{ fill: "#71717a", fontSize: 10 }}
+                    tickFormatter={value => `$${Number(value).toFixed(0)}`}
+                    width={42}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={["dataMin", "dataMax"]}
+                  />
+                  <ReTooltip content={<MacdTooltip />} cursor={{ stroke: "#3f3f46", strokeDasharray: "3 3" }} />
+                  <Line
+                    yAxisId="price"
+                    type="monotone"
+                    dataKey="close"
+                    dot={false}
+                    stroke="#f8fafc"
+                    strokeWidth={2}
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="h-[170px] rounded border border-zinc-900/80 bg-black/20 px-1 pt-2">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={chartPoints} margin={{ top: 4, right: 8, bottom: 0, left: -16 }}>
+                  <CartesianGrid stroke="#27272a" strokeDasharray="2 4" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fill: "#71717a", fontSize: 10 }}
+                    tickFormatter={value => String(value).slice(5)}
+                    minTickGap={26}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    yAxisId="macd"
+                    tick={{ fill: "#71717a", fontSize: 10 }}
+                    width={42}
+                    axisLine={false}
+                    tickLine={false}
+                    domain={["auto", "auto"]}
+                  />
+                  <ReferenceLine yAxisId="macd" y={0} stroke="#52525b" strokeDasharray="3 3" />
+                  <ReTooltip content={<MacdTooltip />} cursor={{ stroke: "#3f3f46", strokeDasharray: "3 3" }} />
+                  <Bar yAxisId="macd" dataKey="histogram" barSize={3} radius={[1, 1, 0, 0]}>
+                    {chartPoints.map(point => (
+                      <Cell
+                        key={point.date}
+                        fill={(point.histogram ?? 0) >= 0 ? "rgba(16,185,129,0.34)" : "rgba(248,113,113,0.34)"}
+                      />
+                    ))}
+                  </Bar>
+                  <Line yAxisId="macd" type="monotone" dataKey="macd" dot={false} stroke="#6478ff" strokeWidth={2} connectNulls />
+                  <Line yAxisId="macd" type="monotone" dataKey="signal" dot={false} stroke="#ff6b6b" strokeWidth={2} connectNulls />
+                  <Scatter yAxisId="macd" data={buyMarkers} dataKey="macd" fill="#22c55e" shape="triangle" />
+                  <Scatter yAxisId="macd" data={sellMarkers} dataKey="macd" fill="#f87171" shape="triangle" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         )}
 
@@ -231,7 +266,7 @@ export function WatchlistMacdInspector({ stock, quote, score }: WatchlistMacdIns
         <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-zinc-800 pt-3 text-[10px] uppercase tracking-widest text-zinc-600">
           <span className="flex items-center gap-1.5">
             <TrendingUp className="h-3.5 w-3.5 text-zinc-500" />
-            6M Daily MACD
+            6M Price + MACD
           </span>
           <span>{data?.cached ? "Cached" : "Live fetch"}</span>
         </div>
