@@ -213,6 +213,8 @@ export function WatchlistMacdInspector({ stock, quote, score }: WatchlistMacdIns
                     strokeWidth={2}
                     connectNulls
                   />
+                  <Scatter yAxisId="price" data={buyMarkers} dataKey="close" fill="#22c55e" shape="triangle" />
+                  <Scatter yAxisId="price" data={sellMarkers} dataKey="close" fill="#f87171" shape="triangle" />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -249,8 +251,6 @@ export function WatchlistMacdInspector({ stock, quote, score }: WatchlistMacdIns
                   </Bar>
                   <Line yAxisId="macd" type="monotone" dataKey="macd" dot={false} stroke="#6478ff" strokeWidth={2} connectNulls />
                   <Line yAxisId="macd" type="monotone" dataKey="signal" dot={false} stroke="#ff6b6b" strokeWidth={2} connectNulls />
-                  <Scatter yAxisId="macd" data={buyMarkers} dataKey="macd" fill="#22c55e" shape="triangle" />
-                  <Scatter yAxisId="macd" data={sellMarkers} dataKey="macd" fill="#f87171" shape="triangle" />
                 </ComposedChart>
               </ResponsiveContainer>
             </div>
