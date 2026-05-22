@@ -2,6 +2,7 @@ import { Router } from "express";
 import { logger } from "../lib/logger";
 import { CATEGORIES } from "../lib/stocks-data";
 import {
+  macdService,
   marketDataService,
   scannerService,
   scoreService,
@@ -12,6 +13,30 @@ const router = Router();
 
 router.get("/stocks", (_req, res) => {
   res.json(CATEGORIES);
+});
+
+router.get("/stocks/:ticker/macd", async (req, res) => {
+  try {
+    const result = await macdService.getMacd(req.params.ticker);
+    if (!result.ok) {
+      res.status(result.status).json({
+        error: result.error,
+        reason: result.reason,
+      });
+      return;
+    }
+
+    res.json({
+      ticker: result.ticker,
+      range: result.range,
+      points: result.points,
+      cached: result.cached,
+      updatedAt: result.updatedAt,
+    });
+  } catch (err) {
+    logger.error({ err }, "/stocks/:ticker/macd route failed");
+    res.status(502).json({ error: "MACD chart failed", reason: "PROVIDER_ERROR" });
+  }
 });
 
 router.get("/quotes", (_req, res) => {
