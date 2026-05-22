@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, type FormEvent } from "react";
 import {
   useGetStocks,
   useGetScores,
@@ -11,6 +11,7 @@ import {
   getGetQuotesQueryKey,
   getGetMarketRegimeQueryKey,
   getGetSectorsQueryKey,
+  type Quote,
   type StockScore,
   type SignalDelta,
 } from "@workspace/api-client-react";
@@ -854,7 +855,23 @@ interface RowData {
   score:         StockScore;
   delta:         SignalDelta | undefined;
   rank:          number;
+  onDemand?:     boolean;
 }
+
+type SymbolScanState = "idle" | "loading" | "success" | "error";
+
+type SymbolScanSuccess = {
+  ok: true;
+  source: "on-demand";
+  cached: boolean;
+  result: {
+    ticker: string;
+    company: string;
+    score: StockScore;
+    quote: Pick<Quote, "ticker" | "price" | "changePercent">;
+    scannedAt: number;
+  };
+};
 
 // ── Filter logic ───────────────────────────────────────────────────────────────
 
@@ -995,6 +1012,10 @@ const SORT_OPTIONS: { key: SortKey; label: string }[] = [
 export function AlphaScannerPage() {
   const [filter, setFilter] = useState<FilterKey>("all");
   const [sortBy, setSortBy] = useState<SortKey>("csos");
+  const [searchTicker, setSearchTicker] = useState("");
+  const [scanStatus, setScanStatus] = useState<SymbolScanState>("idle");
+  const [scanMessage, setScanMessage] = useState("");
+  const [onDemandScan, setOnDemandScan] = useState<SymbolScanSuccess | null>(null);
 
   const { data: categories, isLoading: loadingStocks } = useGetStocks();
 
@@ -1044,15 +1065,74 @@ export function AlphaScannerPage() {
     return rows;
   }, [categories, scoresMap, deltasMap, quotesMap]);
 
+  const onDemandRow = useMemo<RowData | undefined>(() => {
+    if (!onDemandScan) return undefined;
+    const { result } = onDemandScan;
+    const liveQuote = quotesMap.get(result.ticker);
+    return {
+      ticker: result.ticker,
+      company: result.company,
+      categoryColor: "f59e0b",
+      price: liveQuote?.price ?? result.quote.price,
+      changePercent: liveQuote?.changePercent ?? result.quote.changePercent,
+      score: result.score,
+      delta: deltasMap.get(result.ticker),
+      rank: 0,
+      onDemand: true,
+    };
+  }, [deltasMap, onDemandScan, quotesMap]);
+
   const sorted = useMemo(() => {
-    const s = sortRows(allRows, sortBy);
-    return s.map((row, i) => ({ ...row, rank: i + 1 }));
-  }, [allRows, sortBy]);
+    const rows = onDemandRow
+      ? allRows.filter(row => row.ticker !== onDemandRow.ticker)
+      : allRows;
+    const s = sortRows(rows, sortBy).map((row, i) => ({
+      ...row,
+      rank: onDemandRow ? i + 2 : i + 1,
+    }));
+    return onDemandRow
+      ? [{ ...onDemandRow, rank: 1 }, ...s]
+      : s;
+  }, [allRows, onDemandRow, sortBy]);
 
   const filtered = useMemo(
-    () => sorted.filter(r => matchesFilter(r, filter)),
+    () => sorted.filter(r => r.onDemand || matchesFilter(r, filter)),
     [sorted, filter],
   );
+
+  async function handleSymbolScan(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const ticker = searchTicker.trim().toUpperCase();
+    if (!ticker) {
+      setScanStatus("error");
+      setScanMessage("Enter a ticker symbol first.");
+      return;
+    }
+
+    setSearchTicker(ticker);
+    setScanStatus("loading");
+    setScanMessage(`Scanning ${ticker}...`);
+
+    try {
+      const response = await fetch("/api/scanner/symbol", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker }),
+      });
+      const payload = await response.json();
+      if (!response.ok || payload?.ok !== true) {
+        throw new Error(payload?.error ?? `Could not scan ${ticker}.`);
+      }
+
+      setOnDemandScan(payload as SymbolScanSuccess);
+      setFilter("all");
+      setScanStatus("success");
+      setScanMessage(`${ticker} pinned at the top${payload.cached ? " from cache" : ""}.`);
+    } catch (err) {
+      setScanStatus("error");
+      setScanMessage(err instanceof Error ? err.message : `Could not scan ${ticker}.`);
+    }
+  }
 
   if (loadingStocks) {
     return (
@@ -1064,13 +1144,59 @@ export function AlphaScannerPage() {
     );
   }
 
-  const hasScores = allRows.length > 0;
+  const hasScores = allRows.length > 0 || Boolean(onDemandRow);
 
   return (
-    <div className="flex-1 overflow-auto">
+    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
 
       {/* ── Context panels ── */}
       <div className="px-4 pt-4 pb-3 space-y-2.5">
+        <form
+          onSubmit={handleSymbolScan}
+          className="rounded-md border border-zinc-800 bg-zinc-950/60 px-3 py-3"
+        >
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-300">
+                Scan any U.S. ticker
+              </div>
+              <div className="mt-1 text-xs text-zinc-500">
+                Search one American stock on demand. The broad scanner stays curated to avoid free-plan rate limits.
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+              <input
+                value={searchTicker}
+                onChange={event => setSearchTicker(event.target.value.toUpperCase())}
+                placeholder="AAPL, PLTR, SMCI..."
+                className="h-9 w-full rounded border border-zinc-800 bg-black px-3 font-mono text-sm uppercase text-zinc-100 outline-none transition-colors placeholder:text-zinc-700 focus:border-amber-500/70 sm:w-52"
+                maxLength={15}
+                aria-label="Ticker symbol"
+              />
+              <button
+                type="submit"
+                disabled={scanStatus === "loading"}
+                className={cn(
+                  "h-9 rounded border px-4 text-xs font-semibold uppercase tracking-wide transition-colors",
+                  scanStatus === "loading"
+                    ? "border-zinc-800 bg-zinc-900 text-zinc-600"
+                    : "border-amber-500/60 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25",
+                )}
+              >
+                {scanStatus === "loading" ? "Scanning" : "Scan"}
+              </button>
+            </div>
+          </div>
+          {scanMessage && (
+            <div className={cn(
+              "mt-2 text-xs",
+              scanStatus === "error" ? "text-red-300" :
+              scanStatus === "success" ? "text-emerald-300" : "text-zinc-500",
+            )}>
+              {scanMessage}
+            </div>
+          )}
+        </form>
         <RegimeBanner />
         <SectorRotationPanel />
       </div>
@@ -1388,6 +1514,11 @@ export function AlphaScannerPage() {
                           </TooltipContent>
                         </Tooltip>
                         <AnalysisTooltip row={row} />
+                        {row.onDemand && (
+                          <span className="text-[8px] font-bold px-1 py-px rounded border bg-amber-500/10 text-amber-300 border-amber-500/40 leading-none">
+                            ON-DEMAND
+                          </span>
+                        )}
                         {score.isSuperstock && (
                           <Tooltip>
                             <TooltipTrigger asChild>
