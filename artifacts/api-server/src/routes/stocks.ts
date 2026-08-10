@@ -2,7 +2,9 @@ import { Router } from "express";
 import { logger } from "../lib/logger";
 import { CATEGORIES } from "../lib/stocks-data";
 import { getCatalystCalendar } from "../lib/catalysts";
+import { rankBreakoutCandidates, rankOptionsCandidates } from "../lib/breakout";
 import {
+  aiWriteupService,
   macdService,
   marketDataService,
   scannerService,
@@ -102,6 +104,78 @@ router.get("/market-regime", (_req, res) => {
 
 router.get("/signal-deltas", (_req, res) => {
   res.json(signalHistoryService.getAllSignalDeltas());
+});
+
+router.get("/breakout-candidates", (_req, res) => {
+  try {
+    const scores = scoreService.computeScores();
+    const quotesMap = new Map(marketDataService.getAllQuotes().map(q => [q.ticker, q]));
+    const candidates = rankBreakoutCandidates(scores, 10);
+
+    res.json(candidates.map(c => {
+      const q = quotesMap.get(c.ticker);
+      const writeup = aiWriteupService.getBreakoutWriteup(c.ticker, {
+        breakoutReadiness: c.breakoutReadiness,
+        ins: c.drivers.ins,
+        acs: c.drivers.acs,
+        vqs: c.drivers.vqs,
+        lqs: c.drivers.lqs,
+        rsi: c.drivers.rsi,
+        fbrs: c.drivers.fbrs,
+        reasonLabel: c.reasonLabel,
+      });
+      return {
+        ticker: c.ticker,
+        company: c.company,
+        price: q?.price ?? 0,
+        changePercent: q?.changePercent ?? 0,
+        breakoutReadiness: c.breakoutReadiness,
+        reasonLabel: c.reasonLabel,
+        drivers: c.drivers,
+        writeup,
+      };
+    }));
+  } catch (err) {
+    logger.error({ err }, "/breakout-candidates route failed");
+    res.status(500).json({ error: "Breakout candidate ranking failed" });
+  }
+});
+
+router.get("/options-watch", async (_req, res) => {
+  try {
+    const scores = scoreService.computeScores();
+    const extByTicker = new Map(marketDataService.getAllExtendedMetrics().map(e => [e.ticker, e]));
+    const quotesMap = new Map(marketDataService.getAllQuotes().map(q => [q.ticker, q]));
+    const candidates = await rankOptionsCandidates(scores, extByTicker, 5);
+
+    res.json(candidates.map(c => {
+      const q = quotesMap.get(c.ticker);
+      const writeup = aiWriteupService.getOptionsWriteup(c.ticker, {
+        direction: c.direction,
+        optionsSetupScore: c.optionsSetupScore,
+        realizedVolatility20d: c.realizedVolatility20d,
+        rsi: c.drivers.rsi,
+        acs: c.drivers.acs,
+        nextEarnings: c.nextEarnings,
+      });
+      return {
+        ticker: c.ticker,
+        company: c.company,
+        price: q?.price ?? 0,
+        changePercent: q?.changePercent ?? 0,
+        direction: c.direction,
+        optionsSetupScore: c.optionsSetupScore,
+        realizedVolatility20d: c.realizedVolatility20d,
+        nextEarnings: c.nextEarnings,
+        closes60d: c.closes60d,
+        drivers: c.drivers,
+        writeup,
+      };
+    }));
+  } catch (err) {
+    logger.error({ err }, "/options-watch route failed");
+    res.status(500).json({ error: "Options candidate ranking failed" });
+  }
 });
 
 router.get("/catalysts", async (req, res) => {

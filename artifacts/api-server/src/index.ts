@@ -17,6 +17,14 @@ if (!FINNHUB_KEY || FINNHUB_KEY.trim() === "") {
   process.exit(1);
 }
 
+if (!process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_API_KEY.trim() === "") {
+  logger.warn(
+    "ANTHROPIC_API_KEY is not set — Breakout Candidates and Options Setups will show " +
+    "their ranked lists and real computed drivers, but AI write-ups will read " +
+    "\"unavailable\" instead of generating. Not fatal; see .env.example.",
+  );
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {

@@ -462,26 +462,36 @@ async function loadInitialData(): Promise<void> {
   }
   logger.info(`  ✓ Quotes loaded: ${quoteCache.size}/${ALL_TICKERS.length}`);
 
-  // Phase 2: Fundamentals (52W H/L, PE, margins, etc.)
-  logger.info("Phase 2: Fetching fundamentals...");
+  // Phase 2: Candles for 50/200-day MAs + closes60d (RSI, MACD, ACS, INS relative
+  // strength all depend on this). Moved to run right after quotes — it used to be
+  // Phase 4, which meant closes60d didn't exist for ANY ticker until ~11-15 minutes
+  // into every cold start (3 full 150-ticker phases ahead of it at the shared
+  // 1.5s/call rate limit). Every score in the "RSI 50 for the whole universe"
+  // report was really "RSI unknown for the whole universe, because candles hadn't
+  // loaded yet" — running this phase second instead of fourth roughly halves that
+  // wait. It does NOT eliminate it: Render's free plan has no persistent disk
+  // (DATA_DIR points at /tmp, wiped on every restart) and spins the service down
+  // after ~15 min idle, so most cold starts still begin from zero. That's an
+  // infra/plan limitation, not something phase ordering alone can fix.
+  logger.info("Phase 2: Fetching candles/MAs...");
+  for (const ticker of ALL_TICKERS) {
+    await fetchCandlesAndMAs(ticker);
+  }
+  logger.info("  ✓ Moving averages loaded");
+
+  // Phase 3: Fundamentals (52W H/L, PE, margins, etc.)
+  logger.info("Phase 3: Fetching fundamentals...");
   for (const ticker of ALL_TICKERS) {
     await fetchFundamentals(ticker);
   }
   logger.info("  ✓ Fundamentals loaded");
 
-  // Phase 3: Market cap profiles
-  logger.info("Phase 3: Fetching profiles...");
+  // Phase 4: Market cap profiles
+  logger.info("Phase 4: Fetching profiles...");
   for (const ticker of ALL_TICKERS) {
     await fetchProfile(ticker);
   }
   logger.info("  ✓ Profiles loaded");
-
-  // Phase 4: Candles for 50/200-day MAs
-  logger.info("Phase 4: Fetching candles/MAs...");
-  for (const ticker of ALL_TICKERS) {
-    await fetchCandlesAndMAs(ticker);
-  }
-  logger.info("  ✓ Moving averages loaded");
 
   // Phase 5: Analyst recommendations
   logger.info("Phase 5: Fetching recommendations...");
@@ -533,10 +543,10 @@ async function periodicMetricsRefresh(): Promise<void> {
   while (true) {
     await sleep(6 * 60 * 60 * 1000);
     for (const ticker of ALL_TICKERS) {
-      await fetchFundamentals(ticker);
+      await fetchCandlesAndMAs(ticker);
     }
     for (const ticker of ALL_TICKERS) {
-      await fetchCandlesAndMAs(ticker);
+      await fetchFundamentals(ticker);
     }
     for (const ticker of ALL_TICKERS) {
       await fetchRecommendations(ticker);

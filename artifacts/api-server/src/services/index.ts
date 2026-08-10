@@ -1,4 +1,5 @@
 export * from "./ai-context-service";
+export * from "./ai-writeup-service";
 export * from "./cache-service";
 export * from "./macd-service";
 export * from "./market-data-bus";

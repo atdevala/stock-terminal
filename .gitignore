@@ -55,3 +55,6 @@ Thumbs.db
 
 # Runtime data — signal history is generated at runtime, not source
 artifacts/api-server/data/signal-history.json
+
+# Downloaded/exported archives of this repo — never intentionally committed
+*.zip

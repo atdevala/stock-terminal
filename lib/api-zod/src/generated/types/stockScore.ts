@@ -54,10 +54,10 @@ export interface StockScore {
   bps: number;
   /** Long-term Quality Score (1–100) — fundamentals compounder quality. Rewards revenue consistency, margin strength, balance sheet health, and fair valuation. Percentile-ranked within universe. */
   lqs: number;
-  /** Relative Strength Index (14D, 0-100) — is price stretched vs its own recent range. Independent of every other score above. */
-  rsi: number;
-  /** Oversold (<=30) | Overbought (>=70) | Neutral */
-  rsiZone: "Oversold" | "Overbought" | "Neutral";
+  /** Relative Strength Index (14D, 0-100) — is price stretched vs its own recent range. Independent of every other score above. Omitted (not a fake 50) when closes60d history isn't loaded yet. */
+  rsi?: number;
+  /** Oversold (<=30) | Overbought (>=70) | Neutral. Omitted when rsi is unavailable. */
+  rsiZone?: "Oversold" | "Overbought" | "Neutral";
   /** Consolidated signal score (1-100) — replaces cos/csos/cpe/bps as the single displayed composite. Built from the former BPS formula. */
   signalScore: number;
   /** Plain-English reason for signalScore — same label set as the former csosLabel. */

@@ -205,31 +205,31 @@ const FILTERS: {
     key: "all", label: "All Stocks",
     base: "border-zinc-600 text-zinc-400 hover:border-zinc-400 hover:text-zinc-200",
     active: "bg-zinc-700 border-zinc-500 text-white",
-    tip: { title: "All Stocks", body: "Every stock in the scanner, ranked by the composite Signal score." },
+    tip: { title: "All Stocks", body: "Every stock in the scanner, ranked by its composite score." },
   },
   {
     key: "accumulate", label: "Accumulate",
     base: "border-amber-700 text-amber-500 hover:border-amber-500 hover:text-amber-300",
     active: "border-amber-500 bg-amber-900/40 text-amber-200",
-    tip: { title: "Accumulate", body: "Signal ≥ 65 with clean setups (FBRS ≤ 70). The system's actionable buy zone." },
+    tip: { title: "Accumulate", body: "Composite score ≥ 65 with clean setups (FBRS ≤ 70). The system's actionable buy zone." },
   },
   {
     key: "watch", label: "Watch",
     base: "border-sky-700 text-sky-500 hover:border-sky-500 hover:text-sky-300",
     active: "border-sky-500 bg-sky-900/40 text-sky-200",
-    tip: { title: "Watch", body: "Signal 45–64 — developing, not yet actionable. Track for acceleration." },
+    tip: { title: "Watch", body: "Composite score 45–64 — developing, not yet actionable. Track for acceleration." },
   },
   {
     key: "caution", label: "Caution",
     base: "border-orange-700 text-orange-500 hover:border-orange-600 hover:text-orange-300",
     active: "border-orange-500 bg-orange-900/40 text-orange-200",
-    tip: { title: "Caution", body: "FBRS above 70 — elevated false-breakout risk regardless of Signal level." },
+    tip: { title: "Caution", body: "FBRS above 70 — elevated false-breakout risk regardless of the composite score." },
   },
   {
     key: "avoid", label: "Avoid",
     base: "border-red-800 text-red-500 hover:border-red-600 hover:text-red-300",
     active: "border-red-600 bg-red-900/40 text-red-200",
-    tip: { title: "Avoid", body: "Signal below 45, or labeled LATE STAGE MOVE / LOW QUALITY — no edge or exit signal." },
+    tip: { title: "Avoid", body: "Composite score below 45, or labeled LATE STAGE MOVE / LOW QUALITY — no edge or exit signal." },
   },
   {
     key: "prebreakout", label: "Pre-Breakout",
@@ -240,7 +240,7 @@ const FILTERS: {
 ];
 
 const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: "signal", label: "Signal" },
+  { key: "signal", label: "Best Setup" },
   { key: "rsi",    label: "Most Oversold" },
 ];
 
@@ -498,7 +498,7 @@ export function AlphaScannerPage() {
           <div className="text-3xl">⚡</div>
           <div className="text-base font-semibold text-zinc-300">Scores are loading</div>
           <div className="text-sm text-zinc-500 max-w-sm">
-            The Scanner ranks stocks by the composite Signal score. Scores populate within a few minutes of the server starting.
+            The Scanner ranks stocks by their composite setup score. Scores populate within a few minutes of the server starting.
           </div>
         </div>
       )}
@@ -517,7 +517,7 @@ export function AlphaScannerPage() {
                 <th className="py-3 px-4 font-medium">Symbol/Company</th>
                 <th className="py-3 px-4 font-medium text-right">Price</th>
                 <th className="py-3 px-3 font-medium text-left">
-                  Signal
+                  Setup
                   <span className="block normal-case font-normal text-[9px] text-muted-foreground/70 tracking-normal">
                     tap for VQS/GVS/INS/ACS/FBRS/LQS
                   </span>

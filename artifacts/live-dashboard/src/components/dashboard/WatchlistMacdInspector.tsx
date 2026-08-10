@@ -76,6 +76,18 @@ function scoreTone(score?: number): string {
   return "text-red-300";
 }
 
+function signalLabelTone(label: string): string {
+  if (label === "PRIME OPPORTUNITY")                return "text-emerald-300";
+  if (label === "EARLY BREAKOUT SETUP")             return "text-amber-300";
+  if (label === "STEALTH ACCUMULATION")             return "text-teal-300";
+  if (label === "HIDDEN CATALYST POTENTIAL")        return "text-sky-300";
+  if (label.startsWith("QUALITY COMPOUNDER"))       return "text-blue-300";
+  if (label === "CONFIRMED TREND")                  return "text-amber-400";
+  if (label === "DEVELOPING SETUP")                 return "text-zinc-400";
+  if (label === "LATE STAGE MOVE")                  return "text-orange-400";
+  return "text-red-400";
+}
+
 export function WatchlistMacdInspector({ stock, quote, score }: WatchlistMacdInspectorProps) {
   const [data, setData] = useState<MacdResponse | null>(null);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -153,16 +165,21 @@ export function WatchlistMacdInspector({ stock, quote, score }: WatchlistMacdIns
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          {[
-            ["CSOS", score?.csos],
+        {score?.signalLabel && (
+          <div className={cn("mt-3 text-[10px] font-bold uppercase tracking-wide", signalLabelTone(score.signalLabel))}>
+            {score.signalLabel}
+          </div>
+        )}
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {([
             ["INS", score?.ins],
             ["ACS", score?.acs],
-          ].map(([label, value]) => (
+            ["RSI", score?.rsi !== undefined ? Math.round(score.rsi) : undefined],
+          ] as const).map(([label, value]) => (
             <div key={label} className="rounded border border-zinc-800 bg-black/30 px-2 py-1.5">
               <div className="text-[9px] uppercase tracking-widest text-zinc-600">{label}</div>
               <div className={cn("font-mono text-sm font-bold", scoreTone(typeof value === "number" ? value : undefined))}>
-                {typeof value === "number" ? value : "-"}
+                {typeof value === "number" ? value : "—"}
               </div>
             </div>
           ))}

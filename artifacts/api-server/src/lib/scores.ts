@@ -33,10 +33,18 @@ function dailyRets(closes: number[]): number[] {
 // Standard Wilder RSI. This is the "is it oversold right now" signal that was
 // missing from the scoring system — every other score here answers "is this a
 // good business" or "is momentum building"; RSI answers "is the price stretched
-// relative to its own recent range." Returns 50 (neutral) if not enough data.
+// relative to its own recent range."
+//
+// Returns undefined when there isn't enough closes60d history yet (fewer than
+// period+1 candles) — this happens for the whole universe right after a cold
+// start, before the candles fetch phase has run. Previously this returned 50,
+// which is indistinguishable from a real neutral reading; the UI would show
+// "RSI 50 / Neutral" for a stock we actually know nothing about. Callers MUST
+// treat undefined as "insufficient data" and render it as such (e.g. "—"), not
+// substitute a number.
 
-export function computeRSI(closes: number[], period = 14): number {
-  if (closes.length < period + 1) return 50;
+export function computeRSI(closes: number[], period = 14): number | undefined {
+  if (closes.length < period + 1) return undefined;
   const changes: number[] = [];
   for (let i = 1; i < closes.length; i++) changes.push(closes[i]! - closes[i - 1]!);
 
@@ -55,7 +63,8 @@ export function computeRSI(closes: number[], period = 14): number {
   return clamp(100 - 100 / (1 + rs), 0, 100);
 }
 
-export function rsiZone(rsi: number): "Oversold" | "Overbought" | "Neutral" {
+export function rsiZone(rsi: number | undefined): "Oversold" | "Overbought" | "Neutral" | undefined {
+  if (rsi === undefined) return undefined;
   if (rsi <= 30) return "Oversold";
   if (rsi >= 70) return "Overbought";
   return "Neutral";
@@ -1070,8 +1079,10 @@ export interface StockScore {
   // ── LQS — Long-term Quality Score (fundamentals compounder) ──────────────
   lqs: number;
   // ── RSI(14) — is the price stretched relative to its own recent range ────
-  rsi: number;
-  rsiZone: "Oversold" | "Overbought" | "Neutral";
+  // Undefined (not 50) when closes60d history isn't loaded yet — never fake a
+  // neutral reading. The UI must render this as "insufficient data".
+  rsi?: number;
+  rsiZone?: "Oversold" | "Overbought" | "Neutral";
   // ── Consolidated signal ────────────────────────────────────────────────
   // COS, CSOS, CPE, and BPS were four different linear recombinations of the
   // same five underlying scores (VQS, GVS, INS, ACS, FBRS) — they moved
@@ -1255,8 +1266,8 @@ export function computeScore(
       cpe: 0,
       bps: 0,
       lqs: 0,
-      rsi: 50,
-      rsiZone: "Neutral",
+      rsi: undefined,
+      rsiZone: undefined,
       signalScore: 0,
       signalLabel: "LOW QUALITY / AVOID",
     };

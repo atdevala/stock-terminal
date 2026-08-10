@@ -43,7 +43,10 @@ function signalLabelStyle(label: string): string {
 function rsiTone(zone: StockScore["rsiZone"] | undefined): string {
   if (zone === "Oversold") return "text-emerald-400 border-emerald-500/40 bg-emerald-500/10";
   if (zone === "Overbought") return "text-red-400 border-red-500/40 bg-red-500/10";
-  return "text-zinc-400 border-zinc-700/40 bg-zinc-800/30";
+  if (zone === "Neutral") return "text-zinc-400 border-zinc-700/40 bg-zinc-800/30";
+  // No zone at all (rsi undefined) — visually distinct dashed/dimmed style so this
+  // never reads as a real "Neutral" reading.
+  return "text-zinc-700 border-dashed border-zinc-800 bg-transparent";
 }
 
 function scoreTileColor(s: number): string {
@@ -90,30 +93,31 @@ function fmt(v: number | undefined, suffix = "%", decimals = 1): string {
 
 // ── "Why" text — attached to the single retained composite (signalScore) ─────
 
+// COS/CSOS/CPE/BPS are retired as user-visible values — this only ever
+// interpolates VQS/GVS/INS/ACS/FBRS/LQS/RSI into the reason text.
 function getSignalReason(
   label: string,
-  vqs: number, ins: number, acs: number, cos: number, cpe: number,
+  vqs: number, ins: number, acs: number,
 ): { headline: string; detail: string } {
-  const gap = ins - cos;
   if (label === "PRIME OPPORTUNITY")
     return {
       headline: "All signals strongly aligned",
-      detail: `INS (${ins}), ACS (${acs}), COS (${cos}), and VQS (${vqs}) are all elevated together — a rare full-conviction setup where fundamentals, growth, momentum, and institutional accumulation are firing in unison.`,
+      detail: `INS (${ins}), ACS (${acs}), and VQS (${vqs}) are all elevated together, and price action confirms it — a rare full-conviction setup where fundamentals, growth, momentum, and institutional accumulation are firing in unison.`,
     };
   if (label === "EARLY BREAKOUT SETUP")
     return {
-      headline: `INS is leading COS by ${gap} points`,
-      detail: `INS (${ins}) is signaling early institutional positioning before the move shows up in COS (${cos}). This gap historically closes over 2–6 weeks as the broader market confirms the move.`,
+      headline: "Momentum is leading price confirmation",
+      detail: `INS (${ins}) is signaling early institutional positioning before the broader market has confirmed the move in price. This kind of lead historically closes over 2–6 weeks.`,
     };
   if (label === "STEALTH ACCUMULATION")
     return {
       headline: `Quiet institutional build-up detected (ACS ${acs})`,
-      detail: `ACS (${acs}) is elevated with COS (${cos}) still low — institutions are quietly positioning before the public breakout.`,
+      detail: `ACS (${acs}) is elevated while price is still quiet — institutions are positioning before the public breakout.`,
     };
   if (label === "HIDDEN CATALYST POTENTIAL")
     return {
-      headline: `Market underpricing an upcoming catalyst (CPE ${cpe})`,
-      detail: `CPE (${cpe}) is high while COS (${cos}) is still muted — quality and accumulation signals suggest a re-rating event may be approaching.`,
+      headline: "Market underpricing an upcoming catalyst",
+      detail: `Quality and accumulation signals (VQS ${vqs}, ACS ${acs}) suggest a re-rating event may be approaching, before the crowd has priced it in.`,
     };
   if (label === "QUALITY COMPOUNDER — ACTIVATING")
     return {
@@ -127,18 +131,18 @@ function getSignalReason(
     };
   if (label === "CONFIRMED TREND")
     return {
-      headline: `Momentum confirmed across INS (${ins}) and COS (${cos})`,
+      headline: `Momentum confirmed (INS ${ins})`,
       detail: `Both the leading and confirmation signals are elevated, with ACS (${acs}) providing institutional support.`,
     };
   if (label === "LATE STAGE MOVE")
     return {
-      headline: `COS (${cos}) is extended while INS (${ins}) is fading`,
+      headline: `Price is extended while INS (${ins}) is fading`,
       detail: `This pattern suggests the bulk of the move has already occurred — risk/reward is deteriorating for new entries.`,
     };
   if (label === "DEVELOPING SETUP")
     return {
       headline: "Mixed signals — no dominant pattern yet",
-      detail: `Watch INS and ACS for strengthening — a rise in INS with COS still lagging would upgrade this to an early breakout.`,
+      detail: "Watch INS and ACS for strengthening before price catches up — that combination would upgrade this to an early breakout.",
     };
   return {
     headline: `Fundamental floor override (VQS ${vqs})`,
@@ -150,10 +154,10 @@ function getSignalEdgeInsights(
   vqs: number, ins: number, acs: number, cos: number, fbrs?: number,
 ): string[] {
   const insights: string[] = [];
-  const gap = ins - cos;
+  const leadsPrice = ins - cos > 20 && ins > 55; // cos used only to decide, never displayed
 
-  if (gap > 20 && ins > 55)
-    insights.push(`INS leads COS by ${gap} pts — potential 2–6 week window before broad-market confirmation.`);
+  if (leadsPrice)
+    insights.push("INS is running well ahead of price confirmation — potential 2–6 week window before the broader market catches up.");
   if (acs > ins + 15 && acs > 60)
     insights.push(`ACS (${acs}) is ahead of INS (${ins}) — quiet institutional accumulation before price momentum forms.`);
   if (ins >= 65 && acs >= 65 && Math.abs(ins - acs) < 15)
@@ -163,7 +167,7 @@ function getSignalEdgeInsights(
   if (fbrs !== undefined && fbrs > 65)
     insights.push(`⚠ FBRS ${fbrs} — elevated false-breakout risk. Verify volume is organic before sizing up.`);
   if (cos > 80 && ins < 50)
-    insights.push(`COS (${cos}) fully extended while INS (${ins}) declines — late-cycle caution.`);
+    insights.push("Price is fully extended while INS declines — late-cycle caution.");
 
   return insights.slice(0, 3);
 }
@@ -183,12 +187,13 @@ function StatTile({ label, value, sublabel }: { label: string; value: number; su
 }
 
 function DetailsPanel({ score, focus }: { score: StockScore; focus?: string }) {
+  // cos is read here only to feed the reason/insight logic (which decides WHEN
+  // a pattern applies) — it is never rendered. See getSignalReason's note.
   const vqs = score.vqs, gvs = score.gvs, cos = score.cos, acs = score.acs;
   const ins = score.ins ?? 0;
   const fbrs = score.fbrs;
   const lqs = score.lqs;
-  const cpe = score.cpe ?? 50;
-  const reason = getSignalReason(score.signalLabel, vqs, ins, acs, cos, cpe);
+  const reason = getSignalReason(score.signalLabel, vqs, ins, acs);
   const insights = getSignalEdgeInsights(vqs, ins, acs, cos, fbrs);
 
   const fundamentals: [string, string][] = [
@@ -232,15 +237,15 @@ function DetailsPanel({ score, focus }: { score: StockScore; focus?: string }) {
 
       {/* Underlying signals — the "why" behind the composite, not columns */}
       <div>
-        <div className="text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">Underlying Signals</div>
+        <div className="text-[9px] uppercase tracking-widest text-zinc-600 mb-1.5">The Numbers Behind It</div>
         <div className="grid grid-cols-3 sm:grid-cols-7 gap-1.5">
           <StatTile label="VQS" value={vqs} sublabel="Quality" />
           <StatTile label="GVS" value={gvs} sublabel="Growth" />
-          <StatTile label="COS" value={cos} sublabel="Combined" />
           <StatTile label="INS" value={ins} sublabel="Inflection" />
           <StatTile label="ACS" value={acs} sublabel="Accum." />
           {fbrs !== undefined && <StatTile label="FBRS" value={fbrs} sublabel="Hype risk" />}
           {lqs !== undefined && <StatTile label="LQS" value={lqs} sublabel="Quality" />}
+          {score.rsi !== undefined && <StatTile label="RSI" value={Math.round(score.rsi)} sublabel={score.rsiZone} />}
         </div>
       </div>
 
@@ -377,40 +382,35 @@ export function StockRow({
           </div>
         </td>
 
-        {/* Signal — the ONE composite score + label, with RSI/oversold shown right next to it */}
+        {/* Reason — the plain-English "why" leads; the composite score is small/secondary beneath it */}
         <td className="py-2.5 px-3 align-top">
           {score ? (
             <button
               type="button"
               onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
-              className="flex items-center gap-2.5 w-full"
+              className="flex items-center gap-2 w-full"
               aria-expanded={expanded}
-              data-testid={`signal-toggle-${stock.ticker}`}
+              data-testid={`reason-toggle-${stock.ticker}`}
             >
-              <div className={cn(
-                "inline-flex flex-col items-center rounded border px-2 py-1 min-w-[46px] shrink-0",
-                signalColor(score.signalScore),
-              )}>
-                <span className="font-bold text-base leading-none">{score.signalScore}</span>
-              </div>
-              {score.rsi !== undefined && (
-                <div className={cn(
-                  "inline-flex flex-col items-center rounded border px-2 py-1 min-w-[42px] shrink-0",
-                  rsiTone(score.rsiZone),
-                )}>
-                  <span className="font-bold text-sm leading-none">{Math.round(score.rsi)}</span>
-                  <span className="text-[8px] uppercase tracking-wide leading-none mt-0.5">
-                    {score.rsiZone === "Oversold" ? "Oversold" : score.rsiZone === "Overbought" ? "Overbt" : "RSI"}
-                  </span>
-                </div>
-              )}
-              <div className="min-w-0 text-left">
-                <div className={cn("text-[10px] font-bold uppercase tracking-wide leading-tight", signalLabelStyle(score.signalLabel))}>
+              <div className="min-w-0 text-left flex-1">
+                <div className={cn("text-[11px] font-bold uppercase tracking-wide leading-tight", signalLabelStyle(score.signalLabel))}>
                   {score.signalLabel}
+                </div>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className={cn("text-[10px] font-semibold tabular-nums px-1 py-px rounded border", signalColor(score.signalScore))}>
+                    {score.signalScore}
+                  </span>
+                  <span
+                    className={cn("text-[10px] font-semibold tabular-nums px-1 py-px rounded border", rsiTone(score.rsiZone))}
+                    title={score.rsi === undefined ? "RSI needs 14+ days of price history — not loaded yet" : undefined}
+                  >
+                    RSI {score.rsi !== undefined ? Math.round(score.rsi) : "—"}
+                    {score.rsiZone === "Oversold" ? " · Oversold" : score.rsiZone === "Overbought" ? " · Overbought" : ""}
+                  </span>
                 </div>
               </div>
               <ChevronDown className={cn(
-                "h-3.5 w-3.5 text-zinc-600 ml-auto shrink-0 transition-transform",
+                "h-3.5 w-3.5 text-zinc-600 shrink-0 transition-transform",
                 expanded && "rotate-180",
               )} />
             </button>

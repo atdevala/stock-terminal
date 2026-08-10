@@ -1,13 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  Activity,
-  Brain,
-  Database,
-  LayoutDashboard,
-  PanelRight,
-  Radar,
-  SlidersHorizontal,
-} from "lucide-react";
+import { LayoutDashboard, Radar } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type WorkstationTab = {
@@ -23,27 +15,6 @@ type WorkstationShellProps = {
   onTabChange: (tab: string) => void;
   children: ReactNode;
 };
-
-const readiness = [
-  {
-    label: "Market Data",
-    value: "Finnhub primary",
-    detail: "Provider router ready",
-    icon: Database,
-  },
-  {
-    label: "Signal Engine",
-    value: "Legacy factors registered",
-    detail: "VQS/GVS/COS/INS active",
-    icon: Activity,
-  },
-  {
-    label: "Options + AI",
-    value: "Service shells ready",
-    detail: "Awaiting normalized data",
-    icon: Brain,
-  },
-];
 
 export function WorkstationShell({
   tabs,
@@ -77,9 +48,6 @@ export function WorkstationShell({
             </button>
           ))}
         </nav>
-        <div className="mt-auto flex h-10 w-10 items-center justify-center rounded-md border border-zinc-800 text-zinc-500">
-          <SlidersHorizontal className="h-4 w-4" />
-        </div>
       </aside>
 
       <section className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -119,37 +87,6 @@ export function WorkstationShell({
 
         <div className="flex min-h-0 flex-1 overflow-hidden">{children}</div>
       </section>
-
-      <aside className="hidden w-[312px] flex-none border-l border-border/70 bg-zinc-950/45 xl:flex xl:flex-col">
-        <div className="flex items-center gap-2 border-b border-border/70 px-4 py-3">
-          <PanelRight className="h-4 w-4 text-amber-300" />
-          <div>
-            <div className="text-sm font-semibold text-foreground">Intelligence Layer</div>
-            <div className="text-xs text-muted-foreground">Architecture readiness</div>
-          </div>
-        </div>
-        <div className="space-y-1 p-3">
-          {readiness.map(item => {
-            const Icon = item.icon;
-            return (
-              <div key={item.label} className="rounded-md border border-zinc-800/80 bg-black/20 p-3">
-                <div className="flex items-center gap-2">
-                  <Icon className="h-4 w-4 text-zinc-300" />
-                  <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">
-                    {item.label}
-                  </span>
-                </div>
-                <div className="mt-2 text-sm font-medium text-zinc-100">{item.value}</div>
-                <div className="mt-0.5 text-xs text-muted-foreground">{item.detail}</div>
-              </div>
-            );
-          })}
-        </div>
-        <div className="mt-auto border-t border-border/70 p-4 text-xs leading-relaxed text-muted-foreground">
-          Phase 5 keeps the live product stable while carving out space for chart, signal inspector,
-          options, alert, and AI review panels.
-        </div>
-      </aside>
     </div>
   );
 }
