@@ -142,7 +142,7 @@ function matchesFilter(
     case "divergence":
       return typeof delta?.divergence === "string" && delta.divergence.trim() !== "";
     case "latecycle":
-      return score.csosLabel === "LATE STAGE MOVE" || (score.cos > 78 && (score.ins ?? 0) < 48);
+      return score.signalLabel === "LATE STAGE MOVE" || (score.cos > 78 && (score.ins ?? 0) < 48);
     default:
       return true;
   }
@@ -341,157 +341,23 @@ export function Watchlist() {
                 <div className="h-px flex-1 bg-border/50 ml-4" />
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-border bg-card shadow-sm">
-                <table className="min-w-[1280px] w-full text-left border-collapse">
+              <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
+                <table className="w-full text-left border-collapse table-fixed">
+                  <colgroup>
+                    <col className="w-auto" />
+                    <col className="w-[110px] sm:w-[130px]" />
+                    <col className="w-[150px] sm:w-[210px]" />
+                  </colgroup>
                   <thead>
                     <tr className="border-b border-border bg-muted/30 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                       <th className="py-3 px-4 font-medium">Symbol/Company</th>
                       <th className="py-3 px-4 font-medium text-right">Price</th>
-                      <th className="py-3 px-4 font-medium text-right">CHG $</th>
-                      <th className="py-3 px-4 font-medium text-right">Day Chg %</th>
-                      <th className="py-3 px-4 font-medium text-right">Ext Chg %</th>
-                      <th className="py-3 px-4 font-medium text-right">Day H/L</th>
-                      <th className="py-3 px-4 font-medium text-right hidden md:table-cell">52W H/L</th>
-                      <th className="py-3 px-4 font-medium text-right hidden sm:table-cell">P/E</th>
-                      <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2">VQS</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
-                            <p className="font-semibold text-white">(Valuation Quality Score)</p>
-                            <p className="text-zinc-300 text-xs">Measures how fundamentally strong and reasonably priced a company is. Higher VQS = Stronger business quality relative to price.</p>
-                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div><span className="text-emerald-400 font-mono">80+</span><span className="text-zinc-300"> → high-quality undervalued growth</span></div>
-                              <div><span className="text-emerald-400 font-mono">65–79</span><span className="text-zinc-300"> → strong fundamentals</span></div>
-                              <div><span className="text-yellow-400 font-mono">50–64</span><span className="text-zinc-300"> → mixed / fair value</span></div>
-                              <div><span className="text-red-400 font-mono">below 50</span><span className="text-zinc-300"> → weaker fundamentals or overpriced</span></div>
-                            </div>
-                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Use VQS to filter out weak hype stocks and identify companies with sustainable long-term strength.</p>
-                          </TooltipContent>
-                        </Tooltip>
+                      <th className="py-3 px-3 font-medium text-left">
+                        Signal
+                        <span className="block normal-case font-normal text-[9px] text-muted-foreground/70 tracking-normal">
+                          tap for VQS/GVS/INS/ACS/FBRS/LQS
+                        </span>
                       </th>
-                      <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2">GVS</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
-                            <p className="font-semibold text-white">(Growth Volatility Score)</p>
-                            <p className="text-zinc-300 text-xs">Measures how strong a stock's growth, momentum, and breakout potential currently are. Higher GVS = Stronger momentum and higher probability of a major breakout move.</p>
-                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div><span className="text-emerald-400 font-mono">85+</span><span className="text-zinc-300"> → explosive breakout setup</span></div>
-                              <div><span className="text-emerald-400 font-mono">70–84</span><span className="text-zinc-300"> → strong momentum growth stock</span></div>
-                              <div><span className="text-yellow-400 font-mono">55–69</span><span className="text-zinc-300"> → early-stage or re-accelerating growth</span></div>
-                              <div><span className="text-orange-400 font-mono">40–54</span><span className="text-zinc-300"> → weakening momentum</span></div>
-                              <div><span className="text-red-400 font-mono">below 40</span><span className="text-zinc-300"> → broken or low-interest growth story</span></div>
-                            </div>
-                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Use GVS to identify stocks gaining institutional attention and entering strong growth cycles.</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </th>
-                      <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2">COS</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
-                            <p className="font-semibold text-white">(Combined Opportunity Score)</p>
-                            <p className="text-zinc-300 text-xs">Blends VQS and GVS into one overall opportunity score that balances business quality, valuation, growth acceleration, and breakout potential. Higher COS = Strongest combination of quality fundamentals and upside momentum.</p>
-                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div><span className="text-emerald-400 font-mono">80+</span><span className="text-zinc-300"> → elite growth opportunity</span></div>
-                              <div><span className="text-emerald-400 font-mono">70–79</span><span className="text-zinc-300"> → strong risk/reward setup</span></div>
-                              <div><span className="text-yellow-400 font-mono">55–69</span><span className="text-zinc-300"> → decent but incomplete setup</span></div>
-                              <div><span className="text-orange-400 font-mono">40–54</span><span className="text-zinc-300"> → weak or inconsistent signals</span></div>
-                              <div><span className="text-red-400 font-mono">below 40</span><span className="text-zinc-300"> → avoid / low conviction</span></div>
-                            </div>
-                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Use COS to rank the best overall opportunities after filtering for both quality and momentum.</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </th>
-                      <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-violet-400">INS</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
-                            <p className="font-semibold text-violet-300">(Inflection Signal Score)</p>
-                            <p className="text-zinc-300 text-xs">A leading indicator that detects early-stage breakout setups BEFORE they show up in high COS scores. Combines momentum acceleration, volume surges, earnings surprises, and relative strength.</p>
-                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div><span className="text-emerald-400 font-mono">80+</span><span className="text-zinc-300"> → explosive early breakout</span></div>
-                              <div><span className="text-emerald-400 font-mono">65–79</span><span className="text-zinc-300"> → early momentum building</span></div>
-                              <div><span className="text-yellow-400 font-mono">50–64</span><span className="text-zinc-300"> → neutral / developing</span></div>
-                              <div><span className="text-orange-400 font-mono">30–49</span><span className="text-zinc-300"> → weak / no edge</span></div>
-                              <div><span className="text-red-400 font-mono">below 30</span><span className="text-zinc-300"> → avoid</span></div>
-                            </div>
-                            <div className="text-xs border-t border-zinc-700 pt-2 space-y-0.5">
-                              <div className="text-zinc-400 font-semibold mb-1">Formula (0–100):</div>
-                              <div className="text-zinc-400">25% Delta GVS · 20% Volume Accel</div>
-                              <div className="text-zinc-400">20% Narrative Momentum · 20% EPS Slope</div>
-                              <div className="text-zinc-400">15% Delta VQS</div>
-                            </div>
-                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">INS leads COS by 2–6 weeks in emerging winners. High INS + low COS = pre-breakout candidate.</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </th>
-                      <th className="py-3 px-4 font-medium text-center hidden 2xl:table-cell">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-teal-500">ACS</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
-                            <p className="font-semibold text-teal-300">(Accumulation Confidence Score)</p>
-                            <p className="text-zinc-300 text-xs">Detects quiet institutional accumulation before it becomes public knowledge. Combines up-volume ratio, relative strength vs SPY, price compression (coiling), volume surge, and closing strength.</p>
-                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div><span className="text-teal-300 font-mono">80+</span><span className="text-zinc-300"> → strong institutional accumulation</span></div>
-                              <div><span className="text-teal-400 font-mono">60–79</span><span className="text-zinc-300"> → moderate accumulation</span></div>
-                              <div><span className="text-zinc-400 font-mono">below 60</span><span className="text-zinc-300"> → weak / no detectable accumulation</span></div>
-                            </div>
-                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">High ACS + high INS = institutional buying before market consensus forms.</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </th>
-                      <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-amber-400">SIGNAL</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
-                            <p className="font-semibold text-amber-300">(Consolidated Signal)</p>
-                            <p className="text-zinc-300 text-xs">Replaces COS/CSOS/CPE/BPS as separate scores — those four were different weighted recombinations of the same VQS/GVS/INS/ACS/FBRS inputs and mostly moved together. This is the single composite (built from the former BPS formula, which already had the most complete logic: INS-COS gap bonus, LQS quality multiplier) plus a plain-English reason.</p>
-                            <div className="text-xs space-y-1 border-t border-zinc-700 pt-2">
-                              <div className="text-zinc-500 font-semibold mb-1 uppercase tracking-widest text-[9px]">Labels</div>
-                              <div><span className="text-emerald-300 font-medium">PRIME OPPORTUNITY</span><span className="text-zinc-400"> — all signals co-elevated, full conviction</span></div>
-                              <div><span className="text-amber-300 font-medium">EARLY BREAKOUT SETUP</span><span className="text-zinc-400"> — INS front-running COS, pre-breakout entry</span></div>
-                              <div><span className="text-teal-300 font-medium">STEALTH ACCUMULATION</span><span className="text-zinc-400"> — quiet institutional build-up, ACS dominant</span></div>
-                              <div><span className="text-sky-300 font-medium">HIDDEN CATALYST POTENTIAL</span><span className="text-zinc-400"> — underpriced catalyst, not yet reflected in price</span></div>
-                              <div><span className="text-blue-300 font-medium">QUALITY COMPOUNDER — ACTIVATING</span><span className="text-zinc-400"> — strong fundamentals, INS now live</span></div>
-                              <div><span className="text-blue-400 font-medium">QUALITY COMPOUNDER — DORMANT</span><span className="text-zinc-400"> — quality business, no timing signal yet</span></div>
-                              <div><span className="text-amber-400 font-medium">CONFIRMED TREND</span><span className="text-zinc-400"> — move confirmed with institutional backing</span></div>
-                              <div><span className="text-zinc-400 font-medium">DEVELOPING SETUP</span><span className="text-zinc-400"> — signals building, not yet converged</span></div>
-                              <div><span className="text-orange-400 font-medium">LATE STAGE MOVE</span><span className="text-zinc-400"> — extended move, fading INS — consider trimming</span></div>
-                              <div><span className="text-red-400 font-medium">LOW QUALITY / AVOID</span><span className="text-zinc-400"> — VQS below 40, do not chase</span></div>
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </th>
-                      <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-rose-400">RSI</span>
-                          </TooltipTrigger>
-                          <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
-                            <p className="font-semibold text-rose-300">(Relative Strength Index, 14D)</p>
-                            <p className="text-zinc-300 text-xs">Standard Wilder RSI — is the price stretched relative to its own recent range? This is independent of every quality/momentum score in the other columns; it's the direct answer to "is this oversold right now."</p>
-                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div><span className="text-emerald-400 font-mono">≤30</span><span className="text-zinc-300"> → oversold</span></div>
-                              <div><span className="text-zinc-400 font-mono">31–69</span><span className="text-zinc-300"> → neutral</span></div>
-                              <div><span className="text-red-400 font-mono">≥70</span><span className="text-zinc-300"> → overbought</span></div>
-                            </div>
-                          </TooltipContent>
-                        </Tooltip>
-                      </th>
-                      <th className="py-3 px-4 font-medium text-center hidden lg:table-cell">Focus</th>
                     </tr>
                   </thead>
                   <tbody>

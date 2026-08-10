@@ -93,7 +93,7 @@ function isRising(delta: SignalDelta | undefined): boolean {
 function isLateCycle(score: StockScore | undefined, delta: SignalDelta | undefined): boolean {
   if (!score) return false;
   return (
-    score.csosLabel === "LATE STAGE MOVE" ||
+    score.signalLabel === "LATE STAGE MOVE" ||
     score.fbrs > 70 ||
     (score.cos > 78 && scoreValue(score.ins) < 48) ||
     delta?.divergence?.includes("LATE CYCLE") === true
@@ -110,19 +110,14 @@ function buildUniverse(categories: StockCategory[]) {
   );
 }
 
+// Ranks by the single retained composite score — no separate CSOS/INS/ACS/CPE/BPS blend.
 function scoreOpportunity(score: StockScore): number {
-  return (
-    scoreValue(score.csos) * 0.34 +
-    scoreValue(score.ins) * 0.22 +
-    scoreValue(score.acs) * 0.18 +
-    scoreValue(score.cpe) * 0.16 +
-    scoreValue(score.bps) * 0.1
-  );
+  return scoreValue(score.signalScore);
 }
 
 function riskReason(score: StockScore | undefined, delta: SignalDelta | undefined, quote: Quote | undefined): string {
   if (delta?.divergence?.includes("LATE CYCLE")) return "Late-cycle divergence";
-  if (score?.csosLabel === "LATE STAGE MOVE") return "Late-stage CSOS";
+  if (score?.signalLabel === "LATE STAGE MOVE") return "Late-stage move";
   if ((score?.fbrs ?? 0) > 70) return "False breakout risk";
   if (score && score.cos > 78 && scoreValue(score.ins) < 48) return "COS extended, INS fading";
   if ((quote?.changePercent ?? 0) <= -5) return "Price pressure";
@@ -132,7 +127,7 @@ function riskReason(score: StockScore | undefined, delta: SignalDelta | undefine
 function riskRank(score: StockScore | undefined, delta: SignalDelta | undefined, quote: Quote | undefined): number {
   return (
     (score?.fbrs ?? 0) +
-    (score?.csosLabel === "LATE STAGE MOVE" ? 25 : 0) +
+    (score?.signalLabel === "LATE STAGE MOVE" ? 25 : 0) +
     (delta?.divergence ? 16 : 0) +
     Math.max(0, -(quote?.changePercent ?? 0)) * 2
   );
@@ -190,7 +185,7 @@ export function SignalCommandCenter({
       .map(item => scoresMap.get(item.stock.ticker))
       .filter((score): score is StockScore => Boolean(score));
 
-    const totalCsos = scored.reduce((sum, score) => sum + scoreValue(score.csos), 0);
+    const totalSignal = scored.reduce((sum, score) => sum + scoreValue(score.signalScore), 0);
 
     return {
       total: universe.length,
@@ -202,7 +197,7 @@ export function SignalCommandCenter({
         return typeof divergence === "string" && divergence.trim() !== "";
       }).length,
       lateCycle: universe.filter(item => isLateCycle(scoresMap.get(item.stock.ticker), deltasMap.get(item.stock.ticker))).length,
-      avgCsos: scored.length ? Math.round(totalCsos / scored.length) : 0,
+      avgCsos: scored.length ? Math.round(totalSignal / scored.length) : 0,
     };
   }, [deltasMap, scoresMap, universe]);
 
@@ -256,7 +251,7 @@ export function SignalCommandCenter({
           .filter((score): score is StockScore => Boolean(score));
 
         const avgCsos = scored.length
-          ? Math.round(scored.reduce((sum, score) => sum + scoreValue(score.csos), 0) / scored.length)
+          ? Math.round(scored.reduce((sum, score) => sum + scoreValue(score.signalScore), 0) / scored.length)
           : 0;
 
         const avgIns = scored.length
@@ -308,7 +303,7 @@ export function SignalCommandCenter({
 
         <div className="grid grid-cols-2 border-b border-zinc-800 bg-zinc-950/35 md:grid-cols-4 xl:grid-cols-6">
           <CommandMetric label="Universe" value={breadth.total} detail={`${breadth.scored} scored`} />
-          <CommandMetric label="Avg CSOS" value={breadth.avgCsos} detail="Watchlist breadth" tone="amber" />
+          <CommandMetric label="Avg Signal" value={breadth.avgCsos} detail="Watchlist breadth" tone="amber" />
           <CommandMetric label="Accumulation" value={breadth.accumulation} detail="ACS >= 65" tone="green" />
           <CommandMetric label="Rising INS" value={breadth.rising} detail="Signal trend up" tone="violet" />
           <CommandMetric label="Divergence" value={breadth.divergence} detail="Active flags" tone="amber" />
@@ -322,7 +317,7 @@ export function SignalCommandCenter({
                 <Zap className="h-4 w-4 text-amber-300" />
                 <span className="text-sm font-semibold text-zinc-100">Opportunity Radar</span>
               </div>
-              <span className="text-[10px] uppercase tracking-widest text-zinc-500">CSOS + INS + ACS + CPE</span>
+              <span className="text-[10px] uppercase tracking-widest text-zinc-500">Ranked by composite Signal</span>
             </div>
             <div className="divide-y divide-zinc-800/80">
               {opportunities.map((item, index) => (
@@ -335,10 +330,9 @@ export function SignalCommandCenter({
                       <span className="rounded border border-zinc-800 px-1.5 py-0.5 text-[10px] text-zinc-500">{item.sector}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-1.5">
-                      <ScorePill label="CSOS" value={item.score.csos} />
-                      <ScorePill label="INS" value={item.score.ins} />
-                      <ScorePill label="ACS" value={item.score.acs} />
-                      <ScorePill label="CPE" value={item.score.cpe} />
+                      <ScorePill label="Signal" value={item.score.signalScore} />
+                      {item.score.rsi !== undefined && <ScorePill label="RSI" value={item.score.rsi} />}
+                      <span className="text-[10px] text-zinc-500 self-center truncate">{item.score.signalLabel}</span>
                     </div>
                   </div>
                   <div className="text-right">
@@ -373,7 +367,7 @@ export function SignalCommandCenter({
                         <span className="h-2 w-2 rounded-full" style={{ backgroundColor: `#${sector.color}` }} />
                         <span className="truncate text-zinc-300">{sector.name}</span>
                       </div>
-                      <span className="font-mono text-zinc-500">CSOS {sector.avgCsos}</span>
+                      <span className="font-mono text-zinc-500">Signal {sector.avgCsos}</span>
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-zinc-900">
                       <div

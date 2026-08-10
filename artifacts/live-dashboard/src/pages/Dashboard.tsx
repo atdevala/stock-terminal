@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Activity, LayoutDashboard } from "lucide-react";
 import { MarketStatusHeader } from "@/components/dashboard/MarketStatusHeader";
 import { TopMoversStrip } from "@/components/dashboard/TopMoversStrip";
-import { CatalystCalendar } from "@/components/dashboard/CatalystCalendar";
 import { Watchlist } from "@/components/dashboard/Watchlist";
 import {
   WorkstationShell,
@@ -15,13 +14,13 @@ type AppTab = "watchlist" | "alpha";
 const TABS: WorkstationTab[] = [
   {
     key: "watchlist",
-    label: "Watchlist",
-    description: "Signal-ranked sector watchlist",
+    label: "Your List",
+    description: "Your tracked stocks, signal-ranked",
     icon: <LayoutDashboard className="h-4 w-4" />,
   },
   {
     key: "alpha",
-    label: "Scanner",
+    label: "Whole Market",
     description: "Cross-universe alpha discovery",
     icon: <Activity className="h-4 w-4" />,
   },
@@ -44,7 +43,6 @@ export default function Dashboard() {
           activeTab={activeTab}
           onTabChange={tab => setActiveTab(tab as AppTab)}
         >
-          <CatalystCalendar />
           {activeTab === "watchlist" && <Watchlist />}
           {activeTab === "alpha" && <AlphaScannerPage />}
         </WorkstationShell>
