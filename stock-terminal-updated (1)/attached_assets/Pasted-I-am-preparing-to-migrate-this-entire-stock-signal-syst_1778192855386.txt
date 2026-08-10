@@ -1,0 +1,151 @@
+I am preparing to migrate this entire stock signal system (VQS, GVS, COS, INS, ACS + dashboards) OFF Replit to another hosting environment.
+
+Before I move it, I need this codebase made PRODUCTION-READY, PORTABLE, and NON-REPLIT-DEPENDENT.
+
+Perform a full system hardening pass and fix ANY issues that would break when deployed elsewhere (AWS, Render, Railway, VPS, local server, etc).
+
+---
+
+# 1. REMOVE ALL REPLIT DEPENDENCIES
+
+Ensure the code does NOT rely on:
+- Replit DB
+- Replit internal file paths
+- Replit-specific environment assumptions
+- Replit run commands
+- any implicit Replit background services
+
+Replace with:
+- standard Python/Node libraries only
+- portable file system paths (os.path / pathlib)
+
+---
+
+# 2. ENVIRONMENT CONFIGURATION HARDENING
+
+Create a fully portable configuration system:
+
+- All API keys must be in .env only
+- Add config loader module (config.py or equivalent)
+- Validate missing environment variables at startup
+- Fail gracefully with clear error messages
+
+No hardcoded secrets anywhere.
+
+---
+
+# 3. DEPENDENCY LOCKDOWN
+
+Create:
+- requirements.txt (Python) OR package.json (Node)
+
+Ensure:
+- all dependencies are explicitly listed
+- versions are pinned where possible
+- no implicit or missing imports
+
+Also ensure clean install works:
+
+pip install -r requirements.txt
+(or equivalent)
+
+---
+
+# 4. STARTUP GUARANTEE (CRITICAL)
+
+Create a single entry point:
+
+- main.py OR app.py OR server.js
+
+This must:
+- initialize all modules
+- load config
+- start data engine
+- start dashboard/server
+- schedule updates (if applicable)
+
+System must run with ONE command only.
+
+---
+
+# 5. ERROR HANDLING (HARDEN EVERYTHING)
+
+Add robust error handling:
+
+- API failures must not crash system
+- missing data must fallback safely
+- logging must be implemented for all failures
+- retry logic for external API calls
+
+Add structured logs:
+- timestamp
+- ticker
+- module name
+- error type
+
+---
+
+# 6. DATA PERSISTENCE SAFETY
+
+Ensure signal history storage is:
+- file-based (JSON/CSV/SQLite)
+- NOT ephemeral memory
+- NOT Replit storage
+
+Must support:
+- app restart without data loss
+- historical signal recovery
+- incremental updates
+
+---
+
+# 7. SCHEDULER COMPATIBILITY
+
+Replace any Replit scheduling with:
+
+- APScheduler OR
+- cron-compatible functions OR
+- simple loop-based scheduler with sleep intervals
+
+Must support:
+- periodic refresh (5–15 min)
+- manual refresh trigger
+
+---
+
+# 8. PERFORMANCE STABILITY
+
+Ensure system can handle:
+
+- 100–1000 tickers minimum
+- no full recomputation bottlenecks
+- cached computations where possible
+
+Add:
+- caching layer for signal calculations
+- avoid redundant API calls
+
+---
+
+# 9. PORTABILITY TEST CHECKLIST (MANDATORY OUTPUT)
+
+At the end, output a checklist confirming:
+
+- [ ] runs locally from clean install
+- [ ] runs without Replit
+- [ ] no missing dependencies
+- [ ] no hardcoded paths
+- [ ] env vars fully externalized
+- [ ] data persists across restart
+- [ ] scheduler works independently
+- [ ] dashboard runs standalone
+
+---
+
+# 10. FINAL GOAL
+
+The goal is to ensure:
+
+"This system can be copied into ANY environment and run with zero Replit dependency or manual debugging."
+
+Make the code production-grade, portable, and deployment-ready.

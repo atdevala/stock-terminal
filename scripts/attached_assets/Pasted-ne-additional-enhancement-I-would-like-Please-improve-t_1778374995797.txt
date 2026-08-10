@@ -1,0 +1,68 @@
+ne additional enhancement I would like:
+
+Please improve the hover popups/tooltips for each stock in the WATCHLIST tab so they provide deeper decision-making insight, similar to what a quantitative analyst or institutional dashboard might surface.
+
+The current popups already explain the scores and tags, but I want them to become more intelligent, actionable, and context-aware.
+
+Your goal is to make the hover popups feel like:
+
+a lightweight quant analysis summary
+an institutional-style stock briefing
+a “what does this actually mean?” interpretation layer
+
+Please add any additional metrics, tags, classifications, warnings, confidence indicators, or explanatory logic that you believe would genuinely improve decision-making edge.
+
+IMPORTANT:
+Do not add meaningless clutter or generic statistics.
+Only include information that materially improves:
+
+stock evaluation
+timing decisions
+understanding of signal quality
+understanding of risk/reward
+interpretation of CSOS and underlying signals
+
+The hover popup should help answer questions like:
+
+Is this an early breakout or already extended?
+Is institutional accumulation real or weak?
+Is momentum confirmed or speculative?
+Is this a long-term compounder or short-term trade?
+Are signals aligned or conflicting?
+Is this setup high confidence or fragile?
+What type of opportunity is this?
+
+Please intelligently infer and generate useful classifications and insights from the existing signals (VQS, GVS, INS, ACS, COS, CSOS).
+
+Examples of potentially useful additions:
+
+Signal alignment strength
+Confidence score
+Regime fit (bull/bear/chop suitability)
+Early-stage vs late-stage setup detection
+Smart-money accumulation quality
+Risk/reward profile
+Trend maturity
+Breakout probability
+Overextended warning
+Structural weakness warnings
+“High-quality compounder” tag
+“Speculative momentum” tag
+“Institutional accumulation detected” tag
+“Weak confirmation” warning
+“High conviction setup” label
+Multi-day signal persistence indicators
+Signal disagreement warnings
+Suggested interpretation of current setup
+
+The popup should remain:
+
+clean
+readable
+information-dense without feeling cluttered
+visually organized
+fast to scan
+
+Think like a quant analyst designing a professional decision-support interface, not a retail stock app.
+
+If there are additional intelligent insights you believe would provide a meaningful edge, please implement them thoughtfully.

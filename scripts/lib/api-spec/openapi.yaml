@@ -1,0 +1,580 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: API specification
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: stocks
+    description: Stock watchlist operations
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /stocks:
+    get:
+      operationId: getStocks
+      tags: [stocks]
+      summary: Get all stock categories and metadata
+      responses:
+        "200":
+          description: List of stock categories with metadata
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockCategory"
+
+  /quotes:
+    get:
+      operationId: getQuotes
+      tags: [stocks]
+      summary: Get live quotes for all tracked tickers
+      responses:
+        "200":
+          description: Live quote data keyed by ticker
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuotesResponse"
+
+  /market-status:
+    get:
+      operationId: getMarketStatus
+      tags: [stocks]
+      summary: Get current market open/close status
+      responses:
+        "200":
+          description: Market status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketStatus"
+
+  /scores:
+    get:
+      operationId: getScores
+      tags: [stocks]
+      summary: Get computed Valuation Quality, Growth Volatility, and Combined Opportunity scores for all stocks
+      responses:
+        "200":
+          description: Computed scores for all tracked stocks
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/StockScore"
+
+  /movers:
+    get:
+      operationId: getMovers
+      tags: [stocks]
+      summary: Get top gainers and losers from the watchlist today
+      responses:
+        "200":
+          description: Top movers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TopMovers"
+
+  /scanner:
+    get:
+      operationId: getScanner
+      tags: [stocks]
+      summary: Get INS market scanner results (80-stock universe)
+      responses:
+        "200":
+          description: Scanner state and ranked results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScannerResponse"
+
+  /scanner/refresh:
+    post:
+      operationId: refreshScanner
+      tags: [stocks]
+      summary: Trigger a new scanner scan (manual refresh)
+      responses:
+        "200":
+          description: Scan triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                required: [message]
+
+  /sectors:
+    get:
+      operationId: getSectors
+      tags: [stocks]
+      summary: Sector rotation engine — aggregated INS/COS/ACS per category
+      responses:
+        "200":
+          description: Sector averages ranked by momentum
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SectorData"
+
+  /market-regime:
+    get:
+      operationId: getMarketRegime
+      tags: [stocks]
+      summary: Current market regime computed from SPY trend and volatility
+      responses:
+        "200":
+          description: Market regime classification
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MarketRegime"
+
+  /signal-deltas:
+    get:
+      operationId: getSignalDeltas
+      tags: [stocks]
+      summary: Signal movement tracker — per-ticker deltas, trends, and divergence flags
+      responses:
+        "200":
+          description: Signal deltas and sparkline history for all tracked tickers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SignalDelta"
+
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required: [status]
+
+    StockInfo:
+      type: object
+      properties:
+        ticker:
+          type: string
+        company:
+          type: string
+        focus:
+          type: string
+        risk:
+          type: string
+      required: [ticker, company, focus, risk]
+
+    StockCategory:
+      type: object
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+        description:
+          type: string
+        stocks:
+          type: array
+          items:
+            $ref: "#/components/schemas/StockInfo"
+      required: [name, color, description, stocks]
+
+    Quote:
+      type: object
+      properties:
+        ticker:
+          type: string
+        price:
+          type: number
+        change:
+          type: number
+        changePercent:
+          type: number
+        prevClose:
+          type: number
+        high:
+          type: number
+        low:
+          type: number
+        open:
+          type: number
+        high52:
+          type: number
+        low52:
+          type: number
+        marketCap:
+          type: string
+        volume:
+          type: string
+        pe:
+          type: number
+        lastUpdated:
+          type: number
+      required: [ticker, price, change, changePercent, prevClose, high, low, open, lastUpdated]
+
+    QuotesResponse:
+      type: object
+      properties:
+        quotes:
+          type: array
+          items:
+            $ref: "#/components/schemas/Quote"
+        connected:
+          type: boolean
+        lastRefreshed:
+          type: number
+      required: [quotes, connected, lastRefreshed]
+
+    MarketStatus:
+      type: object
+      properties:
+        isOpen:
+          type: boolean
+        exchange:
+          type: string
+        timezone:
+          type: string
+        session:
+          type: string
+      required: [isOpen, exchange, timezone, session]
+
+    StockScore:
+      type: object
+      properties:
+        ticker:
+          type: string
+        vqs:
+          type: number
+          description: Valuation Quality Score (0-100)
+        gvs:
+          type: number
+          description: Growth Volatility Score (0-100)
+        cos:
+          type: number
+          description: Combined Opportunity Score (0-100)
+        vqsLabel:
+          type: string
+        gvsLabel:
+          type: string
+        cosLabel:
+          type: string
+        revenueGrowthYoy:
+          type: number
+        revenueGrowthQoQ:
+          type: number
+        grossMargin:
+          type: number
+        operatingMargin:
+          type: number
+        fcfMargin:
+          type: number
+        debtToEquity:
+          type: number
+        pe:
+          type: number
+        evSales:
+          type: number
+        priceAbove50MA:
+          type: boolean
+        priceAbove200MA:
+          type: boolean
+        earningsRevisionsUp:
+          type: boolean
+        ins:
+          type: number
+          description: Inflection Signal Score (0-100) — leading breakout indicator
+        insLabel:
+          type: string
+        divergenceTag:
+          type: string
+        insComponents:
+          type: object
+          properties:
+            deltaGvs:
+              type: number
+            deltaVqs:
+              type: number
+            volumeAccel:
+              type: number
+            epsSlope:
+              type: number
+            narrativeMomentum:
+              type: number
+          required: [deltaGvs, deltaVqs, volumeAccel, epsSlope, narrativeMomentum]
+        acs:
+          type: number
+          description: Accumulation Confidence Score (0-100) — detects institutional accumulation
+        fbrs:
+          type: number
+          description: False Breakout Risk Score (0-100) — high = dangerous/hype-driven setup
+        trendLabel:
+          type: string
+          description: "Multi-timeframe trend: LONG-TERM LEADER | MID-TERM BREAKOUT | SHORT-TERM IGNITION | NEUTRAL"
+        convictionTier:
+          type: number
+          description: "Conviction tier: 3=High-Conviction, 2=Speculative, 1=Watchlist, 0=No Signal"
+        isSuperstock:
+          type: boolean
+          description: True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics
+        csos:
+          type: number
+          description: "Composite Stock Opportunity Score (1–100) — percentile-ranked within the watchlist universe. 90+ = truly rare elite setup."
+        csosLabel:
+          type: string
+          description: "EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | STEALTH ACCUMULATION | HIDDEN CATALYST POTENTIAL | LATE STAGE MOVE | LOW QUALITY / AVOID"
+        cpe:
+          type: number
+          description: "Catalyst Probability Engine (1–100) — estimates probability the market is underpricing a future major catalyst. Percentile-ranked within universe."
+        bps:
+          type: number
+          description: "Breakout Probability Score (1–100) — near-term setup detector. High = INS+ACS aligned, clean setup, trending structure. Percentile-ranked within universe."
+        lqs:
+          type: number
+          description: "Long-term Quality Score (1–100) — fundamentals compounder quality. Rewards revenue consistency, margin strength, balance sheet health, and fair valuation. Percentile-ranked within universe."
+      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, trendLabel, convictionTier, isSuperstock, csos, csosLabel, cpe, bps, lqs]
+
+    MoverStock:
+      type: object
+      properties:
+        ticker:
+          type: string
+        company:
+          type: string
+        price:
+          type: number
+        changePercent:
+          type: number
+      required: [ticker, company, price, changePercent]
+
+    TopMovers:
+      type: object
+      properties:
+        gainers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MoverStock"
+        losers:
+          type: array
+          items:
+            $ref: "#/components/schemas/MoverStock"
+      required: [gainers, losers]
+
+    ScanResult:
+      type: object
+      properties:
+        rank:
+          type: number
+        ticker:
+          type: string
+        company:
+          type: string
+        source:
+          type: string
+          enum: [watchlist, scanner]
+        ins:
+          type: number
+        insLabel:
+          type: string
+        cos:
+          type: number
+        gvs:
+          type: number
+        vqs:
+          type: number
+        acs:
+          type: number
+          description: Accumulation Confidence Score (0-100)
+        fbrs:
+          type: number
+          description: False Breakout Risk Score (0-100)
+        trendLabel:
+          type: string
+        convictionTier:
+          type: number
+        isSuperstock:
+          type: boolean
+        breakoutScore:
+          type: number
+          description: "Breakout Probability: 50% INS + 30% 7D Momentum + 20% Volume Accel"
+        insMomentum:
+          type: number
+          description: "7-day INS momentum proxy (0-100): compares 7d vs prior 7d return"
+        divergenceTag:
+          type: string
+        alert:
+          type: string
+        insComponents:
+          type: object
+          properties:
+            deltaGvs:
+              type: number
+            deltaVqs:
+              type: number
+            volumeAccel:
+              type: number
+            epsSlope:
+              type: number
+            narrativeMomentum:
+              type: number
+          required: [deltaGvs, deltaVqs, volumeAccel, epsSlope, narrativeMomentum]
+      required: [rank, ticker, company, source, ins, insLabel, cos, gvs, vqs, acs, fbrs, trendLabel, convictionTier, isSuperstock, breakoutScore, insMomentum, divergenceTag, alert]
+
+    ScannerResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [idle, loading, complete]
+        lastScanTime:
+          type: number
+        progress:
+          type: object
+          properties:
+            done:
+              type: number
+            total:
+              type: number
+          required: [done, total]
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScanResult"
+      required: [status, lastScanTime, progress, results]
+
+    SectorData:
+      type: object
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+        avgIns:
+          type: number
+          description: Average INS across stocks in this sector
+        avgCos:
+          type: number
+          description: Average COS across stocks in this sector
+        avgAcs:
+          type: number
+          description: Average ACS across stocks in this sector
+        stockCount:
+          type: number
+        hotRank:
+          type: number
+          description: Rank 1 = hottest sector by avg INS
+      required: [name, color, avgIns, avgCos, avgAcs, stockCount, hotRank]
+
+    MarketRegime:
+      type: object
+      properties:
+        regime:
+          type: string
+          description: "RISK-ON MOMENTUM | QUALITY GROWTH | DEFENSIVE MARKET | HIGH VOLATILITY / UNSTABLE | NEUTRAL | UNKNOWN"
+        spyRet5d:
+          type: number
+          description: SPY 5-day return (%)
+        spyRet20d:
+          type: number
+          description: SPY 20-day return (%)
+        spyVolatility:
+          type: number
+          description: SPY 20-day daily return standard deviation
+      required: [regime, spyRet5d, spyRet20d, spyVolatility]
+
+    SignalValues:
+      type: object
+      properties:
+        vqs:  { type: number }
+        gvs:  { type: number }
+        cos:  { type: number }
+        ins:  { type: number }
+        acs:  { type: number }
+        csos: { type: number }
+        cpe:  { type: number }
+      required: [vqs, gvs, cos, ins, acs, csos, cpe]
+
+    SignalTrends:
+      type: object
+      properties:
+        vqs:  { type: string }
+        gvs:  { type: string }
+        cos:  { type: string }
+        ins:  { type: string }
+        acs:  { type: string }
+        csos: { type: string }
+        cpe:  { type: string }
+      required: [vqs, gvs, cos, ins, acs, csos, cpe]
+
+    SignalHistoryPoint:
+      type: object
+      properties:
+        ts:  { type: number }
+        ins: { type: number }
+        cos: { type: number }
+        acs: { type: number }
+      required: [ts, ins, cos, acs]
+
+    SignalDelta:
+      type: object
+      properties:
+        ticker:
+          type: string
+        current:
+          $ref: "#/components/schemas/SignalValues"
+        delta1H:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+          description: "Delta vs snapshot closest to 1 hour ago (requires ≥30 min of history)"
+        delta1D:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+        delta7D:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+        deltaBaseline:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+          description: "Fallback delta vs oldest available snapshot when 1D/7D not yet available"
+        baselineAgeMs:
+          type: number
+          nullable: true
+          description: "Age of the baseline snapshot in milliseconds (used to render a human-readable period label)"
+        accel:
+          $ref: "#/components/schemas/SignalValues"
+          nullable: true
+        trends:
+          $ref: "#/components/schemas/SignalTrends"
+        divergence:
+          type: string
+          description: "EARLY IGNITION SETUP | SPECULATIVE MOMENTUM (UNCONFIRMED) | LATE CYCLE / EXHAUSTION RISK | INSTITUTIONAL ACCUMULATION BEFORE REPRICING | empty string"
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/SignalHistoryPoint"
+      required: [ticker, current, trends, divergence, history]

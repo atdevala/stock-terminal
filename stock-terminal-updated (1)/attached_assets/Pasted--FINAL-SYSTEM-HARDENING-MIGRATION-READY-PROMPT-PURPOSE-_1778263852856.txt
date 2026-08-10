@@ -1,0 +1,228 @@
+# 🚨 FINAL SYSTEM HARDENING + MIGRATION-READY PROMPT
+# PURPOSE: PREPARE WATCHLIST / SIGNAL SYSTEM FOR EXPORT OUT OF REPLIT
+
+# =====================================================================
+# 🚨 CRITICAL GOAL
+# =====================================================================
+
+You are NOT adding new features.
+
+You are performing a **production hardening pass** to ensure this codebase is:
+
+- fully portable (can run outside Replit)
+- dependency-stable
+- architecture-clean
+- environment-agnostic
+- migration-safe
+- failure-resistant
+
+The system must be ready to move to:
+- any cloud provider
+- local server
+- Docker
+- Vercel / AWS / GCP / bare metal
+
+WITHOUT breaking functionality.
+
+---
+
+# =====================================================================
+# 🚨 SCOPE CONSTRAINT
+# =====================================================================
+
+You may ONLY:
+- refactor for stability and portability
+- clean architecture issues
+- remove Replit-specific dependencies
+- standardize environment handling
+- improve code structure and error handling
+
+You may NOT:
+- change business logic of signals (VQS, GVS, INS, ACS, COS, CSOS, CAE)
+- remove or alter scoring formulas
+- change output behavior of watchlist
+- introduce new features or indicators
+
+---
+
+# =====================================================================
+# 🧠 REQUIRED HARDENING TASKS
+# =====================================================================
+
+## 1. REMOVE REPLIT DEPENDENCIES
+
+Ensure the system does NOT rely on:
+- Replit secrets system
+- Replit-specific file paths
+- Replit hosting assumptions
+- any internal Replit APIs
+
+Replace with:
+- environment variables (.env support)
+- standard Node/Python config patterns
+
+---
+
+## 2. STANDARDIZE CONFIGURATION LAYER
+
+Create a single config system:
+
+- config/environment variables centralized
+- no hardcoded API keys
+- no inline environment assumptions
+
+Example:
+- use process.env or equivalent standard method
+- validate missing env vars at startup with clear errors
+
+---
+
+## 3. ENSURE MODULAR ARCHITECTURE
+
+Split logically into:
+
+- /signals (VQS, GVS, INS, ACS, COS, CAE, CSOS)
+- /core (ranking engine, normalization, regime logic)
+- /watchlist (UI + aggregation only)
+- /utils (helpers, math, normalization)
+
+NO circular dependencies allowed.
+
+---
+
+## 4. ISOLATE BUSINESS LOGIC FROM UI
+
+Ensure:
+
+- scoring logic is NOT inside UI components
+- watchlist rendering ONLY consumes computed outputs
+- all signal computation is backend/service-layer only
+
+---
+
+## 5. ENSURE PORTABILITY OF DATA FLOW
+
+All data flows must be:
+- stateless where possible
+- or explicitly state-managed
+- independent of Replit runtime
+
+Avoid:
+- implicit global state
+- memory-dependent scoring
+- runtime-specific caching
+
+---
+
+## 6. ERROR HANDLING + FAIL SAFETY
+
+Add robust safeguards:
+
+- null / undefined signal handling
+- missing data fallback behavior
+- try/catch around scoring engine
+- safe default values for all signals
+
+System must NEVER crash watchlist rendering.
+
+---
+
+## 7. PERFORMANCE STABILITY
+
+Ensure:
+- no O(n^2) hidden loops in watchlist scoring
+- batch compute signals where possible
+- avoid recomputing unchanged values
+- memoize where appropriate
+
+---
+
+## 8. SIGNAL CONSISTENCY GUARANTEE
+
+Ensure all signals:
+
+- VQS
+- GVS
+- INS
+- ACS
+- COS
+- CSOS
+- CAE
+
+are:
+- deterministic (same input → same output)
+- stateless
+- pure functions
+
+No randomness or external hidden state.
+
+---
+
+## 9. NORMALIZATION CONSISTENCY
+
+Ensure:
+- cross-sectional ranking logic is consistent
+- percentile/z-score normalization does not depend on UI state
+- watchlist universe is explicitly defined and passed in
+
+No hidden global datasets.
+
+---
+
+## 10. MIGRATION READINESS CHECK
+
+Before finishing, verify:
+
+- app runs without Replit environment
+- can be started with simple command:
+  - npm install
+  - npm run build
+  - npm start (or equivalent)
+- no Replit-specific tooling required
+- no broken imports or missing env assumptions
+
+---
+
+# =====================================================================
+# 🧠 FINAL SYSTEM REQUIREMENT
+# =====================================================================
+
+After refactor, the system must behave exactly the same in terms of:
+
+- CSOS rankings
+- CAE rankings
+- signal outputs
+- watchlist display logic
+
+BUT must now be:
+
+> fully portable, production-grade, and independent of Replit.
+
+---
+
+# =====================================================================
+# 🎯 PRIORITY ORDER
+# =====================================================================
+
+1. Preserve signal correctness (highest priority)
+2. Remove platform dependency
+3. Stabilize architecture
+4. Improve error handling
+5. Improve modular structure
+6. Ensure migration readiness
+
+---
+
+# =====================================================================
+# 🧠 FINAL WARNING
+# =====================================================================
+
+Do NOT optimize for complexity reduction.
+
+Optimize ONLY for:
+- stability
+- portability
+- deterministic behavior
+- clean separation of concerns
+
+This system is intended to be moved to production infrastructure outside Replit.

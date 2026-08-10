@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "9P-C9E3xnnFFDBeh7k5IR"
+uri = "file://Financial_Stock_Tracker.xlsx"
+type = "table"
+title = "Stock Tracker — Price Alerts Added"

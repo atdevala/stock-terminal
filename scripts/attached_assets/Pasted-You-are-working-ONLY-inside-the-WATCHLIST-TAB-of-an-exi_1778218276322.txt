@@ -1,0 +1,207 @@
+You are working ONLY inside the WATCHLIST TAB of an existing stock dashboard application.
+
+You MUST:
+
+ONLY modify logic related to the watchlist table
+ONLY add or replace the CSOS column in the watchlist
+DO NOT modify any other tabs, pages, or modules
+DO NOT change backend architecture outside watchlist data pipeline
+DO NOT refactor unrelated systems (alerts, charts, APIs, or signal engines)
+DO NOT break sorting, filtering, or rendering in the watchlist
+
+This is a localized scoring enhancement, not a system rewrite.
+
+🎯 OBJECTIVE
+
+Create or replace a single watchlist column:
+
+CSOS (Composite Stock Opportunity Score)
+
+Range: 1–100
+
+This score represents:
+
+“The overall attractiveness of a stock as an opportunity at its current price, combining fundamentals, growth, momentum, and institutional behavior.”
+
+🧠 SIGNAL SYSTEM (DO NOT MODIFY EXISTING LOGIC)
+
+You are given existing signals:
+
+VQS = Valuation Quality Score
+fundamental strength per price paid
+revenue growth, margins, valuation, debt, dilution
+GVS = Growth / re-rating potential score
+earnings revisions
+growth acceleration
+price momentum
+sector momentum
+INS = Early breakout leading indicator
+detects setups BEFORE COS
+momentum acceleration + volume + revisions
+leads COS by 2–6 weeks
+ACS = Accumulation / institutional buying pressure
+up-volume, RS vs SPY, compression, closing strength
+COS = Momentum confirmation score
+confirms breakout and trend continuation
+🧱 CORE MODEL — CSOS
+BASE WEIGHTED MODEL
+
+CSOS =
+
+VQS * 0.40 +
+GVS * 0.25 +
+INS * 0.15 +
+ACS * 0.12 +
+COS * 0.08
+
+🧠 CRITICAL INTELLIGENCE LAYERS (MUST IMPLEMENT)
+1. EARLY BREAKOUT EDGE (INS LEAD SIGNAL)
+
+If:
+
+INS > 75
+COS < 60
+
+→ ADD BONUS: +5 to +10
+
+Meaning:
+
+early institutional positioning before confirmation
+
+2. LATE STAGE WARNING
+
+If:
+
+COS > 80
+INS < 50
+
+→ APPLY PENALTY: -3 to -10
+
+Meaning:
+
+move already extended, weak forward edge
+
+3. FUNDAMENTAL FLOOR RULE (RISK OVERRIDE)
+
+If:
+
+VQS < 40
+
+→ STRONG PENALTY (override other signals)
+
+Meaning:
+
+avoid structurally weak companies even if momentum is strong
+
+4. ACCUMULATION CONFIRMATION BOOST
+
+If:
+
+INS trending upward
+ACS trending upward
+
+→ APPLY MULTIPLIER: 1.05–1.12
+
+Meaning:
+
+early momentum + institutional accumulation alignment
+
+5. SIGNAL DIVERGENCE PENALTY (VERY IMPORTANT)
+
+If signals strongly conflict, apply penalty:
+
+Examples:
+
+INS high but ACS low
+COS high but INS low
+ACS high but VQS low
+
+→ reduce CSOS (-3 to -12 depending on severity)
+
+Meaning:
+
+fake breakouts / unstable setups / retail-driven moves
+
+6. SIGNAL AGREEMENT BONUS
+
+If ALL of the following are true:
+
+INS > 70
+ACS > 70
+COS > 70
+VQS > 60
+
+→ ADD BONUS: +3 to +8
+
+Meaning:
+
+strong institutional + momentum alignment
+
+🌍 REGIME AWARENESS LAYER (IMPORTANT UPGRADE)
+
+If possible, include market regime adjustment:
+
+Bull regime:
+favor INS + COS
+allow higher momentum weighting
+Bear regime:
+favor VQS + ACS
+penalize COS-driven signals
+Choppy regime:
+penalize COS heavily
+require stronger ACS confirmation
+
+Apply multiplier:
+
+bull: 1.05–1.10
+neutral: 0.95–1.00
+bear: 0.85–0.95
+📊 FINAL OUTPUT REQUIREMENTS (WATCHLIST ONLY)
+
+Add column:
+
+CSOS (1–100)
+
+Optionally display (if UI supports expand/hover):
+
+INS
+ACS
+COS
+VQS
+GVS
+🏷️ CLASSIFICATION LABELS
+
+Assign one:
+
+EARLY BREAKOUT SETUP
+CONFIRMED TREND
+QUALITY COMPOUNDER
+LATE STAGE MOVE
+LOW QUALITY / AVOID
+⚙️ ENGINEERING REQUIREMENTS
+Implement as calculateCSOS() function
+Must ONLY be used in watchlist tab pipeline
+Must NOT affect any other system modules
+Must be performant for real-time updates
+Must safely handle missing/null values
+Must not break sorting/filtering in UI
+Must be modular and well-commented
+Must preserve backward compatibility
+🎯 PRIORITY ORDER
+WATCHLIST isolation (critical constraint)
+System stability (no breaking changes)
+Correct signal integration
+Regime + divergence logic
+Explainability
+Performance efficiency
+🧠 FINAL SYSTEM DESCRIPTION
+
+This CSOS system is a multi-layer institutional decision model:
+
+VQS → fundamental quality filter
+GVS → growth and re-rating potential
+INS → early breakout detection (leading signal)
+ACS → institutional accumulation confirmation
+COS → momentum confirmation
+
+CSOS is NOT a simple weighted average — it is a signal interaction model with regime and divergence adjustments.
