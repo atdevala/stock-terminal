@@ -748,8 +748,16 @@ export function StockRow({ stock, quote, score, signalDelta, isSelected = false,
               </div>
               <span className="text-zinc-700 text-[9px]">·</span>
               <div className="flex items-center gap-1 flex-nowrap">
-                <span className="text-[9px] text-zinc-600 font-medium">CSOS</span>
-                <span className={cn("text-[10px] font-bold tabular-nums", csosTextColor(score.csos ?? 0))}>{score.csos ?? "—"}</span>
+                <span className="text-[9px] text-zinc-600 font-medium">SIGNAL</span>
+                <span className={cn("text-[10px] font-bold tabular-nums", csosTextColor(score.signalScore ?? 0))}>{score.signalScore ?? "—"}</span>
+              </div>
+              <span className="text-zinc-700 text-[9px]">·</span>
+              <div className="flex items-center gap-1 flex-nowrap">
+                <span className="text-[9px] text-zinc-600 font-medium">RSI</span>
+                <span className={cn(
+                  "text-[10px] font-bold tabular-nums",
+                  score.rsiZone === "Oversold" ? "text-emerald-400" : score.rsiZone === "Overbought" ? "text-red-400" : "text-zinc-400",
+                )}>{score.rsi !== undefined ? Math.round(score.rsi) : "—"}</span>
               </div>
             </div>
           );
@@ -853,29 +861,41 @@ export function StockRow({ stock, quote, score, signalDelta, isSelected = false,
         ) : <span className="text-muted-foreground text-xs">—</span>}
       </td>
 
-      {/* CPE */}
-      <td className="py-2.5 px-3 text-center align-middle hidden 2xl:table-cell">
-        {score?.cpe !== undefined ? (
-          <ScoreBadge
-            label={`cpe-${stock.ticker}`}
-            score={score.cpe}
-            colorFn={cpeColor}
-            chips={[]}
-            tooltip={<CpeTooltipContent score={score} />}
-          />
+      {/* SIGNAL — consolidated composite, replaces separate COS/CSOS/CPE/BPS displays */}
+      <td className="py-2.5 px-3 text-center align-middle hidden xl:table-cell">
+        {score?.signalScore !== undefined ? (
+          <div className="inline-flex flex-col items-center gap-0.5">
+            <ScoreBadge
+              label={`signal-${stock.ticker}`}
+              score={score.signalScore}
+              colorFn={csosColor}
+              chips={[]}
+              tooltip={<CsosTooltipContent score={score} />}
+            />
+            <span className={cn("text-[9px] font-bold uppercase tracking-wide max-w-[110px] truncate", csosLabelStyle(score.signalLabel ?? ""))}>
+              {score.signalLabel}
+            </span>
+          </div>
         ) : <span className="text-muted-foreground text-xs">—</span>}
       </td>
 
-      {/* CSOS */}
+      {/* RSI — oversold/overbought, independent of the composite score above */}
       <td className="py-2.5 px-3 text-center align-middle hidden xl:table-cell">
-        {score?.csos !== undefined ? (
-          <ScoreBadge
-            label={`csos-${stock.ticker}`}
-            score={score.csos}
-            colorFn={csosColor}
-            chips={[]}
-            tooltip={<CsosTooltipContent score={score} />}
-          />
+        {score?.rsi !== undefined ? (
+          <div className="inline-flex flex-col items-center gap-0.5">
+            <span className={cn(
+              "text-sm font-bold tabular-nums",
+              score.rsiZone === "Oversold" ? "text-emerald-400" : score.rsiZone === "Overbought" ? "text-red-400" : "text-zinc-400",
+            )}>
+              {Math.round(score.rsi)}
+            </span>
+            <span className={cn(
+              "text-[9px] font-semibold uppercase tracking-wide",
+              score.rsiZone === "Oversold" ? "text-emerald-400" : score.rsiZone === "Overbought" ? "text-red-400" : "text-zinc-500",
+            )}>
+              {score.rsiZone}
+            </span>
+          </div>
         ) : <span className="text-muted-foreground text-xs">—</span>}
       </td>
 

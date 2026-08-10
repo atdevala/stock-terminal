@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { logger } from "../lib/logger";
 import { CATEGORIES } from "../lib/stocks-data";
+import { getCatalystCalendar } from "../lib/catalysts";
 import {
   macdService,
   marketDataService,
@@ -101,6 +102,16 @@ router.get("/market-regime", (_req, res) => {
 
 router.get("/signal-deltas", (_req, res) => {
   res.json(signalHistoryService.getAllSignalDeltas());
+});
+
+router.get("/catalysts", async (req, res) => {
+  try {
+    const daysAhead = Number(req.query["days"]) || 10;
+    res.json(await getCatalystCalendar(daysAhead));
+  } catch (err) {
+    logger.error({ err }, "/catalysts route failed");
+    res.status(502).json({ error: "Catalyst calendar failed", reason: "PROVIDER_ERROR" });
+  }
 });
 
 export default router;

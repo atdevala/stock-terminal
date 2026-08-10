@@ -451,54 +451,43 @@ export function Watchlist() {
                           </TooltipContent>
                         </Tooltip>
                       </th>
-                      <th className="py-3 px-4 font-medium text-center hidden 2xl:table-cell">
+                      <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-sky-400">CPE</span>
+                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-amber-400">SIGNAL</span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
-                            <p className="font-semibold text-sky-300">(Catalyst Probability Engine)</p>
-                            <p className="text-zinc-300 text-xs">Estimates the probability that the market is currently underpricing a future major catalyst — strategic partnerships, enterprise contracts, institutional re-ratings, surprise guidance shifts.</p>
-                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div className="text-zinc-400 font-semibold mb-1">Components:</div>
-                              <div className="text-zinc-400">25% Narrative Asymmetry · 25% Quiet Accumulation</div>
-                              <div className="text-zinc-400">20% Low Attention / Quality · 20% Hype Filter · 10% Strategic Positioning</div>
+                            <p className="font-semibold text-amber-300">(Consolidated Signal)</p>
+                            <p className="text-zinc-300 text-xs">Replaces COS/CSOS/CPE/BPS as separate scores — those four were different weighted recombinations of the same VQS/GVS/INS/ACS/FBRS inputs and mostly moved together. This is the single composite (built from the former BPS formula, which already had the most complete logic: INS-COS gap bonus, LQS quality multiplier) plus a plain-English reason.</p>
+                            <div className="text-xs space-y-1 border-t border-zinc-700 pt-2">
+                              <div className="text-zinc-500 font-semibold mb-1 uppercase tracking-widest text-[9px]">Labels</div>
+                              <div><span className="text-emerald-300 font-medium">PRIME OPPORTUNITY</span><span className="text-zinc-400"> — all signals co-elevated, full conviction</span></div>
+                              <div><span className="text-amber-300 font-medium">EARLY BREAKOUT SETUP</span><span className="text-zinc-400"> — INS front-running COS, pre-breakout entry</span></div>
+                              <div><span className="text-teal-300 font-medium">STEALTH ACCUMULATION</span><span className="text-zinc-400"> — quiet institutional build-up, ACS dominant</span></div>
+                              <div><span className="text-sky-300 font-medium">HIDDEN CATALYST POTENTIAL</span><span className="text-zinc-400"> — underpriced catalyst, not yet reflected in price</span></div>
+                              <div><span className="text-blue-300 font-medium">QUALITY COMPOUNDER — ACTIVATING</span><span className="text-zinc-400"> — strong fundamentals, INS now live</span></div>
+                              <div><span className="text-blue-400 font-medium">QUALITY COMPOUNDER — DORMANT</span><span className="text-zinc-400"> — quality business, no timing signal yet</span></div>
+                              <div><span className="text-amber-400 font-medium">CONFIRMED TREND</span><span className="text-zinc-400"> — move confirmed with institutional backing</span></div>
+                              <div><span className="text-zinc-400 font-medium">DEVELOPING SETUP</span><span className="text-zinc-400"> — signals building, not yet converged</span></div>
+                              <div><span className="text-orange-400 font-medium">LATE STAGE MOVE</span><span className="text-zinc-400"> — extended move, fading INS — consider trimming</span></div>
+                              <div><span className="text-red-400 font-medium">LOW QUALITY / AVOID</span><span className="text-zinc-400"> — VQS below 40, do not chase</span></div>
                             </div>
-                            <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div><span className="text-sky-300 font-mono">80+</span><span className="text-zinc-300"> → high probability of underpriced catalyst</span></div>
-                              <div><span className="text-sky-400 font-mono">60–79</span><span className="text-zinc-300"> → moderate catalyst setup developing</span></div>
-                              <div><span className="text-zinc-400 font-mono">below 60</span><span className="text-zinc-300"> → story already priced in or no edge</span></div>
-                            </div>
-                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Percentile-ranked within the watchlist universe. High CPE + low COS = hidden opportunity before crowd confirmation.</p>
                           </TooltipContent>
                         </Tooltip>
                       </th>
                       <th className="py-3 px-4 font-medium text-center hidden xl:table-cell">
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-amber-400">CSOS</span>
+                            <span className="cursor-help underline decoration-dotted underline-offset-2 text-rose-400">RSI</span>
                           </TooltipTrigger>
                           <TooltipContent side="top" className="max-w-sm text-left p-3 space-y-2" style={{ background: '#000000', border: '1px solid #333' }}>
-                            <p className="font-semibold text-amber-300">(Composite Stock Opportunity Score)</p>
-                            <p className="text-zinc-300 text-xs">The overall attractiveness of a stock as an opportunity — combining fundamentals, growth, momentum, and institutional behavior into a single regime-aware score.</p>
+                            <p className="font-semibold text-rose-300">(Relative Strength Index, 14D)</p>
+                            <p className="text-zinc-300 text-xs">Standard Wilder RSI — is the price stretched relative to its own recent range? This is independent of every quality/momentum score in the other columns; it's the direct answer to "is this oversold right now."</p>
                             <div className="text-xs space-y-0.5 border-t border-zinc-700 pt-2">
-                              <div className="text-zinc-400 font-semibold mb-1">Base weights:</div>
-                              <div className="text-zinc-400">40% VQS · 25% GVS · 15% INS · 12% ACS · 8% COS</div>
+                              <div><span className="text-emerald-400 font-mono">≤30</span><span className="text-zinc-300"> → oversold</span></div>
+                              <div><span className="text-zinc-400 font-mono">31–69</span><span className="text-zinc-300"> → neutral</span></div>
+                              <div><span className="text-red-400 font-mono">≥70</span><span className="text-zinc-300"> → overbought</span></div>
                             </div>
-                            <div className="text-xs space-y-1 border-t border-zinc-700 pt-2">
-                              <div className="text-zinc-500 font-semibold mb-1 uppercase tracking-widest text-[9px]">Labels (pattern-based, not score ranges)</div>
-                              <div><span className="text-emerald-300 font-medium">PRIME OPPORTUNITY</span><span className="text-zinc-400"> — all signals co-elevated, full conviction</span></div>
-                              <div><span className="text-amber-300 font-medium">EARLY BREAKOUT SETUP</span><span className="text-zinc-400"> — INS front-running COS, pre-breakout entry</span></div>
-                              <div><span className="text-teal-300 font-medium">STEALTH ACCUMULATION</span><span className="text-zinc-400"> — quiet institutional build-up, ACS dominant</span></div>
-                              <div><span className="text-sky-300 font-medium">HIDDEN CATALYST</span><span className="text-zinc-400"> — CPE elevated, catalyst not yet priced in</span></div>
-                              <div><span className="text-blue-300 font-medium">QUALITY — ACTIVATING</span><span className="text-zinc-400"> — strong fundamentals + INS ≥60 now live</span></div>
-                              <div><span className="text-blue-400 font-medium">QUALITY — DORMANT</span><span className="text-zinc-400"> — quality business, no timing signal yet</span></div>
-                              <div><span className="text-amber-400 font-medium">CONFIRMED TREND</span><span className="text-zinc-400"> — move confirmed with institutional backing</span></div>
-                              <div><span className="text-zinc-400 font-medium">DEVELOPING SETUP</span><span className="text-zinc-400"> — signals building, not yet converged</span></div>
-                              <div><span className="text-orange-400 font-medium">LATE STAGE MOVE</span><span className="text-zinc-400"> — extended COS, fading INS — consider trimming</span></div>
-                              <div><span className="text-red-400 font-medium">LOW QUALITY / AVOID</span><span className="text-zinc-400"> — VQS below 40, do not chase</span></div>
-                            </div>
-                            <p className="text-zinc-400 text-xs italic border-t border-zinc-700 pt-2">Regime-adjusted. Includes divergence penalties, agreement bonuses, and early breakout edge detection.</p>
                           </TooltipContent>
                         </Tooltip>
                       </th>

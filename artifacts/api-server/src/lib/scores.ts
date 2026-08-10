@@ -29,6 +29,38 @@ function dailyRets(closes: number[]): number[] {
   return r;
 }
 
+// ── RSI(14) — Relative Strength Index ──────────────────────────────────────────
+// Standard Wilder RSI. This is the "is it oversold right now" signal that was
+// missing from the scoring system — every other score here answers "is this a
+// good business" or "is momentum building"; RSI answers "is the price stretched
+// relative to its own recent range." Returns 50 (neutral) if not enough data.
+
+export function computeRSI(closes: number[], period = 14): number {
+  if (closes.length < period + 1) return 50;
+  const changes: number[] = [];
+  for (let i = 1; i < closes.length; i++) changes.push(closes[i]! - closes[i - 1]!);
+
+  const gains = changes.map(c => (c > 0 ? c : 0));
+  const losses = changes.map(c => (c < 0 ? -c : 0));
+
+  // Wilder's smoothing: seed with a simple average, then exponentially smooth.
+  let avgGain = mean(gains.slice(0, period));
+  let avgLoss = mean(losses.slice(0, period));
+  for (let i = period; i < changes.length; i++) {
+    avgGain = (avgGain * (period - 1) + gains[i]!) / period;
+    avgLoss = (avgLoss * (period - 1) + losses[i]!) / period;
+  }
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return clamp(100 - 100 / (1 + rs), 0, 100);
+}
+
+export function rsiZone(rsi: number): "Oversold" | "Overbought" | "Neutral" {
+  if (rsi <= 30) return "Oversold";
+  if (rsi >= 70) return "Overbought";
+  return "Neutral";
+}
+
 // ── Score label functions ──────────────────────────────────────────────────────
 
 function vqsLabel(s: number): string {
@@ -1037,6 +1069,20 @@ export interface StockScore {
   bps: number;
   // ── LQS — Long-term Quality Score (fundamentals compounder) ──────────────
   lqs: number;
+  // ── RSI(14) — is the price stretched relative to its own recent range ────
+  rsi: number;
+  rsiZone: "Oversold" | "Overbought" | "Neutral";
+  // ── Consolidated signal ────────────────────────────────────────────────
+  // COS, CSOS, CPE, and BPS were four different linear recombinations of the
+  // same five underlying scores (VQS, GVS, INS, ACS, FBRS) — they moved
+  // together far more than they disagreed. signalScore/signalLabel is the
+  // single number + one-line reason meant to replace them in the UI. BPS had
+  // the most complete formula (INS-COS gap bonus, LQS quality multiplier),
+  // so it's the one signalScore is built from. cos/csos/cpe/bps are kept on
+  // this object for backward compatibility and internal debugging only —
+  // new UI should read signalScore / signalLabel instead.
+  signalScore: number;
+  signalLabel: string;
 }
 
 // ── Master score computation ───────────────────────────────────────────────────
@@ -1148,6 +1194,14 @@ export function computeScore(
     cos, lqs,
   );
 
+  // ── RSI(14) — oversold/overbought, independent of every other score above ─
+  const rsi = computeRSI(ext.closes60d ?? []);
+  const rsiZoneVal = rsiZone(rsi);
+
+  // ── Consolidated signal — replaces COS/CSOS/CPE/BPS as separate displays ──
+  const signalScore = bps;
+  const signalLabel = csosLabelText(signalScore, vqs, ins, acs, cos, cpe);
+
   return {
     ticker,
     vqs, gvs, cos,
@@ -1179,6 +1233,10 @@ export function computeScore(
     cpe,
     bps,
     lqs,
+    rsi,
+    rsiZone: rsiZoneVal,
+    signalScore,
+    signalLabel,
   };
   } catch (err) {
     logger.error({ ticker, err }, "computeScore threw unexpectedly — returning safe defaults");
@@ -1197,6 +1255,10 @@ export function computeScore(
       cpe: 0,
       bps: 0,
       lqs: 0,
+      rsi: 50,
+      rsiZone: "Neutral",
+      signalScore: 0,
+      signalLabel: "LOW QUALITY / AVOID",
     };
   }
 }

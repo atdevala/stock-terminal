@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Activity, LayoutDashboard } from "lucide-react";
 import { MarketStatusHeader } from "@/components/dashboard/MarketStatusHeader";
 import { TopMoversStrip } from "@/components/dashboard/TopMoversStrip";
+import { CatalystCalendar } from "@/components/dashboard/CatalystCalendar";
 import { Watchlist } from "@/components/dashboard/Watchlist";
 import {
   WorkstationShell,
@@ -43,6 +44,7 @@ export default function Dashboard() {
           activeTab={activeTab}
           onTabChange={tab => setActiveTab(tab as AppTab)}
         >
+          <CatalystCalendar />
           {activeTab === "watchlist" && <Watchlist />}
           {activeTab === "alpha" && <AlphaScannerPage />}
         </WorkstationShell>
