@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { customFetch } from "@ant/api-client-react";
+import { customFetch } from "@workspace/api-client-react";
 import { Calendar, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 
