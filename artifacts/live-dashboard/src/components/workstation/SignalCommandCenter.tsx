@@ -220,7 +220,7 @@ export function SignalCommandCenter({
           rankScore: scoreOpportunity(score),
         };
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .filter((item): item is CommandCenterOpportunity => Boolean(item))
       .sort((a, b) => b.rankScore - a.rankScore)
       .slice(0, 6),
     [quotesMap, scoresMap, universe],
@@ -242,7 +242,7 @@ export function SignalCommandCenter({
           riskScore: riskRank(score, delta, quote),
         };
       })
-      .filter((item): item is NonNullable<typeof item> => item !== null)
+      .filter((item): item is CommandCenterRisk => Boolean(item))
       .sort((a, b) => b.riskScore - a.riskScore)
       .slice(0, 5),
     [deltasMap, quotesMap, scoresMap, universe],
