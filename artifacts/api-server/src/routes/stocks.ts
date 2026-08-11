@@ -106,18 +106,6 @@ router.get("/signal-deltas", (_req, res) => {
   res.json(signalHistoryService.getAllSignalDeltas());
 });
 
-// Diagnostic only — calls the AI write-up service directly with synthetic
-// facts so ANTHROPIC_API_KEY can be verified independent of whether any
-// stock currently clears the breakout/options eligibility gates.
-router.get("/ai-status", (_req, res) => {
-  const result = aiWriteupService.getBreakoutWriteup("TEST", {
-    breakoutReadiness: 70,
-    ins: 65, acs: 60, vqs: 55, lqs: 60, rsi: 45, fbrs: 20,
-    reasonLabel: "DEVELOPING SETUP",
-  });
-  res.json(result);
-});
-
 router.get("/breakout-candidates", (_req, res) => {
   try {
     const scores = scoreService.computeScores();
