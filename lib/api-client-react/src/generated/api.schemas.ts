@@ -92,12 +92,18 @@ export interface StockScore {
   acs: number;
   /** False Breakout Risk Score (0-100) — high = dangerous/hype-driven setup */
   fbrs: number;
-  /** Multi-timeframe trend: LONG-TERM LEADER | MID-TERM BREAKOUT | SHORT-TERM IGNITION | NEUTRAL */
-  trendLabel: string;
   /** Conviction tier: 3=High-Conviction, 2=Speculative, 1=Watchlist, 0=No Signal */
   convictionTier: number;
   /** True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics */
   isSuperstock: boolean;
+  /** 52-week high price, from the quote cache. Real dollar level, not a category. */
+  high52?: number;
+  /** 52-week low price, from the quote cache. */
+  low52?: number;
+  /** 50-day simple moving average price. */
+  ma50?: number;
+  /** 200-day simple moving average price. */
+  ma200?: number;
   /** Composite Stock Opportunity Score (1–100) — percentile-ranked within the watchlist universe. 90+ = truly rare elite setup. */
   csos: number;
   /** EARLY BREAKOUT SETUP | CONFIRMED TREND | QUALITY COMPOUNDER | STEALTH ACCUMULATION | HIDDEN CATALYST POTENTIAL | LATE STAGE MOVE | LOW QUALITY / AVOID */
@@ -160,7 +166,6 @@ export interface ScanResult {
   acs: number;
   /** False Breakout Risk Score (0-100) */
   fbrs: number;
-  trendLabel: string;
   convictionTier: number;
   isSuperstock: boolean;
   /** Breakout Probability: 50% INS + 30% 7D Momentum + 20% Volume Accel */

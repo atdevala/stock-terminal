@@ -109,11 +109,13 @@ router.get("/signal-deltas", (_req, res) => {
 router.get("/breakout-candidates", (_req, res) => {
   try {
     const scores = scoreService.computeScores();
+    const scoresByTicker = new Map(scores.map(s => [s.ticker, s]));
     const quotesMap = new Map(marketDataService.getAllQuotes().map(q => [q.ticker, q]));
     const candidates = rankBreakoutCandidates(scores, 10);
 
     res.json(candidates.map(c => {
       const q = quotesMap.get(c.ticker);
+      const s = scoresByTicker.get(c.ticker);
       const writeup = aiWriteupService.getBreakoutWriteup(c.ticker, {
         breakoutReadiness: c.breakoutReadiness,
         ins: c.drivers.ins,
@@ -123,6 +125,11 @@ router.get("/breakout-candidates", (_req, res) => {
         rsi: c.drivers.rsi,
         fbrs: c.drivers.fbrs,
         reasonLabel: c.reasonLabel,
+        price: q?.price,
+        high52: s?.high52,
+        low52: s?.low52,
+        ma50: s?.ma50,
+        ma200: s?.ma200,
       });
       return {
         ticker: c.ticker,
@@ -144,12 +151,14 @@ router.get("/breakout-candidates", (_req, res) => {
 router.get("/options-watch", async (_req, res) => {
   try {
     const scores = scoreService.computeScores();
+    const scoresByTicker = new Map(scores.map(s => [s.ticker, s]));
     const extByTicker = new Map(marketDataService.getAllExtendedMetrics().map(e => [e.ticker, e]));
     const quotesMap = new Map(marketDataService.getAllQuotes().map(q => [q.ticker, q]));
     const candidates = await rankOptionsCandidates(scores, extByTicker, 5);
 
     res.json(candidates.map(c => {
       const q = quotesMap.get(c.ticker);
+      const s = scoresByTicker.get(c.ticker);
       const writeup = aiWriteupService.getOptionsWriteup(c.ticker, {
         direction: c.direction,
         optionsSetupScore: c.optionsSetupScore,
@@ -157,6 +166,11 @@ router.get("/options-watch", async (_req, res) => {
         rsi: c.drivers.rsi,
         acs: c.drivers.acs,
         nextEarnings: c.nextEarnings,
+        price: q?.price,
+        high52: s?.high52,
+        low52: s?.low52,
+        ma50: s?.ma50,
+        ma200: s?.ma200,
       });
       return {
         ticker: c.ticker,

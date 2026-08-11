@@ -110,7 +110,11 @@ function getOrTrigger(key: string, buildPrompt: () => Promise<string>): WriteupR
 export const aiWriteupService = {
   getBreakoutWriteup(
     ticker: string,
-    facts: { breakoutReadiness: number; ins: number; acs: number; vqs: number; lqs?: number; rsi?: number; fbrs: number; reasonLabel: string },
+    facts: {
+      breakoutReadiness: number; ins: number; acs: number; vqs: number; lqs?: number; rsi?: number; fbrs: number;
+      reasonLabel: string;
+      price?: number; high52?: number; low52?: number; ma50?: number; ma200?: number;
+    },
   ): WriteupResult {
     return getOrTrigger(`breakout:${ticker}`, async () => {
       const packet = aiContextService.buildTickerSignalPacket(
@@ -118,6 +122,12 @@ export const aiWriteupService = {
         "Explain why this stock is currently a breakout candidate",
       );
       const structuredContext = await aiContextService.render(packet);
+      const priceLevelLines: string[] = [];
+      if (facts.price !== undefined) priceLevelLines.push(`- Current price: $${facts.price.toFixed(2)}`);
+      if (facts.high52 !== undefined) priceLevelLines.push(`- 52-week high: $${facts.high52.toFixed(2)}`);
+      if (facts.low52 !== undefined) priceLevelLines.push(`- 52-week low: $${facts.low52.toFixed(2)}`);
+      if (facts.ma50 !== undefined) priceLevelLines.push(`- 50-day moving average: $${facts.ma50.toFixed(2)}`);
+      if (facts.ma200 !== undefined) priceLevelLines.push(`- 200-day moving average: $${facts.ma200.toFixed(2)}`);
       return [
         structuredContext,
         "",
@@ -129,8 +139,9 @@ export const aiWriteupService = {
         facts.rsi !== undefined ? `- RSI(14): ${facts.rsi}` : "- RSI(14): not available yet",
         `- FBRS (false-breakout/hype risk, lower is cleaner): ${facts.fbrs}`,
         `- This screener's own label for the setup: "${facts.reasonLabel}"`,
+        ...priceLevelLines,
         "",
-        `Write a 3-4 sentence breakout-setup analysis for ${ticker}. Cover: (1) why this looks like a good setup given the specific numbers above, (2) concretely what to watch for it to actually play out (volume confirmation, and price levels implied by the 52-week/moving-average facts if given), (3) what would invalidate the setup (e.g. INS or ACS rolling over, RSI running into overbought). If an earnings date or catalyst isn't in the facts above, say explicitly that none is known rather than guessing one.`,
+        `Write a 3-4 sentence breakout-setup analysis for ${ticker}. Cover: (1) why this looks like a good setup given the specific numbers above, (2) concretely what to watch for it to actually play out — reference the ACTUAL 52-week high/low and moving-average price levels given above (e.g. "room to run toward the 52-week high of $X" or "needs to hold above the $Y 50-day average"), plus volume confirmation, (3) what would invalidate the setup (e.g. INS or ACS rolling over, RSI running into overbought, price falling back below a moving average level given above). Do not use vague trend-classification language ("uptrend", "breakout in progress", etc.) — cite the specific dollar levels instead. If a price level fact isn't given above, say plainly it isn't available rather than guessing one. If an earnings date or catalyst isn't in the facts above, say explicitly that none is known rather than guessing one.`,
       ].join("\n");
     });
   },
@@ -144,6 +155,7 @@ export const aiWriteupService = {
       rsi: number;
       acs: number;
       nextEarnings: { date: string; daysAway: number } | null;
+      price?: number; high52?: number; low52?: number; ma50?: number; ma200?: number;
     },
   ): WriteupResult {
     return getOrTrigger(`options:${ticker}`, async () => {
@@ -152,6 +164,12 @@ export const aiWriteupService = {
         "Explain this options setup from real volatility and calendar data",
       );
       const structuredContext = await aiContextService.render(packet);
+      const priceLevelLines: string[] = [];
+      if (facts.price !== undefined) priceLevelLines.push(`- Current price: $${facts.price.toFixed(2)}`);
+      if (facts.high52 !== undefined) priceLevelLines.push(`- 52-week high: $${facts.high52.toFixed(2)}`);
+      if (facts.low52 !== undefined) priceLevelLines.push(`- 52-week low: $${facts.low52.toFixed(2)}`);
+      if (facts.ma50 !== undefined) priceLevelLines.push(`- 50-day moving average: $${facts.ma50.toFixed(2)}`);
+      if (facts.ma200 !== undefined) priceLevelLines.push(`- 200-day moving average: $${facts.ma200.toFixed(2)}`);
       return [
         structuredContext,
         "",
@@ -164,8 +182,9 @@ export const aiWriteupService = {
           ? `- Next earnings date: ${facts.nextEarnings.date} (${facts.nextEarnings.daysAway} days away) — real date from the earnings calendar`
           : "- No earnings date in the next 10 days — this setup is based on realized volatility alone",
         `- Options Setup Score: ${facts.optionsSetupScore} (this screener's own composite of realized volatility and earnings proximity — not a market IV rank)`,
+        ...priceLevelLines,
         "",
-        `Write a 3-4 sentence analysis of ${ticker} as a ${facts.direction.toLowerCase()}. Cover: (1) the reasoning from the volatility/RSI/earnings facts above, (2) what would confirm the thesis, (3) what would invalidate it, (4) roughly what timeframe this setup is relevant for (e.g. into the earnings date, or a multi-week technical window). Do not state or imply specific option strikes, premiums, IV, or Greeks — that data isn't available here.`,
+        `Write a 3-4 sentence analysis of ${ticker} as a ${facts.direction.toLowerCase()}. Cover: (1) the reasoning from the volatility/RSI/earnings facts above — reference the ACTUAL 52-week high/low and moving-average price levels given above where relevant (e.g. "already extended above the 200-day average of $X" or "sitting near the 52-week low of $Y"), not vague trend language, (2) what would confirm the thesis, (3) what would invalidate it, (4) roughly what timeframe this setup is relevant for (e.g. into the earnings date, or a multi-week technical window). If a price level fact isn't given above, say plainly it isn't available rather than guessing one. Do not state or imply specific option strikes, premiums, IV, or Greeks — that data isn't available here.`,
       ].join("\n");
     });
   },

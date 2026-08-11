@@ -116,13 +116,6 @@ function tierStyle(t: number): string {
   return "hidden";
 }
 
-function trendLabelStyle(label: string): string {
-  if (label === "LONG-TERM LEADER")    return "text-emerald-400 border-emerald-600/40 bg-emerald-900/20";
-  if (label === "MID-TERM BREAKOUT")   return "text-yellow-400 border-yellow-600/40 bg-yellow-900/20";
-  if (label === "SHORT-TERM IGNITION") return "text-orange-400 border-orange-600/40 bg-orange-900/20";
-  return "text-zinc-600 border-zinc-700/30 bg-transparent";
-}
-
 function regimeBannerStyle(regime: string): string {
   if (regime === "RISK-ON MOMENTUM")        return "border-emerald-500/40 bg-emerald-900/15 text-emerald-300";
   if (regime === "QUALITY GROWTH")          return "border-blue-500/40 bg-blue-900/15 text-blue-300";
@@ -231,14 +224,6 @@ function ScannerTableRow({ r }: { r: ScanResult }) {
             )}
           </div>
           <div className="text-xs text-muted-foreground truncate max-w-[180px]">{r.company}</div>
-          {r.trendLabel !== "NEUTRAL" && (
-            <span className={cn(
-              "text-[8px] font-bold uppercase tracking-wide px-1 py-px rounded border inline-block w-fit mt-0.5",
-              trendLabelStyle(r.trendLabel)
-            )}>
-              {r.trendLabel}
-            </span>
-          )}
         </div>
       </td>
 

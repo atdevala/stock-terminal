@@ -333,15 +333,24 @@ components:
         fbrs:
           type: number
           description: False Breakout Risk Score (0-100) — high = dangerous/hype-driven setup
-        trendLabel:
-          type: string
-          description: "Multi-timeframe trend: LONG-TERM LEADER | MID-TERM BREAKOUT | SHORT-TERM IGNITION | NEUTRAL"
         convictionTier:
           type: number
           description: "Conviction tier: 3=High-Conviction, 2=Speculative, 1=Watchlist, 0=No Signal"
         isSuperstock:
           type: boolean
           description: True when stock shows early NVDA/CRDO/AVGO-type accumulation characteristics
+        high52:
+          type: number
+          description: 52-week high price, from the quote cache. Real dollar level, not a category.
+        low52:
+          type: number
+          description: 52-week low price, from the quote cache.
+        ma50:
+          type: number
+          description: 50-day simple moving average price.
+        ma200:
+          type: number
+          description: 200-day simple moving average price.
         csos:
           type: number
           description: "Composite Stock Opportunity Score (1–100) — percentile-ranked within the watchlist universe. 90+ = truly rare elite setup."
@@ -370,7 +379,7 @@ components:
         signalLabel:
           type: string
           description: "Plain-English reason for signalScore — same label set as the former csosLabel."
-      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, trendLabel, convictionTier, isSuperstock, csos, csosLabel, cpe, bps, lqs, signalScore, signalLabel]
+      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, convictionTier, isSuperstock, csos, csosLabel, cpe, bps, lqs, signalScore, signalLabel]
 
     MoverStock:
       type: object
@@ -426,8 +435,6 @@ components:
         fbrs:
           type: number
           description: False Breakout Risk Score (0-100)
-        trendLabel:
-          type: string
         convictionTier:
           type: number
         isSuperstock:
@@ -456,7 +463,7 @@ components:
             narrativeMomentum:
               type: number
           required: [deltaGvs, deltaVqs, volumeAccel, epsSlope, narrativeMomentum]
-      required: [rank, ticker, company, source, ins, insLabel, cos, gvs, vqs, acs, fbrs, trendLabel, convictionTier, isSuperstock, breakoutScore, insMomentum, divergenceTag, alert]
+      required: [rank, ticker, company, source, ins, insLabel, cos, gvs, vqs, acs, fbrs, convictionTier, isSuperstock, breakoutScore, insMomentum, divergenceTag, alert]
 
     ScannerResponse:
       type: object

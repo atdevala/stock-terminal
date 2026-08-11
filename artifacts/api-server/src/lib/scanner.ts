@@ -81,7 +81,6 @@ export interface ScanResult {
   vqs: number;
   acs: number;
   fbrs: number;
-  trendLabel: string;
   convictionTier: number;
   isSuperstock: boolean;
   breakoutScore: number;
@@ -368,7 +367,6 @@ function buildScanResult(
     vqs:            scored.vqs,
     acs:            scored.acs,
     fbrs:           scored.fbrs,
-    trendLabel:     scored.trendLabel,
     convictionTier: scored.convictionTier,
     isSuperstock:   scored.isSuperstock,
     breakoutScore:  Math.round(clamp(0.5 * ins + 0.3 * insMom + 0.2 * volAccel)),

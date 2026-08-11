@@ -130,23 +130,37 @@ export const aiContextService = {
   },
 };
 
+// COS/CSOS/CPE/BPS are retired composite scores — never surfaced to a user
+// or an AI prompt as their own number (see StockRow.tsx for the frontend
+// side of this rule). trendLabel is retired too: it was a vague categorical
+// bucket ("MID-TERM BREAKOUT" etc.) that added noise without adding
+// information beyond what the real price-level facts below already say.
+// Give the model actual numbers to reason about instead — 52-week range and
+// moving-average price levels — so write-ups cite concrete levels rather
+// than parroting a label.
 function scoreFacts(score: StockScore | undefined): Array<{ key: string; value: string | number | boolean; source?: string }> {
   if (!score) return [{ key: "scoreStatus", value: "unavailable", source: "score-service" }];
 
-  return [
-    { key: "ins", value: score.ins ?? 50, source: "legacy-score" },
-    { key: "cos", value: score.cos, source: "legacy-score" },
-    { key: "gvs", value: score.gvs, source: "legacy-score" },
-    { key: "vqs", value: score.vqs, source: "legacy-score" },
-    { key: "acs", value: score.acs, source: "legacy-score" },
-    { key: "csos", value: score.csos, source: "legacy-score" },
-    { key: "cpe", value: score.cpe, source: "legacy-score" },
-    { key: "bps", value: score.bps, source: "legacy-score" },
-    { key: "lqs", value: score.lqs, source: "legacy-score" },
-    { key: "trendLabel", value: score.trendLabel, source: "legacy-score" },
-    { key: "convictionTier", value: score.convictionTier, source: "legacy-score" },
-    { key: "isSuperstock", value: score.isSuperstock, source: "legacy-score" },
+  const facts: Array<{ key: string; value: string | number | boolean; source?: string }> = [
+    { key: "ins", value: score.ins ?? 50, source: "score-service" },
+    { key: "gvs", value: score.gvs, source: "score-service" },
+    { key: "vqs", value: score.vqs, source: "score-service" },
+    { key: "acs", value: score.acs, source: "score-service" },
+    { key: "fbrs", value: score.fbrs, source: "score-service" },
+    { key: "lqs", value: score.lqs, source: "score-service" },
+    { key: "convictionTier", value: score.convictionTier, source: "score-service" },
+    { key: "isSuperstock", value: score.isSuperstock, source: "score-service" },
   ];
+
+  if (score.rsi !== undefined) facts.push({ key: "rsi14", value: score.rsi, source: "price-history" });
+  if (score.high52 !== undefined) facts.push({ key: "high52Week", value: score.high52, source: "quote-cache" });
+  if (score.low52 !== undefined) facts.push({ key: "low52Week", value: score.low52, source: "quote-cache" });
+  if (score.ma50 !== undefined) facts.push({ key: "movingAverage50Day", value: score.ma50, source: "price-history" });
+  if (score.ma200 !== undefined) facts.push({ key: "movingAverage200Day", value: score.ma200, source: "price-history" });
+  if (score.priceAbove50MA !== undefined) facts.push({ key: "priceAbove50DayMA", value: score.priceAbove50MA, source: "price-history" });
+  if (score.priceAbove200MA !== undefined) facts.push({ key: "priceAbove200DayMA", value: score.priceAbove200MA, source: "price-history" });
+
+  return facts;
 }
 
 function defaultAIConstraints(): string[] {

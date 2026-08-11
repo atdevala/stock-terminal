@@ -1066,9 +1066,22 @@ export interface StockScore {
   // ── New signals ──────────────────────────────────────────────────────────
   acs: number;
   fbrs: number;
-  trendLabel: string;
+  // trendLabel (LONG-TERM LEADER / MID-TERM BREAKOUT / etc.) used to be
+  // exposed here. It's retired as a user- and AI-facing value — it was a
+  // vague bucket that added noise without adding information beyond what
+  // the real price-level fields below already say. The momentum
+  // classification it was built from still feeds calculateBPS internally
+  // (computeTrendLabel, unchanged) — only the string label is gone.
   convictionTier: number;
   isSuperstock: boolean;
+  // ── Real price levels — what "trend" claims used to gesture at vaguely ───
+  // Give the reader (and the AI write-up) actual numbers to reason about
+  // instead of a categorical label: where is price relative to its 52-week
+  // range and its moving averages, in dollars.
+  high52?: number;
+  low52?: number;
+  ma50?: number;
+  ma200?: number;
   // ── CSOS — watchlist-only composite opportunity score ─────────────────────
   csos: number;
   csosLabel: string;
@@ -1173,6 +1186,10 @@ export function computeScore(
   const fbrs = computeFBRS(ext, quote);
 
   // ── MULTI-TIMEFRAME TREND ─────────────────────────────────────────────────
+  // Internal only as of this pass — trendLabel is no longer part of the
+  // returned StockScore (retired as a user/AI-facing value, see the
+  // StockScore interface comment). It still feeds BPS's momentum component
+  // below unchanged.
   const trendLabel = computeTrendLabel(ext, quote);
 
   // ── CONVICTION TIER + SUPERSTOCK ─────────────────────────────────────────
@@ -1236,9 +1253,12 @@ export function computeScore(
     insComponents: insResult.insComponents,
     acs,
     fbrs,
-    trendLabel,
     convictionTier,
     isSuperstock,
+    high52: quote?.high52,
+    low52:  quote?.low52,
+    ma50:   ext.ma50,
+    ma200:  ext.ma200,
     csos:      csosResult.csos,
     csosLabel: csosResult.csosLabel,
     cpe,
@@ -1258,7 +1278,6 @@ export function computeScore(
       gvsLabel: "Broken Growth Story",
       cosLabel: "Avoid / High Risk",
       acs: 0, fbrs: 100,
-      trendLabel: "NEUTRAL",
       convictionTier: 0,
       isSuperstock: false,
       csos: 0,

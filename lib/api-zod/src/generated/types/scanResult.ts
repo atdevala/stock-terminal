@@ -22,7 +22,6 @@ export interface ScanResult {
   acs: number;
   /** False Breakout Risk Score (0-100) */
   fbrs: number;
-  trendLabel: string;
   convictionTier: number;
   isSuperstock: boolean;
   /** Breakout Probability: 50% INS + 30% 7D Momentum + 20% Volume Accel */

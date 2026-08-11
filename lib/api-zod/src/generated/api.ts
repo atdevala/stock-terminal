@@ -115,11 +115,22 @@ export const GetScoresResponseItem = zod.object({
     .describe(
       "False Breakout Risk Score (0-100) — high = dangerous\/hype-driven setup",
     ),
-  trendLabel: zod
-    .string()
-    .describe(
-      "Multi-timeframe trend: LONG-TERM LEADER | MID-TERM BREAKOUT | SHORT-TERM IGNITION | NEUTRAL",
-    ),
+  high52: zod
+    .number()
+    .optional()
+    .describe("52-week high price, from the quote cache. Real dollar level, not a category."),
+  low52: zod
+    .number()
+    .optional()
+    .describe("52-week low price, from the quote cache."),
+  ma50: zod
+    .number()
+    .optional()
+    .describe("50-day simple moving average price."),
+  ma200: zod
+    .number()
+    .optional()
+    .describe("200-day simple moving average price."),
   convictionTier: zod
     .number()
     .describe(
@@ -203,7 +214,6 @@ export const GetScannerResponse = zod.object({
       vqs: zod.number(),
       acs: zod.number().describe("Accumulation Confidence Score (0-100)"),
       fbrs: zod.number().describe("False Breakout Risk Score (0-100)"),
-      trendLabel: zod.string(),
       convictionTier: zod.number(),
       isSuperstock: zod.boolean(),
       breakoutScore: zod
