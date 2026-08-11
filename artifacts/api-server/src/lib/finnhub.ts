@@ -267,6 +267,37 @@ async function fetchProfile(ticker: string): Promise<void> {
   }
 }
 
+// Finnhub's free tier does not include /stock/candle for US equities (it
+// returns a 403/no_data response) — this was discovered empirically after
+// the RSI/MACD/ACS candle-mode features all came back permanently empty in
+// production, not just during the cold-start window. Yahoo's public chart
+// endpoint is the fallback, same as macd-service.ts already used for MACD;
+// a User-Agent header is required or Yahoo silently rejects/blocks requests
+// from cloud-hosted IPs (Render, AWS, GCP, etc.) with no body.
+async function fetchYahooDailyCandles(ticker: string): Promise<{ closes: number[]; volumes: number[] } | null> {
+  try {
+    const resp = await fetch(
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1y&interval=1d`,
+      {
+        signal: AbortSignal.timeout(10_000),
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; stock-terminal/1.0)" },
+      },
+    );
+    if (!resp.ok) return null;
+    const payload = await resp.json() as {
+      chart?: { result?: Array<{ indicators?: { quote?: Array<{ close?: Array<number | null>; volume?: Array<number | null> }> } }> };
+    };
+    const quote = payload.chart?.result?.[0]?.indicators?.quote?.[0];
+    const closes = (quote?.close ?? []).filter((v): v is number => typeof v === "number");
+    const volumes = (quote?.volume ?? []).filter((v): v is number => typeof v === "number");
+    if (closes.length < 10) return null;
+    return { closes, volumes };
+  } catch (err) {
+    logger.warn({ ticker, err }, "Yahoo candles fallback failed");
+    return null;
+  }
+}
+
 async function fetchCandlesAndMAs(ticker: string): Promise<void> {
   const cached = getCachedCandles(ticker);
   if (cached) {
@@ -280,6 +311,10 @@ async function fetchCandlesAndMAs(ticker: string): Promise<void> {
     });
     return;
   }
+
+  let closes: number[] | undefined;
+  let volumes: number[] | undefined;
+
   try {
     const to   = Math.floor(Date.now() / 1000);
     const from = to - 220 * 86400;
@@ -287,38 +322,48 @@ async function fetchCandlesAndMAs(ticker: string): Promise<void> {
       `/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}`
     ) as Record<string, unknown>;
 
-    if (data["s"] !== "ok") return;
-    const closes  = data["c"] as number[];
-    const volumes = data["v"] as number[] | undefined;
-    if (!closes || closes.length < 10) return;
-
-    const ma50  = closes.length >= 50
-      ? closes.slice(-50).reduce((a, b) => a + b, 0) / 50
-      : closes.reduce((a, b) => a + b, 0) / closes.length;
-
-    const ma200 = closes.length >= 200
-      ? closes.slice(-200).reduce((a, b) => a + b, 0) / 200
-      : closes.reduce((a, b) => a + b, 0) / closes.length;
-
-    const payload: CandlesPayload = {
-      ma50,
-      ma200,
-      closes60d:  closes.slice(-60),
-      volumes60d: volumes ? volumes.slice(-60) : undefined,
-    };
-    setCachedCandles(ticker, payload);
-
-    const ext = extMetricsCache.get(ticker) ?? { ticker };
-    extMetricsCache.set(ticker, {
-      ...ext, ticker,
-      ma50:      payload.ma50,
-      ma200:     payload.ma200,
-      closes60d: payload.closes60d,
-      volumes60d: payload.volumes60d ?? ext.volumes60d,
-    });
+    if (data["s"] === "ok" && Array.isArray(data["c"]) && (data["c"] as number[]).length >= 10) {
+      closes  = data["c"] as number[];
+      volumes = data["v"] as number[] | undefined;
+    }
   } catch (err) {
-    logger.warn({ ticker, err }, "Candles/MA fetch failed");
+    logger.warn({ ticker, err }, "Finnhub candles fetch failed — trying Yahoo fallback");
   }
+
+  if (!closes) {
+    const yahoo = await fetchYahooDailyCandles(ticker);
+    if (yahoo) {
+      closes = yahoo.closes;
+      volumes = yahoo.volumes;
+    }
+  }
+
+  if (!closes || closes.length < 10) return;
+
+  const ma50  = closes.length >= 50
+    ? closes.slice(-50).reduce((a, b) => a + b, 0) / 50
+    : closes.reduce((a, b) => a + b, 0) / closes.length;
+
+  const ma200 = closes.length >= 200
+    ? closes.slice(-200).reduce((a, b) => a + b, 0) / 200
+    : closes.reduce((a, b) => a + b, 0) / closes.length;
+
+  const payload: CandlesPayload = {
+    ma50,
+    ma200,
+    closes60d:  closes.slice(-60),
+    volumes60d: volumes ? volumes.slice(-60) : undefined,
+  };
+  setCachedCandles(ticker, payload);
+
+  const ext = extMetricsCache.get(ticker) ?? { ticker };
+  extMetricsCache.set(ticker, {
+    ...ext, ticker,
+    ma50:      payload.ma50,
+    ma200:     payload.ma200,
+    closes60d: payload.closes60d,
+    volumes60d: payload.volumes60d ?? ext.volumes60d,
+  });
 }
 
 async function fetchRecommendations(ticker: string): Promise<void> {

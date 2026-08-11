@@ -153,7 +153,12 @@ async function fetchFinnhubCandles(ticker: string): Promise<CandleSeries | null>
 async function fetchYahooCandles(ticker: string): Promise<CandleSeries | null> {
   const response = await fetch(
     `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=6mo&interval=1d`,
-    { signal: AbortSignal.timeout(10_000) },
+    {
+      signal: AbortSignal.timeout(10_000),
+      // Without a User-Agent, Yahoo silently rejects/blocks requests from
+      // cloud-hosted IPs (Render, AWS, GCP, etc.) with no error body.
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; stock-terminal/1.0)" },
+    },
   );
   if (!response.ok) return null;
 
