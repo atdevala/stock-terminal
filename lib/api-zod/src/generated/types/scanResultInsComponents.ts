@@ -7,9 +7,9 @@
  */
 
 export type ScanResultInsComponents = {
-  deltaGvs: number;
+  momentum: number;
   deltaVqs: number;
   volumeAccel: number;
   epsSlope: number;
-  narrativeMomentum: number;
+  earningsProximity: number;
 };

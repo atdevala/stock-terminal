@@ -9,11 +9,11 @@ export interface INSResult {
   insLabel: string;
   divergenceTag: string;
   insComponents: {
-    deltaGvs: number;
+    momentum: number;
     deltaVqs: number;
     volumeAccel: number;
     epsSlope: number;
-    narrativeMomentum: number;
+    earningsProximity: number;
   };
 }
 
@@ -32,9 +32,28 @@ export function getDivergenceTag(ins: number, cos: number): string {
   return "";
 }
 
-// ── A. Delta GVS proxy: momentum acceleration (0-100) ─────────────────────────
-// Compares 14-day return vs 30-day return. Positive = momentum accelerating.
-function computeDeltaGVS(closes: number[]): number {
+// ── A. Momentum: acceleration + relative strength + magnitude-weighted streak ─
+// Consolidates the old ΔGVS proxy (computeDeltaGVS) and Narrative Momentum
+// proxy (computeNarrativeMomentum) into one component. Those two overlapped
+// almost entirely — both were just price momentum measured over slightly
+// different windows, so 45% of INS's old weight was two views of the same
+// thing. This keeps the genuinely distinct pieces from each (pace
+// acceleration; relative strength vs SPY) and fixes a third real problem:
+// the old green-day streak counter (`streak * 3`) was magnitude-blind — five
+// days of +0.1% scored identically to five days of +2%. It's now weighted by
+// the average daily return over the streak, not just its length.
+//
+// Internal weighting: Acceleration 40% | Relative Strength 35% | Streak 25%
+function computeMomentum(closes: number[], spyCloses: number[]): number {
+  const acceleration     = computeAcceleration(closes);
+  const relativeStrength = computeRelativeStrength(closes, spyCloses);
+  const streak           = computeStreakScore(closes);
+  return clamp(0.40 * acceleration + 0.35 * relativeStrength + 0.25 * streak, 0, 100);
+}
+
+// 14-day return vs 30-day return — is the pace of the move speeding up.
+// (Formerly computeDeltaGVS.)
+function computeAcceleration(closes: number[]): number {
   if (closes.length < 31) return 50;
   const curr = closes[closes.length - 1]!;
   const c14  = closes[closes.length - 15]!;
@@ -43,6 +62,49 @@ function computeDeltaGVS(closes: number[]): number {
   const ret14 = (curr - c14) / c14 * 100;
   const ret30 = (curr - c30) / c30 * 100;
   return clamp(50 + (ret14 - ret30) * 2.5, 0, 100);
+}
+
+// 20D return vs SPY's 20D return over the same window — a stock up 5% while
+// the market's up 6% is NOT showing real strength. (Formerly the relative-
+// strength half of computeNarrativeMomentum.)
+function computeRelativeStrength(closes: number[], spyCloses: number[]): number {
+  if (closes.length < 20) return 50;
+  const curr = closes[closes.length - 1]!;
+  const c20  = closes[Math.max(0, closes.length - 21)]!;
+  if (!c20) return 50;
+
+  const ret20d = (curr - c20) / c20 * 100;
+  let relStrength = ret20d;
+
+  if (spyCloses.length >= 21) {
+    const spyCurr = spyCloses[spyCloses.length - 1]!;
+    const spy20   = spyCloses[Math.max(0, spyCloses.length - 21)]!;
+    if (spy20 > 0) relStrength = ret20d - ((spyCurr - spy20) / spy20 * 100);
+  }
+
+  return clamp(50 + relStrength * 2, 0, 100);
+}
+
+// Magnitude-weighted up-streak: average daily return over the current run of
+// green closes (max 10 days back), not just how many days it's lasted. A
+// streak of five +0.1% days now scores near-neutral; five +2% days scores
+// high. (Formerly the raw `streak * 3, capped 25` half of computeNarrativeMomentum.)
+function computeStreakScore(closes: number[]): number {
+  let streak = 0;
+  let sumRet = 0;
+  for (let i = closes.length - 1; i > 0 && streak < 10; i--) {
+    const prev = closes[i - 1]!;
+    const curr = closes[i]!;
+    if (prev > 0 && curr > prev) {
+      streak++;
+      sumRet += (curr - prev) / prev * 100;
+    } else {
+      break;
+    }
+  }
+  if (streak === 0) return 50;
+  const avgDailyReturn = sumRet / streak;
+  return clamp(50 + avgDailyReturn * 33, 0, 100);
 }
 
 // ── B. Delta VQS proxy: fundamental re-rating strength (0-100) ────────────────
@@ -109,34 +171,22 @@ function computeEPSSlopeScore(surprises: number[]): number {
   return clamp(50 + avg * 0.5 + trend * 0.3, 0, 100);
 }
 
-// ── E. Narrative Momentum Proxy (0-100) ──────────────────────────────────────
-// 20D relative strength vs SPY + consecutive green day streak.
-function computeNarrativeMomentum(closes: number[], spyCloses: number[]): number {
-  if (closes.length < 20) return 50;
-  const curr = closes[closes.length - 1]!;
-  const c20  = closes[Math.max(0, closes.length - 21)]!;
-  if (!c20) return 50;
-
-  const ret20d = (curr - c20) / c20 * 100;
-  let relStrength = ret20d;
-
-  if (spyCloses.length >= 21) {
-    const spyCurr = spyCloses[spyCloses.length - 1]!;
-    const spy20   = spyCloses[Math.max(0, spyCloses.length - 21)]!;
-    if (spy20 > 0) relStrength = ret20d - ((spyCurr - spy20) / spy20 * 100);
-  }
-
-  const returnScore = clamp(50 + relStrength * 2, 0, 75);
-
-  // Consecutive green closes (max 10 days)
-  let streak = 0;
-  for (let i = closes.length - 1; i > 0 && streak < 10; i--) {
-    if ((closes[i] ?? 0) > (closes[i - 1] ?? 0)) streak++;
-    else break;
-  }
-  const streakScore = clamp(streak * 3, 0, 25);
-
-  return clamp(returnScore + streakScore, 0, 100);
+// ── E. Earnings Proximity (0-100) — NEW ──────────────────────────────────────
+// The one genuinely forward-looking INS input. Everything else above is
+// trailing/lagging price or fundamentals data, which is why a high INS score
+// has historically meant "momentum already started" rather than "about to
+// start." A known earnings date within the next few trading days is a real
+// forward catalyst.
+//
+// tradingDaysAway is undefined when the ticker has no known earnings date in
+// the cached calendar window. That must NOT silently read as "no catalyst"
+// (0) or get ignored — it defaults to a genuine neutral midpoint (50) so a
+// missing data point can neither suppress nor inflate the score.
+function computeEarningsProximity(tradingDaysAway: number | undefined): number {
+  if (tradingDaysAway === undefined || tradingDaysAway < 0) return 50;
+  if (tradingDaysAway <= 3) return 100;
+  if (tradingDaysAway >= 15) return 0;
+  return clamp(100 - ((tradingDaysAway - 3) / 12) * 100, 0, 100);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -145,7 +195,9 @@ export function computeINS(
   ext: ExtendedMetrics,
   currentPrice: number,
   cos: number,
-  spyCloses: number[]
+  spyCloses: number[],
+  rsi: number | undefined,
+  tradingDaysToEarnings: number | undefined,
 ): INSResult {
   const closes    = ext.closes60d    ?? [];
   const volumes   = ext.volumes60d   ?? [];
@@ -154,30 +206,85 @@ export function computeINS(
   // Prepend stored closes with current live price for freshest calculation
   const allCloses = closes.length > 0 ? [...closes, currentPrice] : [currentPrice];
 
-  const deltaGvs          = computeDeltaGVS(allCloses);
+  const momentum          = computeMomentum(allCloses, spyCloses);
   const deltaVqs          = computeDeltaVQS(ext);
   const volumeAccel       = computeVolumeAccel(allCloses, volumes);
   const epsSlope          = computeEPSSlopeScore(surprises);
-  const narrativeMomentum = computeNarrativeMomentum(allCloses, spyCloses);
+  const earningsProximity = computeEarningsProximity(tradingDaysToEarnings);
 
-  const ins = Math.round(clamp(
-    0.25 * deltaGvs +
-    0.20 * volumeAccel +
-    0.20 * narrativeMomentum +
-    0.20 * epsSlope +
-    0.15 * deltaVqs
-  ));
+  // ── INS Weight Table (revised — see history below) ──────────────────────────
+  //   Momentum (consolidated accel + RS + streak):  30%
+  //   Volume Acceleration:                          27%
+  //   Earnings Proximity (forward-looking):         15%
+  //   ΔVQS (fundamental re-rating):                 15%
+  //   EPS Slope:                                    13%
+  //                                                 ----
+  //                                                 100%
+  //
+  // History: ΔGVS (25%) + Narrative Momentum (20%) were 45% combined and
+  // mostly redundant (both just price momentum over overlapping windows) —
+  // consolidated into Momentum above at 30%, freeing 15pts, with Earnings
+  // Proximity added as a new forward-looking component.
+  //
+  // A first pass closed the remaining gap to 100% by scaling EPS Slope and
+  // ΔVQS up proportionally from a draft 10%/15%. That was a mistake: it was
+  // pure arithmetic convenience, not a decision about what INS should
+  // measure, and it pushed ΔVQS — a fundamentals/re-rating signal — up to
+  // 24%, nearly a quarter of a score that's supposed to answer "is momentum
+  // inflecting right now," not "is this a good business" (VQS already
+  // answers that). This revision instead closes the gap using the two
+  // components that are genuinely forward/timing-oriented: Volume
+  // Acceleration (20%→27% — a leading read on institutional positioning,
+  // not a lagging one) and Earnings Proximity (10%→15% — the one explicitly
+  // forward-looking catalyst in this score). ΔVQS returns to its original
+  // 15% weight. EPS Slope — a lagging confirmation signal (past-quarter
+  // beats) — takes a modest trim (16%→13%) rather than carrying a
+  // disproportionate share of the fundamentals-adjacent weight on its own.
+  const rawIns = clamp(
+    0.30 * momentum +
+    0.27 * volumeAccel +
+    0.15 * earningsProximity +
+    0.15 * deltaVqs +
+    0.13 * epsSlope,
+    0, 100,
+  );
+
+  // ── RSI Gate ─────────────────────────────────────────────────────────────
+  // Applied AFTER the weighted score above — not blended in as a 6th
+  // component — so the underlying momentum reading stays honest and
+  // auditable on its own. Distinguishes a fresh setup (room to run) from one
+  // that's already extended.
+  const HIGH_INS_THRESHOLD = 65;
+  let ins: number;
+  let insLabel: string;
+
+  if (rsi !== undefined && rsi >= 70 && rawIns >= HIGH_INS_THRESHOLD) {
+    // Overbought + high INS: momentum is already priced in. Dampen and relabel
+    // so this reads differently from a fresh setup.
+    ins = Math.round(clamp(rawIns * 0.7, 0, 100));
+    insLabel = "EXTENDED — MOMENTUM ALREADY PRICED IN";
+  } else if (rsi !== undefined && rsi <= 30 && rawIns >= HIGH_INS_THRESHOLD) {
+    // Oversold + high INS: a different real pattern (bottoming/reversal
+    // candidate) — not penalized like the overbought case, just labeled
+    // distinctly so it isn't confused with fresh breakout momentum.
+    ins = Math.round(clamp(rawIns, 0, 100));
+    insLabel = "OVERSOLD REVERSAL SETUP";
+  } else {
+    // RSI unavailable, or RSI 30-70 — the target fresh-setup case. Normal path.
+    ins = Math.round(clamp(rawIns, 0, 100));
+    insLabel = getInsLabel(ins);
+  }
 
   return {
     ins,
-    insLabel:      getInsLabel(ins),
+    insLabel,
     divergenceTag: getDivergenceTag(ins, cos),
     insComponents: {
-      deltaGvs:          Math.round(deltaGvs),
+      momentum:          Math.round(momentum),
       deltaVqs:          Math.round(deltaVqs),
       volumeAccel:       Math.round(volumeAccel),
       epsSlope:          Math.round(epsSlope),
-      narrativeMomentum: Math.round(narrativeMomentum),
+      earningsProximity: Math.round(earningsProximity),
     },
   };
 }

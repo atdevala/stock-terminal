@@ -68,4 +68,6 @@ export interface StockScore {
   signalScore: number;
   /** Plain-English reason for signalScore — same label set as the former csosLabel. */
   signalLabel: string;
+  /** True when a risk-off/choppy market regime actively dampened signalScore. */
+  regimeAdjusted?: boolean;
 }

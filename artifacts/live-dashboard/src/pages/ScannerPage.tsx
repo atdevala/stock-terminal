@@ -248,11 +248,11 @@ function ScannerTableRow({ r }: { r: ScanResult }) {
             <p className="text-violet-300 font-semibold">INS: {r.insLabel}</p>
             {r.insComponents && (
               <div className="space-y-1 text-zinc-400 font-mono">
-                <div className="flex justify-between gap-4"><span>Δ GVS Momentum</span><span className={scoreColor(r.insComponents.deltaGvs)}>{r.insComponents.deltaGvs}</span></div>
+                <div className="flex justify-between gap-4"><span>Momentum</span><span className={scoreColor(r.insComponents.momentum)}>{r.insComponents.momentum}</span></div>
                 <div className="flex justify-between gap-4"><span>Δ VQS Quality</span><span className={scoreColor(r.insComponents.deltaVqs)}>{r.insComponents.deltaVqs}</span></div>
                 <div className="flex justify-between gap-4"><span>Volume Accel</span><span className={scoreColor(r.insComponents.volumeAccel)}>{r.insComponents.volumeAccel}</span></div>
                 <div className="flex justify-between gap-4"><span>EPS Slope</span><span className={scoreColor(r.insComponents.epsSlope)}>{r.insComponents.epsSlope}</span></div>
-                <div className="flex justify-between gap-4"><span>Narrative Mom.</span><span className={scoreColor(r.insComponents.narrativeMomentum)}>{r.insComponents.narrativeMomentum}</span></div>
+                <div className="flex justify-between gap-4"><span>Earnings Proximity</span><span className={scoreColor(r.insComponents.earningsProximity)}>{r.insComponents.earningsProximity}</span></div>
               </div>
             )}
           </TooltipContent>

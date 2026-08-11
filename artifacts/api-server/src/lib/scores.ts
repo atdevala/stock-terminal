@@ -1,6 +1,7 @@
 import type { ExtendedMetrics, QuoteData } from "./finnhub";
 import { computeINS } from "./ins";
 import { getSpyCloses60d, getMarketRegime } from "./finnhub";
+import { getTradingDaysToNextEarnings } from "./catalysts";
 import { logger } from "./logger";
 
 // ── Math helpers ───────────────────────────────────────────────────────────────
@@ -1057,11 +1058,11 @@ export interface StockScore {
   insLabel?: string;
   divergenceTag?: string;
   insComponents?: {
-    deltaGvs: number;
+    momentum: number;
     deltaVqs: number;
     volumeAccel: number;
     epsSlope: number;
-    narrativeMomentum: number;
+    earningsProximity: number;
   };
   // ── New signals ──────────────────────────────────────────────────────────
   acs: number;
@@ -1107,6 +1108,11 @@ export interface StockScore {
   // new UI should read signalScore / signalLabel instead.
   signalScore: number;
   signalLabel: string;
+  // True when a risk-off/choppy market regime actively dampened signalScore
+  // below (see the regime-multiplier block in computeScore). Kept as a
+  // separate flag rather than folded into signalLabel's text so existing
+  // exact-match label lookups elsewhere keep working unchanged.
+  regimeAdjusted?: boolean;
 }
 
 // ── Master score computation ───────────────────────────────────────────────────
@@ -1115,7 +1121,11 @@ export function computeScore(
   ticker: string,
   ext: ExtendedMetrics,
   currentPrice: number,
-  changePercent = 0,
+  // No longer used internally — GVS's momentum bucket dropped the intraday
+  // term that used to consume this (see the GVS block below). Kept as a
+  // parameter for call-site signature stability; quote?.changePercent covers
+  // any intraday reads elsewhere in this function.
+  _changePercent = 0,
   quote?: QuoteData,
 ): StockScore {
   try {
@@ -1135,45 +1145,74 @@ export function computeScore(
   const priceAbove200MA = ma200 ? currentPrice > ma200 : false;
 
   // ── VALUATION QUALITY SCORE ──────────────────────────────────────────────
+  // The old 5-bucket VQS (growth, valuation, PEG, margin, health) had PEG
+  // (`20/(PE/growth)`) as a separate 20-pt bucket even though it's just a
+  // rescaled combination of the exact same two inputs — PE and revenue
+  // growth — already used by growth score and valuation score on their own.
+  // That made 3 of 5 buckets (60% of the point budget) different transforms
+  // of the same two numbers, not independent views of the company. PEG is
+  // folded into valuation score below as a single "is the price justified by
+  // ITS OWN growth rate" adjustment instead of a redundant separate bucket.
+  // Point budget: Growth 20 | Valuation 40 (absorbs PEG's old 20) | Margin 20
+  // | Health 20 — sums to a 100-point max.
   const growthScore = clamp(rg * 0.4, 0, 20);
   let valuationScore = 0;
   if (pe && pe > 0) {
-    valuationScore = clamp(200 / pe, 0, 20);
+    const rawPeScore = clamp(200 / pe, 0, 20); // absolute cheapness, unadjusted for growth
+    let pegAdjustment = 0;
+    if (rg > 0) {
+      const peg = pe / Math.max(rg, 1);
+      pegAdjustment = clamp(20 / peg, 0, 20); // cheap relative to ITS OWN growth rate
+    }
+    valuationScore = clamp(rawPeScore + pegAdjustment, 0, 40);
   } else if (evS && evS > 0) {
+    // No PE available — no PEG-style adjustment is possible without it, so
+    // this fallback path caps at the base 20 rather than the full 40.
     valuationScore = clamp(50 / evS, 0, 20);
   }
-  const peg = (pe && pe > 0 && rg > 0) ? pe / Math.max(rg, 1) : 0;
-  const pegScore    = peg > 0 ? clamp(20 / peg, 0, 20) : 0;
   const marginScore = clamp((gm * 0.1) + (opM * 0.2), 0, 20);
   let healthScore   = 20;
   if (fcfM < 0)  healthScore -= 5;
   if (rg < 0)    healthScore -= 5;
   if (de > 2)    healthScore -= 5;
   healthScore = clamp(healthScore, 0, 20);
-  const vqs = Math.round(clamp(growthScore + valuationScore + pegScore + marginScore + healthScore));
+  const vqs = Math.round(clamp(growthScore + valuationScore + marginScore + healthScore, 0, 100));
 
   // ── GROWTH VOLATILITY SCORE ───────────────────────────────────────────────
-  const growthAccelScore = clamp((rg * 0.3) + (rgQ * 0.5), 0, 25);
-  const intradayPts = clamp(changePercent * 0.5, -5, 5);
+  // gvsValScore (`25/(PE/growth)`) is removed — it's the same PE/growth
+  // relationship VQS's valuation score (above) already covers; keeping a
+  // second copy here duplicated that signal rather than adding an
+  // independent view. Its 25-pt budget is redistributed proportionally
+  // across the remaining three buckets (were 25 each out of 100; now ~33
+  // each out of 100): Growth Acceleration 33 | Momentum 34 | Profitability 33.
+  //
+  // Momentum also drops `intradayPts` (today's single-day % change × 0.5,
+  // capped ±5) — a single day's price noise doesn't belong in a score meant
+  // to describe the business or its medium-term trend. If today's price
+  // action matters anywhere, it's INS's momentum component (see ins.ts),
+  // not this one. The flag weights below are rescaled so the 34-pt budget
+  // stays reachable without that intraday term.
+  const growthAccelScore = clamp((rg * 0.4) + (rgQ * 0.65), 0, 33);
   let momentumScore = 0;
-  if (revisionsUp)      momentumScore += 15;
-  if (priceAbove50MA)   momentumScore += 5;
-  if (priceAbove200MA)  momentumScore += 5;
-  momentumScore = clamp(momentumScore + intradayPts, 0, 25);
-  let gvsValScore = 0;
-  if (pe && pe > 0 && rg > 0) {
-    const valAdj = pe / Math.max(rg, 1);
-    gvsValScore = clamp(25 / Math.max(valAdj, 0.01), 0, 25);
-  }
-  const profScore = clamp((gm * 0.2) + (fcfM * 0.3), 0, 25);
-  const gvs = Math.round(clamp(growthAccelScore + momentumScore + gvsValScore + profScore));
+  if (revisionsUp)      momentumScore += 20;
+  if (priceAbove50MA)   momentumScore += 8;
+  if (priceAbove200MA)  momentumScore += 6;
+  momentumScore = clamp(momentumScore, 0, 34);
+  const profScore = clamp((gm * 0.26) + (fcfM * 0.4), 0, 33);
+  const gvs = Math.round(clamp(growthAccelScore + momentumScore + profScore, 0, 100));
 
   // ── COMBINED OPPORTUNITY SCORE ────────────────────────────────────────────
   const cos = Math.round(clamp((0.5 * vqs) + (0.5 * gvs)));
 
+  // ── RSI(14) — computed here (moved up from after BPS) because INS's RSI
+  // gate needs it; independent of every other score in this function.
+  const rsi = computeRSI(ext.closes60d ?? []);
+  const rsiZoneVal = rsiZone(rsi);
+
   // ── INFLECTION SIGNAL SCORE ───────────────────────────────────────────────
   const spyCloses  = getSpyCloses60d();
-  const insResult  = computeINS(ext, currentPrice, cos, spyCloses);
+  const tradingDaysToEarnings = getTradingDaysToNextEarnings(ticker);
+  const insResult  = computeINS(ext, currentPrice, cos, spyCloses, rsi, tradingDaysToEarnings);
   const ins        = insResult.ins;
 
   // ── ACCUMULATION CONFIDENCE SCORE (ACSv2) ────────────────────────────────
@@ -1222,12 +1261,21 @@ export function computeScore(
     cos, lqs,
   );
 
-  // ── RSI(14) — oversold/overbought, independent of every other score above ─
-  const rsi = computeRSI(ext.closes60d ?? []);
-  const rsiZoneVal = rsiZone(rsi);
+  // ── Regime-aware dampening ────────────────────────────────────────────────
+  // CSOS used to apply a regime multiplier (see calculateCSOS above); that
+  // adjustment did NOT carry over when BPS became the consolidated
+  // signalScore — a real regression, since the tool would flash the same
+  // conviction in a bad tape as a strong one. Reinstated here, scoped only
+  // to signalScore, and only as a dampener in risk-off/choppy regimes (this
+  // pass doesn't otherwise change how signalScore is built from its inputs).
+  // `regime` reuses the getMarketRegime() call already made above for CSOS.
+  let regimeMultiplier = 1.0;
+  if      (regime === "HIGH VOLATILITY / UNSTABLE") regimeMultiplier = 0.85;
+  else if (regime === "DEFENSIVE MARKET")            regimeMultiplier = 0.90;
+  const regimeDamped = regimeMultiplier < 1.0;
 
   // ── Consolidated signal — replaces COS/CSOS/CPE/BPS as separate displays ──
-  const signalScore = bps;
+  const signalScore = regimeDamped ? Math.round(clamp(bps * regimeMultiplier, 1, 100)) : bps;
   const signalLabel = csosLabelText(signalScore, vqs, ins, acs, cos, cpe);
 
   return {
@@ -1268,6 +1316,7 @@ export function computeScore(
     rsiZone: rsiZoneVal,
     signalScore,
     signalLabel,
+    regimeAdjusted: regimeDamped,
   };
   } catch (err) {
     logger.error({ ticker, err }, "computeScore threw unexpectedly — returning safe defaults");
@@ -1289,6 +1338,7 @@ export function computeScore(
       rsiZone: undefined,
       signalScore: 0,
       signalLabel: "LOW QUALITY / AVOID",
+      regimeAdjusted: false,
     };
   }
 }

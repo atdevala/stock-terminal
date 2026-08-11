@@ -61,6 +61,57 @@ export async function getEarningsCalendar(daysAhead = 10): Promise<EarningsEvent
   }
 }
 
+// ── Synchronous earnings-proximity lookup (for INS) ─────────────────────────
+// computeScore() runs synchronously across the whole watchlist on every
+// /scores request, but getEarningsCalendar() is an async network call cached
+// for 6h. Rather than making scoring async, INS's earnings-proximity
+// component reads whatever is already cached here and treats "nothing cached
+// yet" as unknown — never as "no catalyst." The cache is normally warmed by
+// whichever request already calls getEarningsCalendar/getCatalystCalendar
+// (the /catalysts route, options-watch ranking); this also kicks a rate-
+// limited background refresh so INS isn't starved indefinitely if nothing
+// else has warmed it yet.
+
+let lastBackgroundRefreshAttempt = 0;
+const BACKGROUND_REFRESH_COOLDOWN_MS = 60 * 1000;
+
+function warmEarningsCacheInBackground(): void {
+  const isStale = !earningsCache || Date.now() - earningsCache.fetchedAt >= CACHE_TTL_MS;
+  if (!isStale) return;
+  if (Date.now() - lastBackgroundRefreshAttempt < BACKGROUND_REFRESH_COOLDOWN_MS) return;
+  lastBackgroundRefreshAttempt = Date.now();
+  void getEarningsCalendar(15).catch(() => {});
+}
+
+// Approximates trading days between two dates by counting weekdays — no
+// market-holiday calendar, which is fine for a "how close" proximity score
+// rather than a precise settlement calculation.
+function tradingDaysBetween(from: Date, toDateStr: string): number | undefined {
+  const to = new Date(`${toDateStr}T00:00:00Z`);
+  if (isNaN(to.getTime())) return undefined;
+  const fromUTC = Date.UTC(from.getFullYear(), from.getMonth(), from.getDate());
+  const toUTC   = Date.UTC(to.getUTCFullYear(), to.getUTCMonth(), to.getUTCDate());
+  const dir = toUTC >= fromUTC ? 1 : -1;
+  let cursor = fromUTC;
+  let count = 0;
+  while (cursor !== toUTC) {
+    cursor += dir * 24 * 60 * 60 * 1000;
+    const dow = new Date(cursor).getUTCDay();
+    if (dow !== 0 && dow !== 6) count += dir;
+  }
+  return count;
+}
+
+// Trading days until `ticker`'s next known earnings date, or undefined if
+// none is cached. Callers (INS) must treat undefined as "unknown," not as
+// "no catalyst" (0) or something to silently ignore.
+export function getTradingDaysToNextEarnings(ticker: string): number | undefined {
+  warmEarningsCacheInBackground();
+  const match = (earningsCache?.events ?? []).find(e => e.ticker === ticker);
+  if (!match) return undefined;
+  return tradingDaysBetween(new Date(), match.date);
+}
+
 // ── Market-wide macro catalysts ─────────────────────────────────────────────────
 // Finnhub's free tier doesn't expose a macro/economic calendar, so this list is
 // maintained by hand rather than fetched. UPDATE THIS LIST periodically (BLS and

@@ -98,11 +98,11 @@ export const GetScoresResponseItem = zod.object({
   divergenceTag: zod.string().optional(),
   insComponents: zod
     .object({
-      deltaGvs: zod.number(),
+      momentum: zod.number(),
       deltaVqs: zod.number(),
       volumeAccel: zod.number(),
       epsSlope: zod.number(),
-      narrativeMomentum: zod.number(),
+      earningsProximity: zod.number(),
     })
     .optional(),
   acs: zod
@@ -230,11 +230,11 @@ export const GetScannerResponse = zod.object({
       alert: zod.string(),
       insComponents: zod
         .object({
-          deltaGvs: zod.number(),
+          momentum: zod.number(),
           deltaVqs: zod.number(),
           volumeAccel: zod.number(),
           epsSlope: zod.number(),
-          narrativeMomentum: zod.number(),
+          earningsProximity: zod.number(),
         })
         .optional(),
     }),

@@ -88,11 +88,11 @@ export interface ScanResult {
   divergenceTag: string;
   alert: string;
   insComponents?: {
-    deltaGvs: number;
+    momentum: number;
     deltaVqs: number;
     volumeAccel: number;
     epsSlope: number;
-    narrativeMomentum: number;
+    earningsProximity: number;
   };
 }
 
@@ -334,8 +334,8 @@ function scannerDivTag(ins: number, cos: number): string {
   return "";
 }
 
-function computeAlert(ins: number, cos: number, deltaGvs: number): string {
-  if (ins > 60 && deltaGvs > 60 && cos < 65) return "EARLY IGNITION ZONE";
+function computeAlert(ins: number, cos: number, momentum: number): string {
+  if (ins > 60 && momentum > 60 && cos < 65) return "EARLY IGNITION ZONE";
   if (cos > 70 && ins < 50)                   return "EXHAUSTION WARNING";
   return "";
 }
@@ -372,7 +372,7 @@ function buildScanResult(
     breakoutScore:  Math.round(clamp(0.5 * ins + 0.3 * insMom + 0.2 * volAccel)),
     insMomentum:    Math.round(insMom),
     divergenceTag:  scannerDivTag(ins, scored.cos),
-    alert:          computeAlert(ins, scored.cos, scored.insComponents?.deltaGvs ?? 50),
+    alert:          computeAlert(ins, scored.cos, scored.insComponents?.momentum ?? 50),
     insComponents:  scored.insComponents,
   };
 }

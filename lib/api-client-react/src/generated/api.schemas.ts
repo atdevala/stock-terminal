@@ -54,11 +54,11 @@ export interface MarketStatus {
 }
 
 export type StockScoreInsComponents = {
-  deltaGvs: number;
+  momentum: number;
   deltaVqs: number;
   volumeAccel: number;
   epsSlope: number;
-  narrativeMomentum: number;
+  earningsProximity: number;
 };
 
 export interface StockScore {
@@ -122,6 +122,8 @@ export interface StockScore {
   signalScore: number;
   /** Plain-English reason for signalScore — same label set as the former csosLabel. */
   signalLabel: string;
+  /** True when a risk-off/choppy market regime actively dampened signalScore. */
+  regimeAdjusted?: boolean;
 }
 
 export interface MoverStock {
@@ -145,11 +147,11 @@ export const ScanResultSource = {
 } as const;
 
 export type ScanResultInsComponents = {
-  deltaGvs: number;
+  momentum: number;
   deltaVqs: number;
   volumeAccel: number;
   epsSlope: number;
-  narrativeMomentum: number;
+  earningsProximity: number;
 };
 
 export interface ScanResult {

@@ -316,7 +316,7 @@ components:
         insComponents:
           type: object
           properties:
-            deltaGvs:
+            momentum:
               type: number
             deltaVqs:
               type: number
@@ -324,9 +324,9 @@ components:
               type: number
             epsSlope:
               type: number
-            narrativeMomentum:
+            earningsProximity:
               type: number
-          required: [deltaGvs, deltaVqs, volumeAccel, epsSlope, narrativeMomentum]
+          required: [momentum, deltaVqs, volumeAccel, epsSlope, earningsProximity]
         acs:
           type: number
           description: Accumulation Confidence Score (0-100) — detects institutional accumulation
@@ -379,6 +379,9 @@ components:
         signalLabel:
           type: string
           description: "Plain-English reason for signalScore — same label set as the former csosLabel."
+        regimeAdjusted:
+          type: boolean
+          description: "True when a risk-off/choppy market regime actively dampened signalScore."
       required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, convictionTier, isSuperstock, csos, csosLabel, cpe, bps, lqs, signalScore, signalLabel]
 
     MoverStock:
@@ -452,7 +455,7 @@ components:
         insComponents:
           type: object
           properties:
-            deltaGvs:
+            momentum:
               type: number
             deltaVqs:
               type: number
@@ -460,9 +463,9 @@ components:
               type: number
             epsSlope:
               type: number
-            narrativeMomentum:
+            earningsProximity:
               type: number
-          required: [deltaGvs, deltaVqs, volumeAccel, epsSlope, narrativeMomentum]
+          required: [momentum, deltaVqs, volumeAccel, epsSlope, earningsProximity]
       required: [rank, ticker, company, source, ins, insLabel, cos, gvs, vqs, acs, fbrs, convictionTier, isSuperstock, breakoutScore, insMomentum, divergenceTag, alert]
 
     ScannerResponse:
