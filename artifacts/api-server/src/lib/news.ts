@@ -154,10 +154,16 @@ function sessionWord(session: string): string {
 // five unrelated tickers) or an article about a completely different
 // company. Using either as "the reason" a stock is moving would be actively
 // misleading, not just uninformative. Rule-based relevance check (no model
-// call): an article only counts if its headline or summary mentions the
-// ticker symbol itself, or the company's own name. This is a cheap,
-// deterministic filter, not sentiment/interpretation — it doesn't decide
-// whether news is GOOD or BAD, only whether it's actually about this company.
+// call): an article only counts if its HEADLINE mentions the ticker symbol
+// or the company's own name. Deliberately headline-only, not headline+summary
+// — confirmed live that checking the summary too still let through a
+// multi-stock roundup article whose summary happened to list the ticker
+// alongside a dozen others ("...other gainers include AII, EROC, ATRO, PESI,
+// CRWV, HRB, CAVA, SMCI...") even though the headline was about entirely
+// different companies. A headline is written to describe what the article is
+// actually about; a summary can just be a list. This is a cheap, deterministic
+// filter, not sentiment/interpretation — it doesn't decide whether news is
+// GOOD or BAD, only whether it's actually about this company.
 function stripCompanySuffix(company: string): string {
   return company.replace(/\b(Inc|Incorporated|Corp|Corporation|Holdings|Group|Ltd|Limited|Technologies|Technology|Company|Co|Global|Solutions|Systems|Corp\.)\b\.?/gi, "").trim();
 }
@@ -173,7 +179,7 @@ function containsWord(text: string, word: string): boolean {
 }
 
 function isAboutCompany(article: NewsArticle, ticker: string, company: string): boolean {
-  const text = `${article.headline} ${article.summary}`;
+  const text = article.headline;
   if (containsWord(text, ticker)) return true;
   const bareCompany = stripCompanySuffix(company);
   const firstWord = bareCompany.split(/\s+/)[0];
