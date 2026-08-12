@@ -70,4 +70,6 @@ export interface StockScore {
   signalLabel: string;
   /** True when a risk-off/choppy market regime actively dampened signalScore. */
   regimeAdjusted?: boolean;
+  /** True once candles and fundamentals have both loaded at least once for this ticker. False means the score is built partly from internal defaults, not real data yet — render as "still loading," not as a real (possibly low) score. */
+  dataComplete: boolean;
 }

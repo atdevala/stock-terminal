@@ -1114,6 +1114,17 @@ export interface StockScore {
   // separate flag rather than folded into signalLabel's text so existing
   // exact-match label lookups elsewhere keep working unchanged.
   regimeAdjusted?: boolean;
+  // ── Scaling-pipeline fix ──────────────────────────────────────────────────
+  // A ticker can have SOME ExtendedMetrics (so it appears in /api/scores at
+  // all) while the fetch pipeline is still mid-warmup for it — e.g. candles
+  // loaded but fundamentals haven't run yet. computeScore() still produces a
+  // full StockScore in that case (defaults like `rg ?? 0` etc.), which looks
+  // exactly like a real low score to the UI — there was no way to tell
+  // "genuinely weak" apart from "not finished loading yet." dataComplete is
+  // true only once the two biggest score-driving inputs (candles → closes60d,
+  // fundamentals → revenueGrowthYoy) have both loaded at least once; the
+  // frontend must treat false as "still loading," not as a real score.
+  dataComplete: boolean;
 }
 
 // ── Master score computation ───────────────────────────────────────────────────
@@ -1302,6 +1313,14 @@ export function computeScore(
   const signalScore = regimeDamped ? Math.round(clamp(bps * regimeMultiplier, 1, 100)) : bps;
   const signalLabel = csosLabelText(signalScore, vqs, ins, acs, cos, cpe);
 
+  // ── Data completeness ──────────────────────────────────────────────────────
+  // See the StockScore interface comment. Candles (closes60d) and
+  // fundamentals (revenueGrowthYoy) are the two biggest score-driving
+  // datasets; until both have loaded at least once for this ticker, every
+  // score above is built partly from computeScore's own internal defaults
+  // (`rg ?? 0`, etc.), not real data — the UI must not present it as final.
+  const dataComplete = ext.closes60d !== undefined && ext.revenueGrowthYoy !== undefined;
+
   return {
     ticker,
     vqs, gvs, cos,
@@ -1341,6 +1360,7 @@ export function computeScore(
     signalScore,
     signalLabel,
     regimeAdjusted: regimeDamped,
+    dataComplete,
   };
   } catch (err) {
     logger.error({ ticker, err }, "computeScore threw unexpectedly — returning safe defaults");
@@ -1363,6 +1383,7 @@ export function computeScore(
       signalScore: 0,
       signalLabel: "LOW QUALITY / AVOID",
       regimeAdjusted: false,
+      dataComplete: false,
     };
   }
 }

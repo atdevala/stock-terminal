@@ -382,7 +382,10 @@ components:
         regimeAdjusted:
           type: boolean
           description: "True when a risk-off/choppy market regime actively dampened signalScore."
-      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, convictionTier, isSuperstock, csos, csosLabel, cpe, bps, lqs, signalScore, signalLabel]
+        dataComplete:
+          type: boolean
+          description: "True once candles and fundamentals have both loaded at least once for this ticker. False means the score is built partly from internal defaults, not real data yet — render as \"still loading,\" not as a real (possibly low) score."
+      required: [ticker, vqs, gvs, cos, vqsLabel, gvsLabel, cosLabel, acs, fbrs, convictionTier, isSuperstock, csos, csosLabel, cpe, bps, lqs, signalScore, signalLabel, dataComplete]
 
     MoverStock:
       type: object

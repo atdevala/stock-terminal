@@ -106,6 +106,38 @@ async function processQueue(): Promise<void> {
   queueProcessing = false;
 }
 
+// ── Bounded-concurrency batch helper ─────────────────────────────────────────
+// Every fetch phase below used to loop `for (const ticker of ALL_TICKERS) {
+// await fetchXxx(ticker); }` — one ticker at a time. The shared rate limiter
+// above already correctly caps real Finnhub calls at ~40/min regardless of
+// how many callers are in flight (confirmed: every TTL-cached fetch function
+// — candles, fundamentals, profiles, recs, earnings — checks its on-disk
+// cache and returns BEFORE ever calling enqueue()/finnhubGet(), so a cache
+// hit never touches the queue at all). But the one-at-a-time loop meant a
+// single ticker needing a real fetch (new ticker, or expired TTL) blocked
+// every ticker AFTER it in the array from even checking its OWN cache —
+// including tickers that would resolve instantly. As the universe grows
+// (more new/expired tickers mixed among more already-cached ones), that
+// artificial serialization gets worse even though the real bottleneck
+// (Finnhub's rate limit) hasn't changed.
+//
+// Concurrency limit: 10. This does NOT raise how fast real Finnhub calls
+// happen — that's still fully governed by RATE_INTERVAL_MS above. It's
+// chosen so that (a) a full batch of cache-hit tickers resolves as one wave
+// instead of one at a time, and (b) the Yahoo-candle fallback in
+// fetchCandlesAndMAs — which does NOT go through Finnhub's queue, since
+// it's a different provider — can't fire more than 10 simultaneous outbound
+// requests even if many tickers need it at once (e.g. right after a cache
+// wipe with Finnhub's own candle endpoint degraded, as happened earlier).
+const FETCH_CONCURRENCY = 10;
+
+async function runBatched<T>(items: readonly T[], fn: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += FETCH_CONCURRENCY) {
+    const batch = items.slice(i, i + FETCH_CONCURRENCY);
+    await Promise.all(batch.map(fn));
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function fmtMcap(v: number | null | undefined): string {
@@ -498,8 +530,12 @@ function prewarmExtMetricsCache(): void {
 }
 
 // ── Sequential startup phases ─────────────────────────────────────────────────
-// All phases run one after the other — no concurrent bursts.
-// All calls go through the rate-limit queue so 429s can't accumulate.
+// Phases still run one after another (candles need to exist before scoring
+// leans on them, etc.). WITHIN each phase, tickers are processed in bounded
+// concurrent batches (runBatched, FETCH_CONCURRENCY above) rather than one at
+// a time — real Finnhub calls still can't exceed the shared rate limit
+// regardless, so this only removes artificial waiting between UNRELATED
+// tickers (a cache hit no longer sits behind an unrelated cache miss).
 
 async function loadInitialData(): Promise<void> {
   if (!FINNHUB_KEY) {
@@ -509,9 +545,7 @@ async function loadInitialData(): Promise<void> {
 
   // Phase 1: REST quotes
   logger.info("Phase 1: Fetching quotes...");
-  for (const ticker of ALL_TICKERS) {
-    await fetchQuoteRest(ticker);
-  }
+  await runBatched(ALL_TICKERS, fetchQuoteRest);
   logger.info(`  ✓ Quotes loaded: ${quoteCache.size}/${ALL_TICKERS.length}`);
 
   // Phase 2: Candles for 50/200-day MAs + closes60d (RSI, MACD, ACS, INS relative
@@ -526,37 +560,27 @@ async function loadInitialData(): Promise<void> {
   // after ~15 min idle, so most cold starts still begin from zero. That's an
   // infra/plan limitation, not something phase ordering alone can fix.
   logger.info("Phase 2: Fetching candles/MAs...");
-  for (const ticker of ALL_TICKERS) {
-    await fetchCandlesAndMAs(ticker);
-  }
+  await runBatched(ALL_TICKERS, fetchCandlesAndMAs);
   logger.info("  ✓ Moving averages loaded");
 
   // Phase 3: Fundamentals (52W H/L, PE, margins, etc.)
   logger.info("Phase 3: Fetching fundamentals...");
-  for (const ticker of ALL_TICKERS) {
-    await fetchFundamentals(ticker);
-  }
+  await runBatched(ALL_TICKERS, fetchFundamentals);
   logger.info("  ✓ Fundamentals loaded");
 
   // Phase 4: Market cap profiles
   logger.info("Phase 4: Fetching profiles...");
-  for (const ticker of ALL_TICKERS) {
-    await fetchProfile(ticker);
-  }
+  await runBatched(ALL_TICKERS, fetchProfile);
   logger.info("  ✓ Profiles loaded");
 
   // Phase 5: Analyst recommendations
   logger.info("Phase 5: Fetching recommendations...");
-  for (const ticker of ALL_TICKERS) {
-    await fetchRecommendations(ticker);
-  }
+  await runBatched(ALL_TICKERS, fetchRecommendations);
   logger.info("  ✓ Recommendations loaded");
 
   // Phase 6: EPS surprises (for INS earnings slope)
   logger.info("Phase 6: Fetching earnings surprises...");
-  for (const ticker of ALL_TICKERS) {
-    await fetchEarnings(ticker);
-  }
+  await runBatched(ALL_TICKERS, fetchEarnings);
   logger.info("  ✓ Earnings surprises loaded");
 
   // Phase 7: SPY candles (for INS relative strength)
@@ -585,27 +609,17 @@ async function periodicRestRefresh(): Promise<void> {
   while (true) {
     // WebSocket handles real-time; this is a 60s safety-net fallback
     await sleep(60_000);
-    for (const ticker of ALL_TICKERS) {
-      await fetchQuoteRest(ticker);
-    }
+    await runBatched(ALL_TICKERS, fetchQuoteRest);
   }
 }
 
 async function periodicMetricsRefresh(): Promise<void> {
   while (true) {
     await sleep(6 * 60 * 60 * 1000);
-    for (const ticker of ALL_TICKERS) {
-      await fetchCandlesAndMAs(ticker);
-    }
-    for (const ticker of ALL_TICKERS) {
-      await fetchFundamentals(ticker);
-    }
-    for (const ticker of ALL_TICKERS) {
-      await fetchRecommendations(ticker);
-    }
-    for (const ticker of ALL_TICKERS) {
-      await fetchEarnings(ticker);
-    }
+    await runBatched(ALL_TICKERS, fetchCandlesAndMAs);
+    await runBatched(ALL_TICKERS, fetchFundamentals);
+    await runBatched(ALL_TICKERS, fetchRecommendations);
+    await runBatched(ALL_TICKERS, fetchEarnings);
     await fetchSpyCandles();
     logger.info("  ✓ Periodic metrics refresh complete");
   }

@@ -384,7 +384,20 @@ export function StockRow({
 
         {/* Reason — the plain-English "why" leads; the composite score is small/secondary beneath it */}
         <td className="py-2.5 px-3 align-top">
-          {score ? (
+          {score && !score.dataComplete ? (
+            // Candles/fundamentals haven't both loaded for this ticker yet — the
+            // score object exists but is built partly from internal defaults, not
+            // real data. Must read as distinctly different from a real (possibly
+            // low) score, not as another shade of "—". See StockScore.dataComplete.
+            <div
+              className="flex items-center gap-1.5 text-zinc-500 text-[11px] italic"
+              data-testid={`score-loading-${stock.ticker}`}
+              title="Data still loading for this ticker — score isn't final yet"
+            >
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-zinc-600 animate-pulse shrink-0" />
+              Loading full data…
+            </div>
+          ) : score ? (
             <button
               type="button"
               onClick={e => { e.stopPropagation(); setExpanded(v => !v); }}
