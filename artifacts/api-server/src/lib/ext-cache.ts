@@ -186,14 +186,6 @@ export function setCachedFundamentals(ticker: string, data: FundamentalsPayload)
   store.fundamentals[ticker] = { data, ts: Date.now() };
   scheduleSave();
 }
-// TEMPORARY — diagnostic for the high52/low52-empty-everywhere bug. Exposes
-// the raw cache entry (including its age) so a debug route can show whether
-// disk-persisted fundamentals entries are stale/incomplete. Remove once fixed.
-export function getFundamentalsCacheDebugInfo(ticker: string): { data: FundamentalsPayload; ageHours: number } | null {
-  const e = store.fundamentals[ticker];
-  if (!e) return null;
-  return { data: e.data, ageHours: Math.round((Date.now() - e.ts) / (60 * 60 * 1000) * 10) / 10 };
-}
 
 // ── Profiles ──────────────────────────────────────────────────────────────────
 

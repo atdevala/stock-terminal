@@ -5,7 +5,6 @@ import { getCatalystCalendar } from "../lib/catalysts";
 import { rankBreakoutCandidates, rankOptionsCandidates } from "../lib/breakout";
 import { buildPeerGroupPercentiles, resolvePeerGroup } from "../lib/sector";
 import { checkSignalConsistency } from "../lib/consistency-check";
-import { getFundamentalsCacheDebugInfo } from "../lib/ext-cache";
 import {
   aiWriteupService,
   macdService,
@@ -285,24 +284,6 @@ router.get("/debug/valuation", (_req, res) => {
     .filter((r): r is NonNullable<typeof r> => r !== undefined);
 
   res.json({ samples, allRows: rows });
-});
-
-// TEMPORARY — diagnostic for the high52/low52-empty-everywhere bug. Dumps the
-// raw disk-cached fundamentals entry (with age) for a few tickers to confirm
-// whether a stale/incomplete cache entry is the cause. Remove once fixed.
-router.get("/debug/fundamentals-cache", (_req, res) => {
-  const testTickers = ["AAOI", "IONQ", "NVDA", "AAPL", "NBIS", "MSFT", "QCOM", "ASML", "AMAT", "MU"];
-  const results = Object.fromEntries(
-    testTickers.map(t => [t, {
-      diskCache: getFundamentalsCacheDebugInfo(t),
-      liveQuote: marketDataService.getQuote(t),
-      liveExt: (() => {
-        const e = marketDataService.getExtendedMetrics(t);
-        return e ? { pe: e.pe, revenueGrowthYoy: e.revenueGrowthYoy, high52: e.high52, low52: e.low52 } : null;
-      })(),
-    }])
-  );
-  res.json(results);
 });
 
 router.get("/catalysts", async (req, res) => {
