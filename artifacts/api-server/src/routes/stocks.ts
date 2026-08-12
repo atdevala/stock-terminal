@@ -293,7 +293,14 @@ router.get("/debug/valuation", (_req, res) => {
 router.get("/debug/fundamentals-cache", (_req, res) => {
   const testTickers = ["AAOI", "IONQ", "NVDA", "AAPL", "NBIS"];
   const results = Object.fromEntries(
-    testTickers.map(t => [t, getFundamentalsCacheDebugInfo(t)])
+    testTickers.map(t => [t, {
+      diskCache: getFundamentalsCacheDebugInfo(t),
+      liveQuote: marketDataService.getQuote(t),
+      liveExt: (() => {
+        const e = marketDataService.getExtendedMetrics(t);
+        return e ? { pe: e.pe, revenueGrowthYoy: e.revenueGrowthYoy } : null;
+      })(),
+    }])
   );
   res.json(results);
 });
