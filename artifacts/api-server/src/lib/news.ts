@@ -72,7 +72,9 @@ function fmtDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function fetchCompanyNews(ticker: string): Promise<NewsArticle[]> {
+// Exported for a temporary debug route only (see routes/news.ts) — the real
+// call path is getMovingStockNews() below.
+export async function fetchCompanyNews(ticker: string): Promise<NewsArticle[]> {
   const cached = newsCache.get(ticker);
   if (cached && Date.now() - cached.fetchedAt < NEWS_CACHE_TTL_MS) {
     return cached.articles;
