@@ -200,20 +200,22 @@ router.get("/debug/industries", (_req, res) => {
   const withIndustry = metrics.filter(m => m.industry && m.industry.trim() !== "");
   const withoutIndustry = metrics.filter(m => !m.industry || m.industry.trim() === "");
 
-  const counts = new Map<string, number>();
+  const tickersByIndustry = new Map<string, string[]>();
   for (const m of withIndustry) {
     const key = m.industry!;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    if (!tickersByIndustry.has(key)) tickersByIndustry.set(key, []);
+    tickersByIndustry.get(key)!.push(m.ticker);
   }
-  const breakdown = Object.fromEntries(
-    [...counts.entries()].sort((a, b) => b[1] - a[1]),
-  );
+  const sortedEntries = [...tickersByIndustry.entries()].sort((a, b) => b[1].length - a[1].length);
+  const breakdown = Object.fromEntries(sortedEntries.map(([k, v]) => [k, v.length]));
+  const byIndustry = Object.fromEntries(sortedEntries);
 
   res.json({
     totalTickers: metrics.length,
     withIndustry: withIndustry.length,
     withoutIndustry: withoutIndustry.length,
-    distinctIndustries: counts.size,
+    distinctIndustries: tickersByIndustry.size,
+    byIndustry,
     breakdown,
     examples: withIndustry.slice(0, 20).map(m => ({ ticker: m.ticker, industry: m.industry })),
     missingExamples: withoutIndustry.slice(0, 10).map(m => m.ticker),
