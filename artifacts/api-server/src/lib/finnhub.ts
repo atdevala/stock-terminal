@@ -53,6 +53,8 @@ export interface ExtendedMetrics {
   closes60d?: number[];
   volumes60d?: number[];
   epsSurprises?: number[];
+  /** Finnhub's own industry classification (e.g. "Semiconductors", "Biotechnology", "Software") — from /stock/profile2's finnhubIndustry field. Data-only for now; not yet used by any scoring math (see scores.ts). */
+  industry?: string;
 }
 
 export interface MarketStatusData {
@@ -252,16 +254,21 @@ async function fetchProfile(ticker: string): Promise<void> {
     if (existing && cached.marketCapMillions) {
       quoteCache.set(ticker, { ...existing, marketCap: fmtMcap(cached.marketCapMillions * 1e6) });
     }
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, { ...ext, ticker, industry: cached.industry });
     return;
   }
   try {
     const data = await finnhubGet(`/stock/profile2?symbol=${ticker}`) as Record<string, unknown>;
     const mcapMillions = data["marketCapitalization"] as number | null | undefined;
+    const industry = data["finnhubIndustry"] as string | null | undefined;
     const existing = quoteCache.get(ticker);
     if (existing && mcapMillions) {
       quoteCache.set(ticker, { ...existing, marketCap: fmtMcap(mcapMillions * 1e6) });
     }
-    setCachedProfile(ticker, { marketCapMillions: mcapMillions ?? undefined });
+    setCachedProfile(ticker, { marketCapMillions: mcapMillions ?? undefined, industry: industry ?? undefined });
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, { ...ext, ticker, industry: industry ?? undefined });
   } catch (err) {
     logger.warn({ ticker, err }, "Profile fetch failed");
   }

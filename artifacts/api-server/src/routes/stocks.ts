@@ -192,6 +192,22 @@ router.get("/options-watch", async (_req, res) => {
   }
 });
 
+// TEMPORARY — sector-blindness fix step 1 diagnostic. Confirms Finnhub's
+// finnhubIndustry field is actually populating ExtendedMetrics.industry
+// before any scoring math is built on top of it. Remove once verified.
+router.get("/debug/industries", (_req, res) => {
+  const metrics = marketDataService.getAllExtendedMetrics();
+  const withIndustry = metrics.filter(m => m.industry && m.industry.trim() !== "");
+  const withoutIndustry = metrics.filter(m => !m.industry || m.industry.trim() === "");
+  res.json({
+    totalTickers: metrics.length,
+    withIndustry: withIndustry.length,
+    withoutIndustry: withoutIndustry.length,
+    examples: withIndustry.slice(0, 20).map(m => ({ ticker: m.ticker, industry: m.industry })),
+    missingExamples: withoutIndustry.slice(0, 10).map(m => m.ticker),
+  });
+});
+
 router.get("/catalysts", async (req, res) => {
   try {
     const daysAhead = Number(req.query["days"]) || 10;

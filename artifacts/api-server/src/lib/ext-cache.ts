@@ -31,6 +31,8 @@ export interface FundamentalsPayload {
 
 export interface ProfilePayload {
   marketCapMillions?: number;
+  /** Finnhub's own industry classification (e.g. "Semiconductors", "Biotechnology") — from /stock/profile2's finnhubIndustry field. */
+  industry?: string;
 }
 
 export interface CandlesPayload {
