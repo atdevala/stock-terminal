@@ -291,7 +291,7 @@ router.get("/debug/valuation", (_req, res) => {
 // raw disk-cached fundamentals entry (with age) for a few tickers to confirm
 // whether a stale/incomplete cache entry is the cause. Remove once fixed.
 router.get("/debug/fundamentals-cache", (_req, res) => {
-  const testTickers = ["AAOI", "IONQ", "NVDA", "AAPL", "NBIS"];
+  const testTickers = ["AAOI", "IONQ", "NVDA", "AAPL", "NBIS", "MSFT", "QCOM", "ASML", "AMAT", "MU"];
   const results = Object.fromEntries(
     testTickers.map(t => [t, {
       diskCache: getFundamentalsCacheDebugInfo(t),
