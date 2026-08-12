@@ -1,58 +1,35 @@
 import type { StockScore } from "./scores";
 import type { ExtendedMetrics, QuoteData } from "./finnhub";
-import { appendLivePrice } from "./scores";
+import { appendLivePrice } from "./finnhub";
 import { CATEGORIES } from "./stocks-data";
 import { getEarningsCalendar } from "./catalysts";
-import { RSI_OVERBOUGHT } from "./signal-consistency";
-
-function clamp(v: number, lo = 0, hi = 100): number {
-  return Math.max(lo, Math.min(hi, v));
-}
 
 const COMPANY_BY_TICKER: Map<string, string> = new Map(
   CATEGORIES.flatMap(c => c.stocks).map(s => [s.ticker, s.company]),
 );
 
 // ═════════════════════════════════════════════════════════════════════════════
-// BREAKOUT READINESS — "which stocks are most likely to break out right now"
+// TOP BREAKOUT CANDIDATES — "which stocks are most likely to break out right now"
 // ═════════════════════════════════════════════════════════════════════════════
 //
-// This is a NEW derived value (plain English name, not another 3-letter code),
-// built the same way BPS/CSOS were: documented weights over already-computed
-// primitives, no invented data.
+// Consolidation pass: this used to be a second, independently-weighted scoring
+// formula (45% INS + 30% ACS + 25% a bespoke RSI-derived "room to run" term,
+// plus its own quality/FBRS adjustments) with its own eligibility thresholds —
+// exactly the setup that let COHR/NBIS/ONDS/PATH end up in contradictory
+// places, because this formula could rank a stock differently than the ONE
+// signal (signalScore) everyone else reads. It is now a pure filter+sort over
+// that one shared signal — no separate formula, so it structurally cannot
+// disagree with it. `breakoutReadiness` on BreakoutCandidate below IS
+// score.signalScore for whichever stocks pass the shared eligibility gate,
+// not a distinct number.
 //
 // Eligibility gate — a stock isn't even considered unless ALL of these hold:
 //   - INS is present (real leading-momentum signal, not a missing-data default)
 //   - RSI is present (must have real price history)
-//   - passesQualityFloor (shared definition, lib/signal-consistency.ts: VQS
-//     >= 40) — a pure meme spike on a broken business doesn't qualify just
-//     because it's moving. Was this file's own `vqs < 30` check; that looser,
-//     independently-chosen threshold is exactly why a stock already labeled
-//     "LOW QUALITY / AVOID" elsewhere (VQS 30-39) could still show up here —
-//     a real production bug, fixed by reading the same shared flag everything
-//     else reads instead of re-deriving a different number.
-//   - !isExtended (shared definition: RSI >= 70) — can't already be
-//     overbought; "room to run" is part of the definition, not a bonus. Was
-//     this file's own `rsi >= 75` check — looser than the shared 70, which
-//     meant a stock already flagged "EXTENDED" by the RSI gate elsewhere
-//     could still pass here in the 70-74.9 RSI band.
-//
-// Weighted score (0-100) over stocks that pass the gate:
-//   45% INS   — the leading momentum-inflection signal. This is the single
-//               biggest driver on purpose: breakout candidates are defined by
-//               "is momentum inflecting right now," and INS is built exactly
-//               to answer that.
-//   30% ACS   — accumulation confidence. Requires REAL institutional buying
-//               behind the move, not just a hype-driven price spike.
-//   25% RoomToRun — derived from RSI. 100 at RSI<=50, tapering linearly to 0
-//               at RSI_OVERBOUGHT (the gate already excludes at/above that).
-//               Rewards setups that haven't already run most of their move.
-//
-// Then two adjustments, both tracing to real computed numbers:
-//   Quality gate:  avg(VQS, LQS) < 35  → ×0.75 penalty (junk discount)
-//                  avg(VQS, LQS) >= 65 → ×1.05 bonus (quality confirms the move)
-//   FBRS penalty:  score -= max(0, FBRS - 60) * 0.4 (hype/false-breakout risk
-//                  pulls the score down; clean setups (FBRS <= 60) are untouched)
+//   - eligibleForBuySide (shared definition, lib/signal-consistency.ts:
+//     passesQualityFloor && !isExtended — VQS >= 40, and not extended by any
+//     of RSI/50-day-MA-distance/same-day-% reads). One shared flag, not this
+//     file's own thresholds.
 
 export interface BreakoutCandidate {
   ticker: string;
@@ -70,24 +47,12 @@ export interface BreakoutCandidate {
 }
 
 export function computeBreakoutReadiness(score: StockScore): number | null {
-  const ins = score.ins;
-  const rsi = score.rsi;
-  if (ins === undefined) return null;
-  if (rsi === undefined) return null;
+  if (score.ins === undefined) return null;
+  if (score.rsi === undefined) return null;
   if (!score.passesQualityFloor) return null;
   if (score.isExtended) return null;
 
-  const taperSlope = 100 / (RSI_OVERBOUGHT - 50);
-  const roomToRun = clamp(100 - Math.max(0, rsi - 50) * taperSlope, 0, 100); // 100 at <=50, 0 at RSI_OVERBOUGHT
-  let raw = 0.45 * ins + 0.30 * score.acs + 0.25 * roomToRun;
-
-  const qualityFloor = score.lqs !== undefined ? (score.vqs + score.lqs) / 2 : score.vqs;
-  if (qualityFloor < 35) raw *= 0.75;
-  else if (qualityFloor >= 65) raw *= 1.05;
-
-  raw -= Math.max(0, score.fbrs - 60) * 0.4;
-
-  return Math.round(clamp(raw, 0, 100));
+  return score.signalScore;
 }
 
 export function rankBreakoutCandidates(scores: StockScore[], limit = 10): BreakoutCandidate[] {
@@ -192,7 +157,7 @@ export async function rankOptionsCandidates(
 
   for (const score of scores) {
     const ext = extByTicker.get(score.ticker);
-    // Appends the live quote price (see appendLivePrice in scores.ts) — a
+    // Appends the live quote price (see appendLivePrice in finnhub.ts) — a
     // stock that already moved a lot TODAY has already realized that
     // volatility; holding it back until tomorrow's candle would understate
     // an already-materialized move for a ranking whose whole point is

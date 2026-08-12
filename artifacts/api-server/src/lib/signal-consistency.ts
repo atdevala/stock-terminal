@@ -59,8 +59,62 @@ export const RSI_OVERBOUGHT = 70;
 export const RSI_OVERSOLD = 30;
 export const VQS_QUALITY_FLOOR = 40;
 
+// The one shared chase-risk qualifier signalLabel appends (not replaces) when
+// isExtended is true (see scores.ts) — exported so consistency-check.ts can
+// verify the label a stock actually shows matches what its own isExtended
+// flag says it should, without hardcoding a second copy of this string to
+// drift out of sync with the one scores.ts actually uses.
+export const EXTENDED_LABEL_SUFFIX = " — already extended today";
+
+export const LOW_QUALITY_LABEL = "LOW QUALITY / AVOID";
+
+// ── Extended-detection robustness ────────────────────────────────────────────
+// RSI(14) alone can fail to flag a huge single-day move if the prior 13 days
+// offset it — Wilder smoothing means one dramatic day is diluted across a
+// two-week average. This is what happened with NBIS: up ~30% in a session,
+// RSI stayed in the low-to-mid 60s because the two weeks before that move
+// were flat-to-down, keeping the smoothed average well under the RSI_OVERBOUGHT
+// line. RSI is still the primary check (it's the standard, well-understood
+// "is this stretched relative to its own range" read), but "extended" is now
+// an OR across three independent, cheaper-to-game-proof reads — any ONE of
+// them firing is enough, since each is measuring the same underlying idea
+// (has this stock already made its move) from a different angle:
+//
+//   1. RSI >= RSI_OVERBOUGHT (70) — the standard multi-day read.
+//   2. Price >= MA50_EXTENSION_PCT (25%) above its own 50-day moving average.
+//      Chosen because it's a magnitude check independent of RSI's smoothing:
+//      a stock doesn't get 25%+ above its own 50-day average without a real,
+//      large move having already happened, regardless of how the prior two
+//      weeks shaped RSI's average. 25% is deliberately a high bar — comfortably
+//      above normal single-name volatility in an ordinary uptrend (which
+//      routinely runs 5-15% above its 50-day average without being "extended"
+//      in the chase-risk sense) — so this only fires for genuinely large
+//      dislocations, not routine strength.
+//   3. Same-day change >= SAME_DAY_MOVE_PCT (15%). The most direct read of
+//      all: a stock up 15%+ in a single session has, by definition, already
+//      made "the move" today — no multi-day indicator needs to confirm that.
+//      15% is picked as large enough that it's unambiguous even accounting
+//      for this universe's characteristically volatile small/mid-caps
+//      (quantum computing, biotech, pre-revenue space names routinely see
+//      5-10% single-day swings that are NOT "the move already happened,"
+//      just normal noise for these names) — this catches NBIS's ~30% day
+//      immediately, on day one, without waiting for RSI or the 50-day
+//      average to catch up.
+export const MA50_EXTENSION_PCT = 0.25;
+export const SAME_DAY_MOVE_PCT = 15;
+
+export interface SignalConsistencyInputs {
+  vqs: number;
+  rsi: number | undefined;
+  /** Current live price. Combined with ma50 for the MA50_EXTENSION_PCT check. */
+  price?: number;
+  ma50?: number;
+  /** Today's % change (e.g. 30 for +30%), for the SAME_DAY_MOVE_PCT check. */
+  changePercent?: number;
+}
+
 export interface SignalConsistency {
-  /** RSI >= RSI_OVERBOUGHT. False (not "unknown") when RSI isn't loaded yet — callers that need to distinguish "known safe" from "no data" should check rsi presence separately. */
+  /** True if RSI>=RSI_OVERBOUGHT, OR price is MA50_EXTENSION_PCT+ above its 50-day MA, OR today's change is SAME_DAY_MOVE_PCT+ — see the reasoning above each threshold. False (not "unknown") when no input is available to evaluate any condition — callers that need to distinguish "known safe" from "no data" should check rsi/price presence separately. */
   isExtended: boolean;
   /** RSI <= RSI_OVERSOLD. */
   isOversold: boolean;
@@ -70,8 +124,15 @@ export interface SignalConsistency {
   eligibleForBuySide: boolean;
 }
 
-export function evaluateSignalConsistency(vqs: number, rsi: number | undefined): SignalConsistency {
-  const isExtended = rsi !== undefined && rsi >= RSI_OVERBOUGHT;
+export function evaluateSignalConsistency(inputs: SignalConsistencyInputs): SignalConsistency {
+  const { vqs, rsi, price, ma50, changePercent } = inputs;
+
+  const rsiExtended = rsi !== undefined && rsi >= RSI_OVERBOUGHT;
+  const ma50Extended = price !== undefined && ma50 !== undefined && ma50 > 0
+    && (price - ma50) / ma50 >= MA50_EXTENSION_PCT;
+  const sameDayExtended = changePercent !== undefined && changePercent >= SAME_DAY_MOVE_PCT;
+
+  const isExtended = rsiExtended || ma50Extended || sameDayExtended;
   const isOversold = rsi !== undefined && rsi <= RSI_OVERSOLD;
   const passesQualityFloor = vqs >= VQS_QUALITY_FLOOR;
   return {

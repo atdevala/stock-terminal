@@ -76,7 +76,14 @@ function scoreTone(score?: number): string {
   return "text-red-300";
 }
 
-function signalLabelTone(label: string): string {
+// signalLabel may carry a " — already extended today" chase-risk suffix (see
+// StockRow.tsx's stripExtensionSuffix) instead of being a distinct label —
+// strip it before matching or a strong trend that's also extended falls
+// through to the red "avoid" default below.
+function signalLabelTone(rawLabel: string): string {
+  const label = rawLabel.endsWith(" — already extended today")
+    ? rawLabel.slice(0, -" — already extended today".length)
+    : rawLabel;
   if (label === "PRIME OPPORTUNITY")                return "text-emerald-300";
   if (label === "EARLY BREAKOUT SETUP")             return "text-amber-300";
   if (label === "STEALTH ACCUMULATION")             return "text-teal-300";

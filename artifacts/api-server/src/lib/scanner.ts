@@ -1,4 +1,4 @@
-import { finnhubGet, getSpyCloses60d, getAllExtendedMetrics, getQuote } from "./finnhub";
+import { finnhubGet, getSpyCloses60d, getAllExtendedMetrics, getQuote, appendLivePrice } from "./finnhub";
 import type { ExtendedMetrics, QuoteData } from "./finnhub";
 import { computeScore, type StockScore } from "./scores";
 import { getInsLabel } from "./ins";
@@ -316,7 +316,7 @@ async function resolveCompanyName(ticker: string): Promise<string | undefined> {
 
 // 7-day momentum proxy: compares 7d return vs the prior 7d return
 function computeInsMomentum7d(closes: number[], currentPrice: number): number {
-  const all = closes.length > 0 ? [...closes, currentPrice] : [currentPrice];
+  const all = appendLivePrice(closes, currentPrice);
   if (all.length < 15) return 50;
   const curr  = all[all.length - 1]!;
   const c7    = all[all.length - 8]!;

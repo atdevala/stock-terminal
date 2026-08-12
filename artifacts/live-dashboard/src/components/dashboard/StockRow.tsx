@@ -27,7 +27,18 @@ function signalColor(s: number): string {
   return "text-zinc-500 border-zinc-700/40 bg-zinc-800/30";
 }
 
-function signalLabelStyle(label: string): string {
+// signalLabel can now carry a chase-risk qualifier appended by the backend
+// (e.g. "CONFIRMED TREND — already extended today", see signal-consistency.ts)
+// instead of replacing the whole label. Every exact-match lookup against a
+// base label name below needs the qualifier stripped first, or a genuinely
+// strong trend that's also extended would fall through every branch here.
+const EXTENSION_SUFFIX = " — already extended today";
+function stripExtensionSuffix(label: string): string {
+  return label.endsWith(EXTENSION_SUFFIX) ? label.slice(0, -EXTENSION_SUFFIX.length) : label;
+}
+
+function signalLabelStyle(rawLabel: string): string {
+  const label = stripExtensionSuffix(rawLabel);
   if (label === "PRIME OPPORTUNITY")                return "text-emerald-300";
   if (label === "EARLY BREAKOUT SETUP")             return "text-amber-300";
   if (label === "STEALTH ACCUMULATION")             return "text-teal-300";
@@ -37,7 +48,6 @@ function signalLabelStyle(label: string): string {
   if (label === "CONFIRMED TREND")                  return "text-amber-400";
   if (label === "DEVELOPING SETUP")                 return "text-zinc-400";
   if (label === "LATE STAGE MOVE")                  return "text-orange-400";
-  if (label === "EXTENDED — MOMENTUM ALREADY PRICED IN") return "text-orange-300";
   return "text-red-400";
 }
 
@@ -97,6 +107,24 @@ function fmt(v: number | undefined, suffix = "%", decimals = 1): string {
 // COS/CSOS/CPE/BPS are retired as user-visible values — this only ever
 // interpolates VQS/GVS/INS/ACS/FBRS/LQS/RSI into the reason text.
 function getSignalReason(
+  rawLabel: string,
+  vqs: number, ins: number, acs: number,
+): { headline: string; detail: string } {
+  const label = stripExtensionSuffix(rawLabel);
+  const isExtended = label !== rawLabel;
+  const { headline, detail } = getSignalReasonForBaseLabel(label, vqs, ins, acs);
+  if (!isExtended) return { headline, detail };
+  // Chase-risk qualifier: the base label's headline/detail still describe
+  // what the trend genuinely is — this appends the timing caveat rather than
+  // replacing the explanation, matching signalLabel's own "modifier, not
+  // replacement" design (see signal-consistency.ts).
+  return {
+    headline,
+    detail: `${detail} This name is also currently extended (RSI, its distance from the 50-day average, or today's move already reflect a large recent move) — the setup above is real, but chasing it here means buying after the move already happened rather than ahead of it.`,
+  };
+}
+
+function getSignalReasonForBaseLabel(
   label: string,
   vqs: number, ins: number, acs: number,
 ): { headline: string; detail: string } {
@@ -144,11 +172,6 @@ function getSignalReason(
     return {
       headline: "Mixed signals — no dominant pattern yet",
       detail: "Watch INS and ACS for strengthening before price catches up — that combination would upgrade this to an early breakout.",
-    };
-  if (label === "EXTENDED — MOMENTUM ALREADY PRICED IN")
-    return {
-      headline: "RSI shows this stock already overbought right now",
-      detail: "The move has already happened — chasing it here means buying after the fact, not ahead of it. Wait for RSI to cool off before treating this as a fresh setup.",
     };
   return {
     headline: `Fundamental floor override (VQS ${vqs})`,

@@ -132,7 +132,7 @@ export const aiWriteupService = {
         structuredContext,
         "",
         "Additional computed facts for this specific analysis:",
-        `- Breakout Readiness score: ${facts.breakoutReadiness}/100 (this screener's own composite of momentum, accumulation, and room-to-run — not a market-standard metric)`,
+        `- This screener's composite signal score for the stock right now: ${facts.breakoutReadiness}/100 (the same score used everywhere else in this screener — not a market-standard metric, and not a separate breakout-specific formula; this stock is on this list because that score is high AND the stock isn't currently flagged extended or quality-gated)`,
         `- INS (inflection/momentum signal): ${facts.ins}`,
         `- ACS (accumulation confidence): ${facts.acs}`,
         `- VQS (valuation/quality): ${facts.vqs}${facts.lqs !== undefined ? `, LQS (long-term quality): ${facts.lqs}` : ""}`,

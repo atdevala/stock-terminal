@@ -1,9 +1,9 @@
 import type { ExtendedMetrics, QuoteData } from "./finnhub";
 import { computeINS } from "./ins";
-import { getSpyCloses60d, getMarketRegime } from "./finnhub";
+import { getSpyCloses60d, getMarketRegime, appendLivePrice } from "./finnhub";
 import { getTradingDaysToNextEarnings } from "./catalysts";
 import type { PeerPercentile } from "./sector";
-import { evaluateSignalConsistency } from "./signal-consistency";
+import { evaluateSignalConsistency, EXTENDED_LABEL_SUFFIX, LOW_QUALITY_LABEL } from "./signal-consistency";
 import { logger } from "./logger";
 
 // ── Math helpers ───────────────────────────────────────────────────────────────
@@ -32,27 +32,10 @@ function dailyRets(closes: number[]): number[] {
   return r;
 }
 
-// ── closes60d live-price audit ────────────────────────────────────────────────
-// closes60d is populated from completed daily candles (refreshed on its own
-// TTL cycle), which lags same-day price action by definition — the day's
-// candle isn't finalized until the session closes. ins.ts's computeMomentum
-// already appends the live quote price before computing momentum; computeRSI
-// did NOT, which meant RSI answered "was this stock stretched as of
-// yesterday's close," not "is it stretched right now" — invisible on a quiet
-// day, materially wrong on a day with a large intraday move (confirmed live:
-// a stock up 29% intraday still read RSI 59/Neutral, computed from a candle
-// series that had no way to know about that move yet).
-//
-// appendLivePrice is the one shared helper for this decision, used
-// consistently everywhere closes60d feeds something that's supposed to
-// describe the CURRENT moment rather than a completed multi-day structure.
-// Guards currentPrice > 0 so a not-yet-loaded quote (0) can't corrupt the
-// series with a fake 100% drop.
-export function appendLivePrice(closes: number[] | undefined, currentPrice: number): number[] {
-  const base = closes ?? [];
-  if (currentPrice <= 0) return base;
-  return [...base, currentPrice];
-}
+// appendLivePrice (the shared "append today's live price to closes60d before
+// computing something that's supposed to describe right now" helper) now
+// lives in finnhub.ts — see that file for the full writeup. Re-imported here,
+// not redefined, so there's exactly one implementation.
 
 // ── RSI(14) — Relative Strength Index ──────────────────────────────────────────
 // Standard Wilder RSI. This is the "is it oversold right now" signal that was
@@ -153,7 +136,30 @@ function computeACS_v2(
   const qOpen    = quote?.open       ?? 0;
   const qPrev    = quote?.prevClose  ?? 0;
   const changePct = quote?.changePercent ?? 0;
+  // candleMode gates on the REAL stored candle count, deliberately not
+  // live-appended — this is "do we have enough real history to trust
+  // candle-mode math," which one extra live point doesn't change.
   const candleMode = closes.length >= 20 && volumes.length >= 20;
+
+  // ── closes60d live-price audit (this pass) ────────────────────────────────
+  // ACS_v2 has two genuinely different kinds of sub-calculation below, and
+  // they need opposite answers to "should this see today's live price":
+  //   - `closes` (raw, NOT live-appended) — used everywhere this function
+  //     indexes closes[i] against volumes[i] pairwise (Volume Structure's OBV,
+  //     Liquidity Quality's dollar-volume calc). Appending a live price here
+  //     without a matching live VOLUME figure would misalign the two arrays'
+  //     lengths and corrupt the index-paired math — and there's no such thing
+  //     as a live "today's volume" figure to pair it with mid-session anyway.
+  //   - `pricedCloses` (live-appended via appendLivePrice) — used everywhere
+  //     this function reads price alone, with no volume pairing: RS
+  //     Persistence, Closing Strength's CLV/up-close streak, Volatility
+  //     Compression, and the Institutional Quality Multiplier's return-based
+  //     penalties. That last one specifically exists to catch "parabolic
+  //     blowoffs" — a stock up 30% today IS a parabolic blowoff, and without
+  //     today's price this multiplier was blind to it until tomorrow's
+  //     candle, the exact same asymmetry class as the RSI bug this pass
+  //     started from.
+  const pricedCloses = appendLivePrice(closes, price);
 
   // ── 1. VOLUME STRUCTURE (35%) ──────────────────────────────────────────────
   // Candle mode:  OBV slope + relative volume + up-day volume dominance.
@@ -235,9 +241,9 @@ function computeACS_v2(
 
   let rsScore: number;
 
-  if (closes.length >= 10 && spyCloses.length >= 10) {
-    const n = Math.min(closes.length, spyCloses.length, 20);
-    const stockSlice = closes.slice(-n);
+  if (pricedCloses.length >= 10 && spyCloses.length >= 10) {
+    const n = Math.min(pricedCloses.length, spyCloses.length, 20);
+    const stockSlice = pricedCloses.slice(-n);
     const spySlice   = spyCloses.slice(-n);
 
     const excessRets: number[] = [];
@@ -292,17 +298,17 @@ function computeACS_v2(
 
   let closeStrScore: number;
 
-  if (closes.length >= 10) {
-    const recent = closes.slice(-20);
+  if (pricedCloses.length >= 10) {
+    const recent = pricedCloses.slice(-20);
     const rHigh  = Math.max(...recent);
     const rLow   = Math.min(...recent);
-    const lastClose = closes[closes.length - 1]!;
+    const lastClose = pricedCloses[pricedCloses.length - 1]!;
     const clv = rHigh > rLow ? (lastClose - rLow) / (rHigh - rLow) : 0.5;
     const clvScore = clamp(clv * 100, 0, 100);
 
     let upCloseCount = 0;
-    for (let i = 1; i <= Math.min(10, closes.length - 1); i++) {
-      if (closes[closes.length - i]! > closes[closes.length - i - 1]!) upCloseCount++;
+    for (let i = 1; i <= Math.min(10, pricedCloses.length - 1); i++) {
+      if (pricedCloses[pricedCloses.length - i]! > pricedCloses[pricedCloses.length - i - 1]!) upCloseCount++;
     }
     const upCloseScore = clamp((upCloseCount / 10) * 130 - 15, 0, 100);
 
@@ -351,15 +357,15 @@ function computeACS_v2(
 
   let compressionScore: number;
 
-  if (closes.length >= 20) {
-    const dailyRets10 = dailyRets(closes.slice(-11));
-    const dailyRets30 = dailyRets(closes.slice(-31));
+  if (pricedCloses.length >= 20) {
+    const dailyRets10 = dailyRets(pricedCloses.slice(-11));
+    const dailyRets30 = dailyRets(pricedCloses.slice(-31));
     const vol10D = stddev(dailyRets10);
     const vol30D = stddev(dailyRets30.length >= 2 ? dailyRets30 : dailyRets10);
     const volRatio = vol30D > 0 ? vol10D / vol30D : 1;
     const volCompScore = clamp(50 + (1 - volRatio) * 70, 0, 100);
 
-    const closes20 = closes.slice(-20);
+    const closes20 = pricedCloses.slice(-20);
     const ma20     = closes20.reduce((a, b) => a + b, 0) / 20;
     const bb20std  = stddev(closes20);
     const bbWidth  = ma20 > 0 ? (4 * bb20std) / ma20 * 100 : 10;
@@ -421,24 +427,29 @@ function computeACS_v2(
 
   let multiplier = 1.0;
 
-  if (closes.length >= 10) {
-    const last5Ret = closes.length >= 6
-      ? (closes[closes.length - 1]! - closes[closes.length - 6]!) / closes[closes.length - 6]! * 100
+  if (pricedCloses.length >= 10) {
+    const last5Ret = pricedCloses.length >= 6
+      ? (pricedCloses[pricedCloses.length - 1]! - pricedCloses[pricedCloses.length - 6]!) / pricedCloses[pricedCloses.length - 6]! * 100
       : 0;
-    const prior15Avg = closes.length >= 21
-      ? (closes[closes.length - 6]! - closes[closes.length - 21]!) / closes[closes.length - 21]! * 100 / 3
+    const prior15Avg = pricedCloses.length >= 21
+      ? (pricedCloses[pricedCloses.length - 6]! - pricedCloses[pricedCloses.length - 21]!) / pricedCloses[pricedCloses.length - 21]! * 100 / 3
       : last5Ret;
 
+    // last5Ret/prior15Avg now see today's live price (pricedCloses) — this is
+    // the parabolic-blowoff detector referenced in the audit note above the
+    // pricedCloses declaration: a stock up 30% today IS the kind of move this
+    // penalty exists to catch, and previously couldn't see until tomorrow's
+    // candle.
     if (last5Ret > 15 && last5Ret > prior15Avg * 3)      multiplier -= 0.18;
     else if (last5Ret > 10 && last5Ret > prior15Avg * 2) multiplier -= 0.08;
 
-    const ret20D = closes.length >= 21
-      ? (closes[closes.length - 1]! - closes[closes.length - 21]!) / closes[closes.length - 21]! * 100
+    const ret20D = pricedCloses.length >= 21
+      ? (pricedCloses[pricedCloses.length - 1]! - pricedCloses[pricedCloses.length - 21]!) / pricedCloses[pricedCloses.length - 21]! * 100
       : 0;
     if (ret20D > 8 && ret20D < 35)      multiplier += 0.10;
     else if (ret20D > 3 && ret20D < 15) multiplier += 0.05;
 
-    const ret10 = dailyRets(closes.slice(-11));
+    const ret10 = dailyRets(pricedCloses.slice(-11));
     const vol10 = stddev(ret10);
     if (vol10 > 5)        multiplier -= 0.15;
     else if (vol10 > 3.5) multiplier -= 0.07;
@@ -1286,7 +1297,7 @@ export function computeScore(
   // ── INFLECTION SIGNAL SCORE ───────────────────────────────────────────────
   const spyCloses  = getSpyCloses60d();
   const tradingDaysToEarnings = getTradingDaysToNextEarnings(ticker);
-  const insResult  = computeINS(ext, currentPrice, cos, spyCloses, rsi, tradingDaysToEarnings);
+  const insResult  = computeINS(ext, currentPrice, cos, spyCloses, tradingDaysToEarnings);
   const ins        = insResult.ins;
 
   // ── ACCUMULATION CONFIDENCE SCORE (ACSv2) ────────────────────────────────
@@ -1352,19 +1363,30 @@ export function computeScore(
   const signalScore = regimeDamped ? Math.round(clamp(bps * regimeMultiplier, 1, 100)) : bps;
 
   // ── Signal consistency — ONE shared definition, see signal-consistency.ts ──
-  // csosLabelText has no RSI awareness at all (confirmed root cause of a real
-  // production bug: a stock genuinely up 29% intraday kept a bullish
-  // "QUALITY COMPOUNDER — ACTIVATING" label because nothing checked RSI
-  // before assigning it). Override to the same "EXTENDED" wording ins.ts's
-  // RSI gate already uses, so the label users actually see (signalLabel)
-  // agrees with the one embedded in insLabel — priority sits below the
-  // fundamental floor (a structurally broken business stays "LOW QUALITY /
-  // AVOID" regardless of RSI; that's a more severe, longer-lived condition
-  // than a temporarily extended momentum reading).
-  const consistency = evaluateSignalConsistency(vqs, rsi);
+  // csosLabelText has no RSI/extension awareness at all (confirmed root cause
+  // of a real production bug: a stock genuinely up 29% intraday kept a
+  // bullish "QUALITY COMPOUNDER — ACTIVATING" label because nothing checked
+  // for extension before assigning it). This is now the ONLY place that
+  // decides "is this stock's label showing chase risk" — ins.ts no longer has
+  // its own separate RSI gate/label (see ins.ts), and isExtended itself
+  // combines RSI with 50-day-MA distance and same-day % change (see
+  // signal-consistency.ts) so a huge single-day move can't slip through RSI's
+  // multi-day smoothing the way it did for NBIS.
+  //
+  // Chase-risk is applied as a MODIFIER on the existing label's wording, not
+  // a replacement — a stock with a genuinely strong trend that's also
+  // extended today should still say what the trend IS, plus the timing
+  // caveat, not lose that information to a generic "EXTENDED" label. Priority
+  // still sits below the fundamental floor: a structurally broken business
+  // stays exactly "LOW QUALITY / AVOID" regardless of RSI — that's a more
+  // severe, longer-lived condition than a temporarily extended reading, so it
+  // doesn't need (or get) the extra qualifier.
+  const consistency = evaluateSignalConsistency({
+    vqs, rsi, price: currentPrice, ma50: ext.ma50, changePercent: quote?.changePercent,
+  });
   const baseSignalLabel = csosLabelText(signalScore, vqs, ins, acs, cos, cpe);
-  const signalLabel = (consistency.isExtended && baseSignalLabel !== "LOW QUALITY / AVOID")
-    ? "EXTENDED — MOMENTUM ALREADY PRICED IN"
+  const signalLabel = (consistency.isExtended && baseSignalLabel !== LOW_QUALITY_LABEL)
+    ? `${baseSignalLabel}${EXTENDED_LABEL_SUFFIX}`
     : baseSignalLabel;
 
   // ── Data completeness ──────────────────────────────────────────────────────

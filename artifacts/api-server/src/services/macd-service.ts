@@ -1,5 +1,5 @@
 import { finnhubGet } from "../lib/finnhub";
-import { getExtendedMetrics } from "../lib/finnhub";
+import { getExtendedMetrics, getQuote, appendLivePrice } from "../lib/finnhub";
 import { ALL_TICKERS } from "../lib/stocks-data";
 
 export type MacdMarker = "buy" | "sell";
@@ -178,8 +178,20 @@ async function fetchYahooCandles(ticker: string): Promise<CandleSeries | null> {
 }
 
 function getCachedMetricCandles(ticker: string): CandleSeries | null {
-  const closes = getExtendedMetrics(ticker)?.closes60d ?? [];
-  if (closes.length < 35) return null;
+  const storedCloses = getExtendedMetrics(ticker)?.closes60d ?? [];
+  if (storedCloses.length < 35) return null;
+
+  // closes60d live-price audit: this fallback (only reached when BOTH live
+  // Finnhub and Yahoo candle fetches above have failed) reads our own
+  // TTL-refreshed candle cache, which can lag same-day price action the same
+  // way RSI did before that fix — MACD is the same "is momentum turning right
+  // now" category of indicator, so it gets the same appendLivePrice treatment.
+  // The two PRIMARY fetch paths (fetchFinnhubCandles/fetchYahooCandles above)
+  // deliberately do NOT get this — they're live network calls returning
+  // whatever that provider already considers current, and appending our own
+  // quote on top of an already-fresh series risks double-counting today.
+  const currentPrice = getQuote(ticker)?.price ?? 0;
+  const closes = appendLivePrice(storedCloses, currentPrice);
 
   const today = Math.floor(Date.now() / 1000);
   return {

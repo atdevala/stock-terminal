@@ -57,6 +57,32 @@ export interface ExtendedMetrics {
   industry?: string;
 }
 
+// ── closes60d live-price audit — the ONE shared "append today's price" helper ──
+// closes60d is populated from completed daily candles (refreshed on its own
+// TTL cycle), which lags same-day price action by definition — the day's
+// candle isn't finalized until the session closes. Anything computed from
+// closes60d that's supposed to describe the CURRENT moment (RSI, MACD, short
+// -window momentum/trend reads) rather than a completed multi-day structure
+// needs to see today's live price, or it silently answers "as of yesterday's
+// close" instead of "right now."
+//
+// This was the confirmed root cause of a real production bug: RSI computed
+// from a candle series with no way to know about today's move stayed at
+// "59/Neutral" for a stock that was actually up 29% intraday. Several call
+// sites had already reinvented this exact append inline (ins.ts, scanner.ts)
+// before it was named — consolidated here as the one canonical implementation
+// so future callers reach for this instead of writing `[...closes, price]`
+// again. Lives in finnhub.ts (not scores.ts) specifically so ins.ts can import
+// it without creating a scores.ts↔ins.ts circular dependency.
+//
+// Guards currentPrice > 0 so a not-yet-loaded quote (0) can't corrupt the
+// series with a fake 100% drop.
+export function appendLivePrice(closes: number[] | undefined, currentPrice: number): number[] {
+  const base = closes ?? [];
+  if (currentPrice <= 0) return base;
+  return [...base, currentPrice];
+}
+
 export interface MarketStatusData {
   isOpen: boolean;
   exchange: string;

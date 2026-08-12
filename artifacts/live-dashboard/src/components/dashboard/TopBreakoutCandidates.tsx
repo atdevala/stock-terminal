@@ -26,10 +26,14 @@ function reasonTone(label: string): string {
   return "text-red-400";
 }
 
-function readinessTone(v: number): string {
-  if (v >= 75) return "text-amber-300 border-amber-500/40 bg-amber-500/10";
+// Matches StockRow.tsx's signalColor bands — this IS score.signalScore (see
+// breakout.ts's consolidation-pass comment), not a distinct scoring system,
+// so it should look like the same number everywhere else, not its own thing.
+function signalColor(v: number): string {
+  if (v >= 75) return "text-amber-300 border-amber-500/50 bg-amber-500/10";
   if (v >= 55) return "text-amber-400 border-amber-600/40 bg-amber-600/10";
-  return "text-orange-400 border-orange-500/40 bg-orange-500/10";
+  if (v >= 35) return "text-orange-400 border-orange-500/40 bg-orange-500/10";
+  return "text-zinc-500 border-zinc-700/40 bg-zinc-800/30";
 }
 
 function DriverChip({ label, value }: { label: string; value: number | undefined }) {
@@ -82,8 +86,8 @@ function CandidateCard({ c }: { c: BreakoutCandidate }) {
       </div>
 
       <div className="flex items-center gap-1.5 flex-wrap">
-        <span className={cn("text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded border", readinessTone(c.breakoutReadiness))}>
-          Breakout Readiness {c.breakoutReadiness}
+        <span className={cn("text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded border", signalColor(c.breakoutReadiness))}>
+          {c.breakoutReadiness}
         </span>
         <DriverChip label="INS" value={c.drivers.ins} />
         <DriverChip label="ACS" value={c.drivers.acs} />
@@ -119,7 +123,7 @@ export function TopBreakoutCandidates() {
         {isError && <p className="text-sm text-red-400 px-1 py-4">Couldn't load breakout candidates.</p>}
         {data && data.length === 0 && (
           <p className="text-sm text-zinc-500 px-1 py-4">
-            No stock currently clears the eligibility bar (real INS + RSI data, RSI under 75, VQS ≥ 30). Check back as scores populate.
+            No stock currently clears the eligibility bar (real INS + RSI data, not currently extended, VQS ≥ 40). Check back as scores populate.
           </p>
         )}
         {data?.map(c => <CandidateCard key={c.ticker} c={c} />)}

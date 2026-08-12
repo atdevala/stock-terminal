@@ -1,5 +1,6 @@
 import type { StockScore } from "./scores";
 import type { BreakoutCandidate, OptionsCandidate } from "./breakout";
+import { EXTENDED_LABEL_SUFFIX, LOW_QUALITY_LABEL } from "./signal-consistency";
 import { logger } from "./logger";
 
 // ── Phase 3 safety net ────────────────────────────────────────────────────────
@@ -48,7 +49,22 @@ export function checkSignalConsistency(
       issues.push({ ticker: score.ticker, issue: "quality-gated (fails VQS floor) but present in Top Breakout Candidates" });
     }
     if (breakoutTickers.has(score.ticker) && score.isExtended) {
-      issues.push({ ticker: score.ticker, issue: "currently extended (RSI>=70) but present in Top Breakout Candidates" });
+      issues.push({ ticker: score.ticker, issue: "currently extended (RSI, 50-day-MA distance, or same-day % — see signal-consistency.ts) but present in Top Breakout Candidates" });
+    }
+
+    // Consolidation-pass addition: does the LABEL a user actually sees agree
+    // with the gate flags that supposedly drove it? These two checks catch a
+    // different failure mode than the cross-feature ones above — not "is this
+    // stock in two lists that disagree," but "is scores.ts's own label
+    // computation internally consistent with its own isExtended/
+    // passesQualityFloor flags on this same object." Structurally shouldn't
+    // be possible after this pass (see scores.ts's signalLabel computation),
+    // which is exactly why it's worth checking, not assuming.
+    if (!score.passesQualityFloor && score.signalLabel !== LOW_QUALITY_LABEL) {
+      issues.push({ ticker: score.ticker, issue: `fails VQS quality floor but signalLabel is "${score.signalLabel}", not "${LOW_QUALITY_LABEL}"` });
+    }
+    if (score.isExtended && score.passesQualityFloor && !score.signalLabel.endsWith(EXTENDED_LABEL_SUFFIX)) {
+      issues.push({ ticker: score.ticker, issue: `isExtended is true but signalLabel ("${score.signalLabel}") doesn't carry the "${EXTENDED_LABEL_SUFFIX.trim()}" qualifier` });
     }
 
     // The direct cross-feature contradiction this whole investigation started

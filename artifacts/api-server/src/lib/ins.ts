@@ -1,4 +1,5 @@
 import type { ExtendedMetrics } from "./finnhub";
+import { appendLivePrice } from "./finnhub";
 
 function clamp(v: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, v));
@@ -196,15 +197,13 @@ export function computeINS(
   currentPrice: number,
   cos: number,
   spyCloses: number[],
-  rsi: number | undefined,
   tradingDaysToEarnings: number | undefined,
 ): INSResult {
   const closes    = ext.closes60d    ?? [];
   const volumes   = ext.volumes60d   ?? [];
   const surprises = ext.epsSurprises ?? [];
 
-  // Prepend stored closes with current live price for freshest calculation
-  const allCloses = closes.length > 0 ? [...closes, currentPrice] : [currentPrice];
+  const allCloses = appendLivePrice(closes, currentPrice);
 
   const momentum          = computeMomentum(allCloses, spyCloses);
   const deltaVqs          = computeDeltaVQS(ext);
@@ -249,31 +248,18 @@ export function computeINS(
     0, 100,
   );
 
-  // ── RSI Gate ─────────────────────────────────────────────────────────────
-  // Applied AFTER the weighted score above — not blended in as a 6th
-  // component — so the underlying momentum reading stays honest and
-  // auditable on its own. Distinguishes a fresh setup (room to run) from one
-  // that's already extended.
-  const HIGH_INS_THRESHOLD = 65;
-  let ins: number;
-  let insLabel: string;
-
-  if (rsi !== undefined && rsi >= 70 && rawIns >= HIGH_INS_THRESHOLD) {
-    // Overbought + high INS: momentum is already priced in. Dampen and relabel
-    // so this reads differently from a fresh setup.
-    ins = Math.round(clamp(rawIns * 0.7, 0, 100));
-    insLabel = "EXTENDED — MOMENTUM ALREADY PRICED IN";
-  } else if (rsi !== undefined && rsi <= 30 && rawIns >= HIGH_INS_THRESHOLD) {
-    // Oversold + high INS: a different real pattern (bottoming/reversal
-    // candidate) — not penalized like the overbought case, just labeled
-    // distinctly so it isn't confused with fresh breakout momentum.
-    ins = Math.round(clamp(rawIns, 0, 100));
-    insLabel = "OVERSOLD REVERSAL SETUP";
-  } else {
-    // RSI unavailable, or RSI 30-70 — the target fresh-setup case. Normal path.
-    ins = Math.round(clamp(rawIns, 0, 100));
-    insLabel = getInsLabel(ins);
-  }
+  // insLabel is a PURE magnitude label — no RSI/extension awareness. It used
+  // to have its own independent RSI gate here (dampening ins itself and
+  // swapping in an "EXTENDED"/"OVERSOLD REVERSAL" label), computed separately
+  // from — and inconsistently with — the real signal-consistency check. That
+  // was two independent RSI-gate implementations in the codebase at once.
+  // insLabel isn't shown on any live page (grep confirms the only reader is
+  // the retired/unrendered ScannerPage.tsx) — kept only for backward
+  // compatibility and internal debugging, same as cos/csos/cpe/bps on
+  // StockScore. Extension/chase-risk framing now lives in exactly one place:
+  // signalLabel's computation in scores.ts, via signal-consistency.ts.
+  const ins = Math.round(clamp(rawIns, 0, 100));
+  const insLabel = getInsLabel(ins);
 
   return {
     ins,

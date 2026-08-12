@@ -169,19 +169,23 @@ type SymbolScanSuccess = {
 // ── Filter logic — driven entirely by the single composite signal ────────────
 
 const PRE_BREAKOUT_LABELS = new Set(["STEALTH ACCUMULATION", "HIDDEN CATALYST POTENTIAL"]);
-// "EXTENDED — MOMENTUM ALREADY PRICED IN" (RSI >= 70, see signal-consistency.ts
-// on the backend) is included here so a stock that already moved a lot today
-// gets hard-excluded from Accumulate/Watch/Pre-Breakout — the same shared
-// definition the backend now uses for Top Breakout Candidates and Options
-// Setups, so this page can't disagree with those the way it used to.
-const AVOID_LABELS = new Set(["LATE STAGE MOVE", "LOW QUALITY / AVOID", "EXTENDED — MOMENTUM ALREADY PRICED IN"]);
+const AVOID_LABELS = new Set(["LATE STAGE MOVE", "LOW QUALITY / AVOID"]);
 
 function matchesFilter(row: RowData, filter: FilterKey): boolean {
-  const { signalScore, signalLabel, fbrs } = row.score;
+  const { signalScore, signalLabel, fbrs, isExtended } = row.score;
   if (filter === "all") return true;
-  if (filter === "prebreakout") return PRE_BREAKOUT_LABELS.has(signalLabel);
+  // A stock that's currently extended (RSI/50-day-MA-distance/same-day %, see
+  // signal-consistency.ts on the backend) isn't "pre-breakout" by definition —
+  // "pre" means it hasn't happened yet. signalLabel may also carry a chase-
+  // risk suffix now instead of a distinct label (see StockRow.tsx's
+  // stripExtensionSuffix), so checking isExtended directly here — rather than
+  // string-matching signalLabel — is the correct and more robust read either way.
+  if (filter === "prebreakout") return PRE_BREAKOUT_LABELS.has(signalLabel) && !isExtended;
   if (filter === "caution") return fbrs > 70;
-  if (AVOID_LABELS.has(signalLabel)) return filter === "avoid";
+  // isExtended hard-excludes into "avoid" — the same shared flag the backend
+  // uses for Top Breakout Candidates and Options Setups, so this page can't
+  // disagree with those the way it used to.
+  if (AVOID_LABELS.has(signalLabel) || isExtended) return filter === "avoid";
   switch (filter) {
     case "accumulate": return signalScore >= 65 && fbrs <= 70;
     case "watch":      return signalScore >= 45 && signalScore < 65 && fbrs <= 70;
