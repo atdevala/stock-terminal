@@ -1,4 +1,5 @@
 import "dotenv/config";
+// no-op: persistent-disk cache-survival test deploy
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startFinnhubService } from "./lib/finnhub";
