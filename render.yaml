@@ -2,14 +2,18 @@ services:
   - type: web
     name: stock-terminal
     runtime: node
-    plan: free
+    plan: starter
     buildCommand: npx --yes pnpm@9.15.9 install --no-frozen-lockfile --prod=false && npx --yes pnpm@9.15.9 --filter @workspace/api-server run build && PORT=3000 BASE_PATH=/ npx --yes pnpm@9.15.9 --filter @workspace/live-dashboard run build
     startCommand: node --enable-source-maps artifacts/api-server/dist/index.mjs
     healthCheckPath: /api/health
+    disk:
+      name: data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1
     envVars:
       - key: NODE_ENV
         value: production
       - key: DATA_DIR
-        value: /tmp/atdevala
+        value: /opt/render/project/src/data
       - key: FINNHUB_API_KEY
         sync: false
