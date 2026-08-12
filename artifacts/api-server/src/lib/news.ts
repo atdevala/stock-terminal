@@ -72,9 +72,7 @@ function fmtDate(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-// Exported for a temporary debug route only (see routes/news.ts) — the real
-// call path is getMovingStockNews() below.
-export async function fetchCompanyNews(ticker: string): Promise<NewsArticle[]> {
+async function fetchCompanyNews(ticker: string): Promise<NewsArticle[]> {
   const cached = newsCache.get(ticker);
   if (cached && Date.now() - cached.fetchedAt < NEWS_CACHE_TTL_MS) {
     return cached.articles;
@@ -111,13 +109,22 @@ export async function fetchCompanyNews(ticker: string): Promise<NewsArticle[]> {
 // summarizing. Strips a trailing "(EXCHANGE: TICKER)" suffix some sources
 // append and trailing punctuation so the headline reads naturally after
 // "... after {headline}.". Lowercases the first letter so it reads as a
-// clause continuing the sentence, UNLESS the first word is an acronym (all
-// caps) or the company's own name — confirmed live that headlines starting
-// with the company name (e.g. "Nebius: Why You Must Pick Your Spots",
-// "Credo's Massive Valuation...") read badly lowercased ("after nebius:...",
-// "after credo's..."); a proper noun shouldn't get de-capitalized just
-// because it's the first word of the sentence.
+// clause continuing the sentence, UNLESS:
+//   - the first word is an acronym (all caps), or the company's own name —
+//     confirmed live that headlines starting with the company name (e.g.
+//     "Nebius: Why You Must Pick Your Spots", "Credo's Massive Valuation...")
+//     read badly lowercased ("after nebius:...", "after credo's..."); a
+//     proper noun shouldn't get de-capitalized just because it's the first
+//     word of the sentence.
+//   - the headline is itself a question (e.g. "Why Is Archer Aviation Stock
+//     Falling on Wednesday?", very common in financial news headlines) —
+//     confirmed live that lowercasing only the first word of a question
+//     produces an inconsistently-cased fragment ("after why Is Archer...");
+//     left as its original title-case instead, since a question can't be
+//     smoothly spliced into "after ..." as a continuing clause without
+//     actually rewording it, which this function isn't allowed to do.
 function cleanHeadline(headline: string, company: string): string {
+  const isQuestion = headline.trim().endsWith("?");
   let h = headline.trim();
   h = h.replace(/\s*\([A-Za-z]+:\s*[A-Za-z.]+\)\s*$/, "");
   h = h.replace(/[.!?]+$/, "");
@@ -128,7 +135,7 @@ function cleanHeadline(headline: string, company: string): string {
   const isProperNounStart = /^[A-Z]{2,}$/.test(h.split(/\s+/)[0] ?? "")
     || (companyFirstWord.length > 2 && firstWord === companyFirstWord);
 
-  if (h.length > 1 && /^[A-Z][a-z]/.test(h) && !isProperNounStart) {
+  if (h.length > 1 && /^[A-Z][a-z]/.test(h) && !isProperNounStart && !isQuestion) {
     h = h[0]!.toLowerCase() + h.slice(1);
   }
   return h;
@@ -155,12 +162,22 @@ function stripCompanySuffix(company: string): string {
   return company.replace(/\b(Inc|Incorporated|Corp|Corporation|Holdings|Group|Ltd|Limited|Technologies|Technology|Company|Co|Global|Solutions|Systems|Corp\.)\b\.?/gi, "").trim();
 }
 
+// Word-boundary match, not substring — confirmed live this matters: ticker
+// "BE" (Bloom Energy) substring-matched inside "better-than-expected" via a
+// naive .includes() check, a false positive that would recur for any short
+// ticker (BE, ON, D, J, ...) that's also a common English letter sequence.
+function containsWord(text: string, word: string): boolean {
+  if (!word) return false;
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(text);
+}
+
 function isAboutCompany(article: NewsArticle, ticker: string, company: string): boolean {
-  const text = `${article.headline} ${article.summary}`.toLowerCase();
-  if (text.includes(ticker.toLowerCase())) return true;
+  const text = `${article.headline} ${article.summary}`;
+  if (containsWord(text, ticker)) return true;
   const bareCompany = stripCompanySuffix(company);
   const firstWord = bareCompany.split(/\s+/)[0];
-  return !!firstWord && firstWord.length > 2 && text.includes(firstWord.toLowerCase());
+  return !!firstWord && firstWord.length > 2 && containsWord(text, firstWord);
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
