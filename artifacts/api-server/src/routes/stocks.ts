@@ -5,6 +5,7 @@ import { getCatalystCalendar } from "../lib/catalysts";
 import { rankBreakoutCandidates, rankOptionsCandidates } from "../lib/breakout";
 import { buildPeerGroupPercentiles, resolvePeerGroup } from "../lib/sector";
 import { checkSignalConsistency } from "../lib/consistency-check";
+import { finnhubGet } from "../lib/finnhub";
 import {
   aiWriteupService,
   macdService,
@@ -284,6 +285,39 @@ router.get("/debug/valuation", (_req, res) => {
     .filter((r): r is NonNullable<typeof r> => r !== undefined);
 
   res.json({ samples, allRows: rows });
+});
+
+// TEMPORARY — AI write-up pipeline fix, step 1 diagnostic. Verifies which of
+// Finnhub's insider-transactions, insider-sentiment, short-interest, and
+// institutional-ownership endpoints actually return data on this project's
+// real (free-tier) API key, since documented free-tier scope doesn't always
+// match runtime behavior (some endpoints 403 as premium-required regardless
+// of docs). Remove once verified and the real endpoints are wired in or
+// confirmed gated.
+router.get("/debug/alt-data-sources", async (_req, res) => {
+  const testTickers = ["AAPL", "NVDA", "COHR"];
+  const endpoints: Array<{ name: string; path: (t: string) => string }> = [
+    { name: "insiderTransactions", path: t => `/stock/insider-transactions?symbol=${t}&from=2025-06-01&to=2026-08-12` },
+    { name: "insiderSentiment", path: t => `/stock/insider-sentiment?symbol=${t}&from=2025-06-01&to=2026-08-12` },
+    { name: "shortInterest", path: t => `/stock/short-interest?symbol=${t}` },
+    { name: "institutionalOwnership", path: t => `/institutional/ownership?symbol=${t}&from=2025-06-01&to=2026-08-12` },
+  ];
+
+  const results: Record<string, Record<string, unknown>> = {};
+
+  for (const ticker of testTickers) {
+    results[ticker] = {};
+    for (const ep of endpoints) {
+      try {
+        const data = await finnhubGet(ep.path(ticker));
+        results[ticker]![ep.name] = { ok: true, sample: data };
+      } catch (err) {
+        results[ticker]![ep.name] = { ok: false, error: err instanceof Error ? err.message : String(err) };
+      }
+    }
+  }
+
+  res.json(results);
 });
 
 router.get("/catalysts", async (req, res) => {
