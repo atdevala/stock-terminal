@@ -111,15 +111,24 @@ export async function fetchCompanyNews(ticker: string): Promise<NewsArticle[]> {
 // summarizing. Strips a trailing "(EXCHANGE: TICKER)" suffix some sources
 // append and trailing punctuation so the headline reads naturally after
 // "... after {headline}.". Lowercases the first letter so it reads as a
-// clause continuing the sentence, unless the headline starts with what looks
-// like an acronym or proper noun (e.g. "FDA approves...", "Nvidia unveils...")
-// — a rough heuristic (all-caps first word, or already lowercase), not a
-// grammar engine.
-function cleanHeadline(headline: string): string {
+// clause continuing the sentence, UNLESS the first word is an acronym (all
+// caps) or the company's own name — confirmed live that headlines starting
+// with the company name (e.g. "Nebius: Why You Must Pick Your Spots",
+// "Credo's Massive Valuation...") read badly lowercased ("after nebius:...",
+// "after credo's..."); a proper noun shouldn't get de-capitalized just
+// because it's the first word of the sentence.
+function cleanHeadline(headline: string, company: string): string {
   let h = headline.trim();
   h = h.replace(/\s*\([A-Za-z]+:\s*[A-Za-z.]+\)\s*$/, "");
   h = h.replace(/[.!?]+$/, "");
-  if (h.length > 1 && /^[A-Z][a-z]/.test(h)) {
+
+  const normalize = (w: string) => w.replace(/[:,.]+$/, "").replace(/['’]s$/i, "").toLowerCase();
+  const firstWord = normalize(h.split(/\s+/)[0] ?? "");
+  const companyFirstWord = normalize(stripCompanySuffix(company).split(/\s+/)[0] ?? "");
+  const isProperNounStart = /^[A-Z]{2,}$/.test(h.split(/\s+/)[0] ?? "")
+    || (companyFirstWord.length > 2 && firstWord === companyFirstWord);
+
+  if (h.length > 1 && /^[A-Z][a-z]/.test(h) && !isProperNounStart) {
     h = h[0]!.toLowerCase() + h.slice(1);
   }
   return h;
@@ -129,6 +138,29 @@ function sessionWord(session: string): string {
   if (session === "pre-market")  return "premarket";
   if (session === "post-market") return "after hours";
   return "today";
+}
+
+// Finnhub's /company-news endpoint doesn't always return articles actually
+// ABOUT the requested company — confirmed live: several tickers came back
+// with generic daily-roundup teasers ("Uncover the latest developments among
+// S&P500 stocks in today's session" — the EXACT same headline reused across
+// five unrelated tickers) or an article about a completely different
+// company. Using either as "the reason" a stock is moving would be actively
+// misleading, not just uninformative. Rule-based relevance check (no model
+// call): an article only counts if its headline or summary mentions the
+// ticker symbol itself, or the company's own name. This is a cheap,
+// deterministic filter, not sentiment/interpretation — it doesn't decide
+// whether news is GOOD or BAD, only whether it's actually about this company.
+function stripCompanySuffix(company: string): string {
+  return company.replace(/\b(Inc|Incorporated|Corp|Corporation|Holdings|Group|Ltd|Limited|Technologies|Technology|Company|Co|Global|Solutions|Systems|Corp\.)\b\.?/gi, "").trim();
+}
+
+function isAboutCompany(article: NewsArticle, ticker: string, company: string): boolean {
+  const text = `${article.headline} ${article.summary}`.toLowerCase();
+  if (text.includes(ticker.toLowerCase())) return true;
+  const bareCompany = stripCompanySuffix(company);
+  const firstWord = bareCompany.split(/\s+/)[0];
+  return !!firstWord && firstWord.length > 2 && text.includes(firstWord.toLowerCase());
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -144,20 +176,22 @@ export async function getMovingStockNews(): Promise<NewsBlurb[]> {
   // tickers on any given day, so a plain Promise.all is fine here without
   // needing that helper.
   const results = await Promise.all(movers.map(async q => {
+    const company = TICKER_TO_COMPANY[q.ticker] ?? q.ticker;
     const articles = await fetchCompanyNews(q.ticker);
     const recent = articles
       .filter(a => a.datetime >= cutoffSeconds)
+      .filter(a => isAboutCompany(a, q.ticker, company))
       .sort((a, b) => b.datetime - a.datetime);
     if (recent.length === 0) return null;
 
     const top = recent[0]!;
-    const reason = cleanHeadline(top.headline || top.summary);
+    const reason = cleanHeadline(top.headline || top.summary, company);
     if (!reason) return null;
 
     const direction = q.changePercent >= 0 ? "higher" : "lower";
     const blurb: NewsBlurb = {
       ticker: q.ticker,
-      company: TICKER_TO_COMPANY[q.ticker] ?? q.ticker,
+      company,
       blurb: `${q.ticker} shares are trading ${direction} ${sess} after ${reason}.`,
       headline: top.headline,
       source: top.source,
