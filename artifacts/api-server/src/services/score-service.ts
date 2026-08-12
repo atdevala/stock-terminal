@@ -1,5 +1,6 @@
 import { CATEGORIES } from "../lib/stocks-data";
 import { computeScore, mean, type StockScore } from "../lib/scores";
+import { buildPeerGroupPercentiles } from "../lib/sector";
 import { marketDataService } from "./market-data-service";
 import { signalHistoryService } from "./signal-history-service";
 import { publishLegacyScoreEvents } from "./signal-engine-service";
@@ -16,9 +17,18 @@ export interface SectorRotationRow {
 }
 
 function computeScores(): StockScore[] {
-  return marketDataService.getAllExtendedMetrics().map(ext => {
+  // Two-pass structure (sector-blindness fix, step 2): peer-group PE
+  // percentiles are a cross-ticker comparison, so they must be computed ONCE
+  // across the whole universe (pass 1) before any individual computeScore()
+  // call (pass 2) — a single ticker can't know its own percentile in
+  // isolation. See sector.ts for the grouping/percentile logic itself.
+  const allExt = marketDataService.getAllExtendedMetrics();
+  const percentileMap = buildPeerGroupPercentiles(allExt);
+
+  return allExt.map(ext => {
     const q = marketDataService.getQuote(ext.ticker);
-    return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0, q);
+    const peerPercentile = percentileMap.get(ext.ticker) ?? null;
+    return computeScore(ext.ticker, ext, q?.price ?? 0, q?.changePercent ?? 0, q, peerPercentile);
   });
 }
 

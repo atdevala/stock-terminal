@@ -3,6 +3,7 @@ import { logger } from "../lib/logger";
 import { CATEGORIES } from "../lib/stocks-data";
 import { getCatalystCalendar } from "../lib/catalysts";
 import { rankBreakoutCandidates, rankOptionsCandidates } from "../lib/breakout";
+import { buildPeerGroupPercentiles, resolvePeerGroup } from "../lib/sector";
 import {
   aiWriteupService,
   macdService,
@@ -220,6 +221,61 @@ router.get("/debug/industries", (_req, res) => {
     examples: withIndustry.slice(0, 20).map(m => ({ ticker: m.ticker, industry: m.industry })),
     missingExamples: withoutIndustry.slice(0, 10).map(m => m.ticker),
   });
+});
+
+// TEMPORARY — sector-blindness fix step 2 diagnostic. Shows the OLD absolute-
+// threshold valuationScore next to the NEW peer-group-percentile one, per
+// ticker, using the real live percentile map (same buildPeerGroupPercentiles
+// call score-service.ts uses) — so the before/after can be verified against
+// real production data instead of a hand-worked example. Remove once verified.
+router.get("/debug/valuation", (_req, res) => {
+  const metrics = marketDataService.getAllExtendedMetrics();
+  const percentileMap = buildPeerGroupPercentiles(metrics);
+
+  // Mirrors the exact absolute-threshold formula in scores.ts's VALUATION
+  // QUALITY SCORE block — duplicated here only so this throwaway route can
+  // show both numbers side-by-side without changing computeScore's public
+  // return shape. Not the source of truth; scores.ts is.
+  function oldValuationScore(pe: number | undefined, evSales: number | undefined, rg: number): number {
+    if (pe && pe > 0) {
+      const rawPeScore = Math.max(0, Math.min(200 / pe, 20));
+      let pegAdjustment = 0;
+      if (rg > 0) {
+        const peg = pe / Math.max(rg, 1);
+        pegAdjustment = Math.max(0, Math.min(20 / peg, 20));
+      }
+      return Math.max(0, Math.min(rawPeScore + pegAdjustment, 40));
+    } else if (evSales && evSales > 0) {
+      return Math.max(0, Math.min(50 / evSales, 20));
+    }
+    return 0;
+  }
+
+  const rows = metrics.map(ext => {
+    const pct = percentileMap.get(ext.ticker) ?? null;
+    const rg = ext.revenueGrowthYoy ?? 0;
+    const oldScore = oldValuationScore(ext.pe, ext.evSales, rg);
+    const newScore = pct ? (pct.percentile / 100) * 40 : oldScore;
+    return {
+      ticker: ext.ticker,
+      pe: ext.pe ?? null,
+      revenueGrowthYoy: ext.revenueGrowthYoy ?? null,
+      finnhubIndustry: ext.industry ?? null,
+      resolvedPeerGroup: pct?.peerGroup ?? resolvePeerGroup(ext.ticker, ext.industry),
+      peerGroupSize: pct?.peerGroupSize ?? null,
+      percentile: pct ? Math.round(pct.percentile * 10) / 10 : null,
+      usedPercentile: pct !== null,
+      oldValuationScore: Math.round(oldScore * 10) / 10,
+      newValuationScore: Math.round(newScore * 10) / 10,
+    };
+  });
+
+  const sampleTickers = ["COHR", "NVDA", "AMD", "TSM", "IONQ", "MARA", "NNE", "MSFT"];
+  const samples = sampleTickers
+    .map(t => rows.find(r => r.ticker === t))
+    .filter((r): r is NonNullable<typeof r> => r !== undefined);
+
+  res.json({ samples, allRows: rows });
 });
 
 router.get("/catalysts", async (req, res) => {

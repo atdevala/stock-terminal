@@ -2,6 +2,7 @@ import type { ExtendedMetrics, QuoteData } from "./finnhub";
 import { computeINS } from "./ins";
 import { getSpyCloses60d, getMarketRegime } from "./finnhub";
 import { getTradingDaysToNextEarnings } from "./catalysts";
+import type { PeerPercentile } from "./sector";
 import { logger } from "./logger";
 
 // ── Math helpers ───────────────────────────────────────────────────────────────
@@ -1127,6 +1128,14 @@ export function computeScore(
   // any intraday reads elsewhere in this function.
   _changePercent = 0,
   quote?: QuoteData,
+  // Precomputed once per scoring pass across the whole universe (see
+  // buildPeerGroupPercentiles in sector.ts) and passed through from
+  // score-service.ts — computeScore itself never computes this, since a
+  // percentile is inherently a cross-ticker comparison. undefined/null (the
+  // default) means "no valid peer-group percentile" — VQS's valuation score
+  // falls back to the existing absolute-threshold method in that case; see
+  // the VALUATION QUALITY SCORE block below.
+  peerPercentile?: PeerPercentile | null,
 ): StockScore {
   try {
   const rg    = ext.revenueGrowthYoy ?? 0;
@@ -1157,7 +1166,22 @@ export function computeScore(
   // | Health 20 — sums to a 100-point max.
   const growthScore = clamp(rg * 0.4, 0, 20);
   let valuationScore = 0;
-  if (pe && pe > 0) {
+  // ── Sector-blindness fix, step 2 ──────────────────────────────────────────
+  // Valuation used to compare every ticker's PE against fixed global
+  // thresholds — a semiconductor at PE 30 and a utility at PE 30 scored
+  // identically, which is wrong; "expensive" means something different in
+  // each industry. When a valid peer-group PE percentile is available
+  // (peerPercentile, precomputed once per pass in score-service.ts via
+  // buildPeerGroupPercentiles — see sector.ts), it REPLACES the absolute
+  // formula below entirely (not just the PEG piece), scaled to the same
+  // 0-40 point budget: percentile 100 (cheapest in its peer group) → 40pts,
+  // percentile 0 (priciest) → 0pts. When no valid percentile exists — peer
+  // group too thin (<5 members) or ticker has no usable PE — this falls
+  // back to the exact absolute-threshold method used before this pass,
+  // unchanged, so behavior for those tickers doesn't regress.
+  if (peerPercentile) {
+    valuationScore = clamp((peerPercentile.percentile / 100) * 40, 0, 40);
+  } else if (pe && pe > 0) {
     const rawPeScore = clamp(200 / pe, 0, 20); // absolute cheapness, unadjusted for growth
     let pegAdjustment = 0;
     if (rg > 0) {
