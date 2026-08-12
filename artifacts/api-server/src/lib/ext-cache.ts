@@ -111,9 +111,31 @@ export function loadExtCache(): void {
       logger.warn("Ext-cache: version mismatch — starting empty");
       return;
     }
+    // One-time migration: some disk-cached fundamentals entries predate
+    // high52/low52 being parsed at all, so the key is entirely absent from
+    // the stored object rather than present-but-null. Those entries look
+    // "fresh" under TTL_H24 forever and would otherwise never get
+    // re-fetched to pick up the missing fields. Drop just those entries
+    // (not profiles/candles/recs/earnings/insider, which aren't affected)
+    // so fetchFundamentals treats them as a cache miss and backfills them
+    // on the next fundamentals phase.
+    const rawFundamentals = parsed.fundamentals ?? {};
+    const fundamentals: typeof rawFundamentals = {};
+    let migratedCount = 0;
+    for (const [ticker, entry] of Object.entries(rawFundamentals)) {
+      if (entry.data && "high52" in entry.data) {
+        fundamentals[ticker] = entry;
+      } else {
+        migratedCount++;
+      }
+    }
+    if (migratedCount > 0) {
+      logger.info(`Ext-cache: dropped ${migratedCount} pre-high52 fundamentals entries — will refetch`);
+    }
+
     store = {
       v:            1,
-      fundamentals: parsed.fundamentals ?? {},
+      fundamentals,
       profiles:     parsed.profiles     ?? {},
       candles:      parsed.candles      ?? {},
       recs:         parsed.recs         ?? {},
