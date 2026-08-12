@@ -298,7 +298,7 @@ router.get("/debug/fundamentals-cache", (_req, res) => {
       liveQuote: marketDataService.getQuote(t),
       liveExt: (() => {
         const e = marketDataService.getExtendedMetrics(t);
-        return e ? { pe: e.pe, revenueGrowthYoy: e.revenueGrowthYoy } : null;
+        return e ? { pe: e.pe, revenueGrowthYoy: e.revenueGrowthYoy, high52: e.high52, low52: e.low52 } : null;
       })(),
     }])
   );

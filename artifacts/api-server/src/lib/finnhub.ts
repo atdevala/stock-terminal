@@ -50,6 +50,15 @@ export interface ExtendedMetrics {
   debtToEquity?: number;
   pe?: number;
   evSales?: number;
+  // 52-week high/low, sourced here (not on the live quote object) so they're
+  // set unconditionally alongside pe/revenueGrowthYoy/etc from the same
+  // /stock/metric response — see the high52/low52-empty-everywhere bug this
+  // fixed: the old quoteCache-only path only wrote these when quoteCache
+  // already had an entry for the ticker at the exact moment fetchFundamentals
+  // ran, which depended on Phase 1/Phase 3 timing and silently dropped the
+  // value for any ticker where that race lost.
+  high52?: number;
+  low52?: number;
   ma50?: number;
   ma200?: number;
   earningsRevisionsUp?: boolean;
@@ -271,6 +280,8 @@ async function fetchFundamentals(ticker: string): Promise<void> {
       debtToEquity:     cached.debtToEquity,
       pe:               cached.pe,
       evSales:          cached.evSales,
+      high52:           cached.high52,
+      low52:            cached.low52,
     });
     return;
   }
@@ -310,6 +321,8 @@ async function fetchFundamentals(ticker: string): Promise<void> {
       debtToEquity:     payload.debtToEquity,
       pe:               payload.pe,
       evSales:          payload.evSales,
+      high52:           payload.high52,
+      low52:            payload.low52,
     });
   } catch (err) {
     logger.warn({ ticker, err }, "Fundamentals fetch failed");
@@ -633,6 +646,8 @@ function prewarmExtMetricsCache(): void {
         debtToEquity:     fundamentals.debtToEquity,
         pe:               fundamentals.pe,
         evSales:          fundamentals.evSales,
+        high52:           fundamentals.high52,
+        low52:            fundamentals.low52,
       } : {}),
       ...(candles ? {
         ma50:       candles.ma50,

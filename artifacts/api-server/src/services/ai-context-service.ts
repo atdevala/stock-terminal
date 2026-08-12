@@ -171,8 +171,8 @@ function scoreFacts(score: StockScore | undefined, ticker?: string): Array<{ key
   ];
 
   if (score.rsi !== undefined) facts.push({ key: "rsi14", value: score.rsi, source: "price-history" });
-  if (score.high52 !== undefined) facts.push({ key: "high52Week", value: score.high52, source: "quote-cache" });
-  if (score.low52 !== undefined) facts.push({ key: "low52Week", value: score.low52, source: "quote-cache" });
+  if (score.high52 !== undefined) facts.push({ key: "high52Week", value: score.high52, source: "fundamentals" });
+  if (score.low52 !== undefined) facts.push({ key: "low52Week", value: score.low52, source: "fundamentals" });
   if (score.ma50 !== undefined) facts.push({ key: "movingAverage50Day", value: score.ma50, source: "price-history" });
   if (score.ma200 !== undefined) facts.push({ key: "movingAverage200Day", value: score.ma200, source: "price-history" });
   if (score.priceAbove50MA !== undefined) facts.push({ key: "priceAbove50DayMA", value: score.priceAbove50MA, source: "price-history" });

@@ -129,8 +129,8 @@ function computeACS_v2(
   const closes  = ext.closes60d  ?? [];
   const volumes = ext.volumes60d ?? [];
   const price    = quote?.price      ?? 0;
-  const high52   = quote?.high52     ?? 0;
-  const low52    = quote?.low52      ?? 0;
+  const high52   = ext.high52        ?? 0;
+  const low52    = ext.low52         ?? 0;
   const qHigh    = quote?.high       ?? 0;
   const qLow     = quote?.low        ?? 0;
   const qOpen    = quote?.open       ?? 0;
@@ -510,8 +510,8 @@ function computeACS_v2(
 
 function computeFBRS(ext: ExtendedMetrics, quote: QuoteData | undefined): number {
   const price  = quote?.price   ?? 0;
-  const high52 = quote?.high52  ?? 0;
-  const low52  = quote?.low52   ?? 0;
+  const high52 = ext.high52     ?? 0;
+  const low52  = ext.low52      ?? 0;
 
   // 1. Valuation Risk (30%)
   // Very high PE = more vulnerable to correction when sentiment shifts.
@@ -587,8 +587,8 @@ function computeTrendLabel(ext: ExtendedMetrics, quote: QuoteData | undefined): 
 
   // Fallback: fundamentals + quote signals
   const price    = quote?.price         ?? 0;
-  const high52   = quote?.high52        ?? 0;
-  const low52    = quote?.low52         ?? 0;
+  const high52   = ext.high52           ?? 0;
+  const low52    = ext.low52            ?? 0;
   const changePct = quote?.changePercent ?? 0;
   const yoy      = ext.revenueGrowthYoy ?? 0;
 
@@ -1422,8 +1422,8 @@ export function computeScore(
     fbrs,
     convictionTier,
     isSuperstock,
-    high52: quote?.high52,
-    low52:  quote?.low52,
+    high52: ext.high52,
+    low52:  ext.low52,
     ma50:   ext.ma50,
     ma200:  ext.ma200,
     csos:      csosResult.csos,
