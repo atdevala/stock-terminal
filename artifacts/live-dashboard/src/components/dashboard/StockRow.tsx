@@ -37,6 +37,7 @@ function signalLabelStyle(label: string): string {
   if (label === "CONFIRMED TREND")                  return "text-amber-400";
   if (label === "DEVELOPING SETUP")                 return "text-zinc-400";
   if (label === "LATE STAGE MOVE")                  return "text-orange-400";
+  if (label === "EXTENDED — MOMENTUM ALREADY PRICED IN") return "text-orange-300";
   return "text-red-400";
 }
 
@@ -143,6 +144,11 @@ function getSignalReason(
     return {
       headline: "Mixed signals — no dominant pattern yet",
       detail: "Watch INS and ACS for strengthening before price catches up — that combination would upgrade this to an early breakout.",
+    };
+  if (label === "EXTENDED — MOMENTUM ALREADY PRICED IN")
+    return {
+      headline: "RSI shows this stock already overbought right now",
+      detail: "The move has already happened — chasing it here means buying after the fact, not ahead of it. Wait for RSI to cool off before treating this as a fresh setup.",
     };
   return {
     headline: `Fundamental floor override (VQS ${vqs})`,

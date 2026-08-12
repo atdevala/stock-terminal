@@ -4,6 +4,7 @@ import { CATEGORIES } from "../lib/stocks-data";
 import { getCatalystCalendar } from "../lib/catalysts";
 import { rankBreakoutCandidates, rankOptionsCandidates } from "../lib/breakout";
 import { buildPeerGroupPercentiles, resolvePeerGroup } from "../lib/sector";
+import { checkSignalConsistency } from "../lib/consistency-check";
 import {
   aiWriteupService,
   macdService,
@@ -155,7 +156,14 @@ router.get("/options-watch", async (_req, res) => {
     const scoresByTicker = new Map(scores.map(s => [s.ticker, s]));
     const extByTicker = new Map(marketDataService.getAllExtendedMetrics().map(e => [e.ticker, e]));
     const quotesMap = new Map(marketDataService.getAllQuotes().map(q => [q.ticker, q]));
-    const candidates = await rankOptionsCandidates(scores, extByTicker, 5);
+    const candidates = await rankOptionsCandidates(scores, extByTicker, quotesMap, 5);
+
+    // Phase 3 safety net (signal-consistency): breakout candidates are cheap
+    // to re-derive synchronously here — no extra network call — giving this
+    // request both lists needed to check for a stock landing in
+    // contradictory places (e.g. a Put Candidate that's also a top breakout
+    // pick). Logs findings; never blocks the response.
+    checkSignalConsistency(scores, rankBreakoutCandidates(scores, 10), candidates);
 
     res.json(candidates.map(c => {
       const q = quotesMap.get(c.ticker);

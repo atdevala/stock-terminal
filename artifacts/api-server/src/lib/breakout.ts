@@ -1,7 +1,9 @@
 import type { StockScore } from "./scores";
-import type { ExtendedMetrics } from "./finnhub";
+import type { ExtendedMetrics, QuoteData } from "./finnhub";
+import { appendLivePrice } from "./scores";
 import { CATEGORIES } from "./stocks-data";
 import { getEarningsCalendar } from "./catalysts";
+import { RSI_OVERBOUGHT } from "./signal-consistency";
 
 function clamp(v: number, lo = 0, hi = 100): number {
   return Math.max(lo, Math.min(hi, v));
@@ -21,10 +23,19 @@ const COMPANY_BY_TICKER: Map<string, string> = new Map(
 //
 // Eligibility gate — a stock isn't even considered unless ALL of these hold:
 //   - INS is present (real leading-momentum signal, not a missing-data default)
-//   - RSI is present AND < 75 (must have real price history, and can't already
-//     be deep overbought — "room to run" is part of the definition, not a bonus)
-//   - VQS >= 30 (hard fundamental floor — a pure meme spike on a broken
-//     business doesn't qualify just because it's moving)
+//   - RSI is present (must have real price history)
+//   - passesQualityFloor (shared definition, lib/signal-consistency.ts: VQS
+//     >= 40) — a pure meme spike on a broken business doesn't qualify just
+//     because it's moving. Was this file's own `vqs < 30` check; that looser,
+//     independently-chosen threshold is exactly why a stock already labeled
+//     "LOW QUALITY / AVOID" elsewhere (VQS 30-39) could still show up here —
+//     a real production bug, fixed by reading the same shared flag everything
+//     else reads instead of re-deriving a different number.
+//   - !isExtended (shared definition: RSI >= 70) — can't already be
+//     overbought; "room to run" is part of the definition, not a bonus. Was
+//     this file's own `rsi >= 75` check — looser than the shared 70, which
+//     meant a stock already flagged "EXTENDED" by the RSI gate elsewhere
+//     could still pass here in the 70-74.9 RSI band.
 //
 // Weighted score (0-100) over stocks that pass the gate:
 //   45% INS   — the leading momentum-inflection signal. This is the single
@@ -34,8 +45,8 @@ const COMPANY_BY_TICKER: Map<string, string> = new Map(
 //   30% ACS   — accumulation confidence. Requires REAL institutional buying
 //               behind the move, not just a hype-driven price spike.
 //   25% RoomToRun — derived from RSI. 100 at RSI<=50, tapering linearly to 0
-//               at RSI=75 (the gate already excludes >=75). Rewards setups
-//               that haven't already run most of their move.
+//               at RSI_OVERBOUGHT (the gate already excludes at/above that).
+//               Rewards setups that haven't already run most of their move.
 //
 // Then two adjustments, both tracing to real computed numbers:
 //   Quality gate:  avg(VQS, LQS) < 35  → ×0.75 penalty (junk discount)
@@ -62,10 +73,12 @@ export function computeBreakoutReadiness(score: StockScore): number | null {
   const ins = score.ins;
   const rsi = score.rsi;
   if (ins === undefined) return null;
-  if (rsi === undefined || rsi >= 75) return null;
-  if (score.vqs < 30) return null;
+  if (rsi === undefined) return null;
+  if (!score.passesQualityFloor) return null;
+  if (score.isExtended) return null;
 
-  const roomToRun = clamp(100 - Math.max(0, rsi - 50) * 4, 0, 100); // 100 at <=50, 0 at >=75
+  const taperSlope = 100 / (RSI_OVERBOUGHT - 50);
+  const roomToRun = clamp(100 - Math.max(0, rsi - 50) * taperSlope, 0, 100); // 100 at <=50, 0 at RSI_OVERBOUGHT
   let raw = 0.45 * ins + 0.30 * score.acs + 0.25 * roomToRun;
 
   const qualityFloor = score.lqs !== undefined ? (score.vqs + score.lqs) / 2 : score.vqs;
@@ -116,10 +129,15 @@ export function rankBreakoutCandidates(scores: StockScore[], limit = 10): Breako
 //
 // Directional read (must have one, or the stock isn't shown here at all —
 // "no strong directional read" means it's not a good options-setup candidate
-// by this heuristic's own definition):
-//   - RSI >= 65  → "Put Candidate"  (extended / overbought — the case for a
-//     directional put or a covered-call-style setup)
-//   - RSI <= 40 AND ACS >= 55 → "Call Candidate" (oversold, but with real
+// by this heuristic's own definition). Uses the shared isExtended/isOversold
+// flags (lib/signal-consistency.ts) instead of this file's own separate RSI
+// thresholds — this file used to check RSI >= 65 / <= 40 independently of
+// the RSI >= 70 / <= 30 the rest of the system uses, which is exactly how a
+// stock (e.g. RSI 65-69) could get called a bearish "Put Candidate" here
+// while every other feature still read it as a fine long:
+//   - isExtended  → "Put Candidate"  (RSI >= 70 — the case for a directional
+//     put or a covered-call-style setup)
+//   - isOversold AND ACS >= 55 → "Call Candidate" (RSI <= 30, but with real
 //     accumulation underneath — the case for a reversal-higher setup)
 //
 // Ranking — Options Setup Score = realizedVol20d × (1 + earningsProximityBonus)
@@ -163,6 +181,7 @@ function daysBetween(fromISODate: string, toISODate: string): number {
 export async function rankOptionsCandidates(
   scores: StockScore[],
   extByTicker: Map<string, ExtendedMetrics>,
+  quotesByTicker: Map<string, QuoteData>,
   limit = 5,
 ): Promise<OptionsCandidate[]> {
   const earnings = await getEarningsCalendar(10);
@@ -173,7 +192,13 @@ export async function rankOptionsCandidates(
 
   for (const score of scores) {
     const ext = extByTicker.get(score.ticker);
-    const closes = ext?.closes60d ?? [];
+    // Appends the live quote price (see appendLivePrice in scores.ts) — a
+    // stock that already moved a lot TODAY has already realized that
+    // volatility; holding it back until tomorrow's candle would understate
+    // an already-materialized move for a ranking whose whole point is
+    // "which names are moving right now."
+    const currentPrice = quotesByTicker.get(score.ticker)?.price ?? 0;
+    const closes = appendLivePrice(ext?.closes60d, currentPrice);
     const vol = computeRealizedVolatility20d(closes);
     if (vol === undefined) continue;
 
@@ -187,8 +212,8 @@ export async function rankOptionsCandidates(
     if (rsi === undefined) continue;
 
     let direction: "Call Candidate" | "Put Candidate" | null = null;
-    if (rsi >= 65) direction = "Put Candidate";
-    else if (rsi <= 40 && score.acs >= 55) direction = "Call Candidate";
+    if (score.isExtended) direction = "Put Candidate";
+    else if (score.isOversold && score.acs >= 55) direction = "Call Candidate";
     if (!direction) continue; // no strong directional read — not a candidate here
 
     const earningsBonus = daysAway === undefined ? 0 : daysAway <= 3 ? 0.5 : daysAway <= 7 ? 0.25 : 0;

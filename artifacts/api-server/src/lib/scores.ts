@@ -3,6 +3,7 @@ import { computeINS } from "./ins";
 import { getSpyCloses60d, getMarketRegime } from "./finnhub";
 import { getTradingDaysToNextEarnings } from "./catalysts";
 import type { PeerPercentile } from "./sector";
+import { evaluateSignalConsistency } from "./signal-consistency";
 import { logger } from "./logger";
 
 // ── Math helpers ───────────────────────────────────────────────────────────────
@@ -29,6 +30,28 @@ function dailyRets(closes: number[]): number[] {
     if (p !== 0) r.push((closes[i]! - p) / p * 100);
   }
   return r;
+}
+
+// ── closes60d live-price audit ────────────────────────────────────────────────
+// closes60d is populated from completed daily candles (refreshed on its own
+// TTL cycle), which lags same-day price action by definition — the day's
+// candle isn't finalized until the session closes. ins.ts's computeMomentum
+// already appends the live quote price before computing momentum; computeRSI
+// did NOT, which meant RSI answered "was this stock stretched as of
+// yesterday's close," not "is it stretched right now" — invisible on a quiet
+// day, materially wrong on a day with a large intraday move (confirmed live:
+// a stock up 29% intraday still read RSI 59/Neutral, computed from a candle
+// series that had no way to know about that move yet).
+//
+// appendLivePrice is the one shared helper for this decision, used
+// consistently everywhere closes60d feeds something that's supposed to
+// describe the CURRENT moment rather than a completed multi-day structure.
+// Guards currentPrice > 0 so a not-yet-loaded quote (0) can't corrupt the
+// series with a fake 100% drop.
+export function appendLivePrice(closes: number[] | undefined, currentPrice: number): number[] {
+  const base = closes ?? [];
+  if (currentPrice <= 0) return base;
+  return [...base, currentPrice];
 }
 
 // ── RSI(14) — Relative Strength Index ──────────────────────────────────────────
@@ -530,7 +553,11 @@ function computeFBRS(ext: ExtendedMetrics, quote: QuoteData | undefined): number
 // Falls back to candle-based logic when closes are available.
 
 function computeTrendLabel(ext: ExtendedMetrics, quote: QuoteData | undefined): string {
-  const closes = ext.closes60d ?? [];
+  // Appends the live quote price (see appendLivePrice) — this classifies
+  // RECENT momentum (5D/20D/60D returns), the same "is this happening right
+  // now" category as RSI, so it needs the same fix: without this, `curr`
+  // below would be yesterday's close, one day blind to today's move.
+  const closes = appendLivePrice(ext.closes60d, quote?.price ?? 0);
 
   // Preferred: candle-based (when available)
   if (closes.length >= 21) {
@@ -1125,6 +1152,15 @@ export interface StockScore {
   // fundamentals → revenueGrowthYoy) have both loaded at least once; the
   // frontend must treat false as "still loading," not as a real score.
   dataComplete: boolean;
+  // ── Signal consistency — the shared source of truth (lib/signal-consistency.ts) ─
+  // Every feature that needs to know "is this stock currently overbought" or
+  // "does it pass the fundamental quality floor" reads these fields — they are
+  // computed ONCE, here, from the canonical thresholds (RSI>=70, VQS>=40).
+  // Nothing downstream (breakout candidates, options direction, etc.) should
+  // reimplement its own version of these checks with its own threshold.
+  isExtended: boolean;
+  isOversold: boolean;
+  passesQualityFloor: boolean;
 }
 
 // ── Master score computation ───────────────────────────────────────────────────
@@ -1241,7 +1277,10 @@ export function computeScore(
 
   // ── RSI(14) — computed here (moved up from after BPS) because INS's RSI
   // gate needs it; independent of every other score in this function.
-  const rsi = computeRSI(ext.closes60d ?? []);
+  // Appends the live quote price (see appendLivePrice) — RSI is explicitly
+  // "is this stock stretched right now," so it must see today's move, not
+  // just completed candles through yesterday's close.
+  const rsi = computeRSI(appendLivePrice(ext.closes60d, currentPrice));
   const rsiZoneVal = rsiZone(rsi);
 
   // ── INFLECTION SIGNAL SCORE ───────────────────────────────────────────────
@@ -1311,7 +1350,22 @@ export function computeScore(
 
   // ── Consolidated signal — replaces COS/CSOS/CPE/BPS as separate displays ──
   const signalScore = regimeDamped ? Math.round(clamp(bps * regimeMultiplier, 1, 100)) : bps;
-  const signalLabel = csosLabelText(signalScore, vqs, ins, acs, cos, cpe);
+
+  // ── Signal consistency — ONE shared definition, see signal-consistency.ts ──
+  // csosLabelText has no RSI awareness at all (confirmed root cause of a real
+  // production bug: a stock genuinely up 29% intraday kept a bullish
+  // "QUALITY COMPOUNDER — ACTIVATING" label because nothing checked RSI
+  // before assigning it). Override to the same "EXTENDED" wording ins.ts's
+  // RSI gate already uses, so the label users actually see (signalLabel)
+  // agrees with the one embedded in insLabel — priority sits below the
+  // fundamental floor (a structurally broken business stays "LOW QUALITY /
+  // AVOID" regardless of RSI; that's a more severe, longer-lived condition
+  // than a temporarily extended momentum reading).
+  const consistency = evaluateSignalConsistency(vqs, rsi);
+  const baseSignalLabel = csosLabelText(signalScore, vqs, ins, acs, cos, cpe);
+  const signalLabel = (consistency.isExtended && baseSignalLabel !== "LOW QUALITY / AVOID")
+    ? "EXTENDED — MOMENTUM ALREADY PRICED IN"
+    : baseSignalLabel;
 
   // ── Data completeness ──────────────────────────────────────────────────────
   // See the StockScore interface comment. Candles (closes60d) and
@@ -1361,6 +1415,9 @@ export function computeScore(
     signalLabel,
     regimeAdjusted: regimeDamped,
     dataComplete,
+    isExtended: consistency.isExtended,
+    isOversold: consistency.isOversold,
+    passesQualityFloor: consistency.passesQualityFloor,
   };
   } catch (err) {
     logger.error({ ticker, err }, "computeScore threw unexpectedly — returning safe defaults");
@@ -1384,6 +1441,9 @@ export function computeScore(
       signalLabel: "LOW QUALITY / AVOID",
       regimeAdjusted: false,
       dataComplete: false,
+      isExtended: false,
+      isOversold: false,
+      passesQualityFloor: false,
     };
   }
 }

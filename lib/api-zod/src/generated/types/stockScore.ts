@@ -72,4 +72,10 @@ export interface StockScore {
   regimeAdjusted?: boolean;
   /** True once candles and fundamentals have both loaded at least once for this ticker. False means the score is built partly from internal defaults, not real data yet — render as "still loading," not as a real (possibly low) score. */
   dataComplete: boolean;
+  /** True when RSI >= 70 (the shared "currently overbought" definition — see lib/signal-consistency.ts). The single source of truth for "extended" across breakout candidates, options direction, and the composite label. */
+  isExtended: boolean;
+  /** True when RSI <= 30 (the shared "currently oversold" definition). */
+  isOversold: boolean;
+  /** True when VQS >= 40 (the shared fundamental quality floor). False means this ticker is excluded from buy-side candidate lists regardless of other scores. */
+  passesQualityFloor: boolean;
 }

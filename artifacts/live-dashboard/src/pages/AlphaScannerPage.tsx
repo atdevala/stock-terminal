@@ -169,7 +169,12 @@ type SymbolScanSuccess = {
 // ── Filter logic — driven entirely by the single composite signal ────────────
 
 const PRE_BREAKOUT_LABELS = new Set(["STEALTH ACCUMULATION", "HIDDEN CATALYST POTENTIAL"]);
-const AVOID_LABELS = new Set(["LATE STAGE MOVE", "LOW QUALITY / AVOID"]);
+// "EXTENDED — MOMENTUM ALREADY PRICED IN" (RSI >= 70, see signal-consistency.ts
+// on the backend) is included here so a stock that already moved a lot today
+// gets hard-excluded from Accumulate/Watch/Pre-Breakout — the same shared
+// definition the backend now uses for Top Breakout Candidates and Options
+// Setups, so this page can't disagree with those the way it used to.
+const AVOID_LABELS = new Set(["LATE STAGE MOVE", "LOW QUALITY / AVOID", "EXTENDED — MOMENTUM ALREADY PRICED IN"]);
 
 function matchesFilter(row: RowData, filter: FilterKey): boolean {
   const { signalScore, signalLabel, fbrs } = row.score;
