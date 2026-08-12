@@ -199,10 +199,22 @@ router.get("/debug/industries", (_req, res) => {
   const metrics = marketDataService.getAllExtendedMetrics();
   const withIndustry = metrics.filter(m => m.industry && m.industry.trim() !== "");
   const withoutIndustry = metrics.filter(m => !m.industry || m.industry.trim() === "");
+
+  const counts = new Map<string, number>();
+  for (const m of withIndustry) {
+    const key = m.industry!;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const breakdown = Object.fromEntries(
+    [...counts.entries()].sort((a, b) => b[1] - a[1]),
+  );
+
   res.json({
     totalTickers: metrics.length,
     withIndustry: withIndustry.length,
     withoutIndustry: withoutIndustry.length,
+    distinctIndustries: counts.size,
+    breakdown,
     examples: withIndustry.slice(0, 20).map(m => ({ ticker: m.ticker, industry: m.industry })),
     missingExamples: withoutIndustry.slice(0, 10).map(m => m.ticker),
   });
