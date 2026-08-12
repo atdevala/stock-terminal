@@ -5,7 +5,6 @@ import { getCatalystCalendar } from "../lib/catalysts";
 import { rankBreakoutCandidates, rankOptionsCandidates } from "../lib/breakout";
 import { buildPeerGroupPercentiles, resolvePeerGroup } from "../lib/sector";
 import { checkSignalConsistency } from "../lib/consistency-check";
-import { finnhubGet } from "../lib/finnhub";
 import {
   aiWriteupService,
   macdService,
@@ -285,19 +284,6 @@ router.get("/debug/valuation", (_req, res) => {
     .filter((r): r is NonNullable<typeof r> => r !== undefined);
 
   res.json({ samples, allRows: rows });
-});
-
-// TEMPORARY — one-off diagnostic for a separately-discovered bug: high52/low52
-// are empty for every ticker in /api/scores even though other /stock/metric
-// fields (pe, revenueGrowthYoy) populate fine. Dumps the raw metric response
-// to find the actual current key names. Remove once diagnosed.
-router.get("/debug/raw-metric", async (_req, res) => {
-  try {
-    const data = await finnhubGet("/stock/metric?symbol=AAOI&metric=all");
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
 });
 
 router.get("/catalysts", async (req, res) => {
