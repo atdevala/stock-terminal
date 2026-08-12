@@ -9,17 +9,36 @@ import { aiContextService } from "./ai-context-service";
 // callers get an explicit "unavailable"/"error" status, never invented prose.
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "";
-const ANTHROPIC_MODEL = "claude-sonnet-5";
+// Haiku-class model — these are short, structured write-ups built entirely
+// from facts already computed server-side, not open-ended multi-step
+// reasoning, so they don't need Sonnet-tier capability. This is the single
+// biggest per-call cost lever available (Haiku is roughly 1/15th of Sonnet's
+// per-token price), independent of how often the model is actually called.
+const ANTHROPIC_MODEL = "claude-haiku-4-5";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
-// Real model calls cost money and take a few seconds — cache write-ups instead
-// of regenerating on every poll. 30 min matches the same order of magnitude as
-// the other slow-moving inputs here (candles refresh every 6h, so a breakout
-// candidate's underlying drivers don't change fast enough to justify calling
-// the model more often than this).
-const WRITEUP_TTL_MS = 30 * 60 * 1000;
+// Real model calls cost money — cache write-ups instead of regenerating on
+// every poll. Both dashboard boxes poll their route every 60s
+// (TopBreakoutCandidates.tsx / OptionsSetupsToWatch.tsx), and each request
+// re-derives the top-10/top-5 candidate lists from live scores, so a stock
+// bouncing in and out of the list across polls used to mean a fresh model
+// call every time it reappeared after 30 min. Against a ~150-ticker universe
+// with prices moving all day, that produced far more distinct (ticker,
+// re-entry) pairs than the "~15 stocks" the feature nominally covers —
+// consistent with the 100+ calls/2 days actually observed.
+//
+// Fixed daily cadence instead of change-detection: write-ups already read
+// price-level facts as "current as of generation time," not a live feed, and
+// the other slow-moving inputs this project already caches on disk
+// (ext-cache.ts) all use flat TTLs rather than diffing the underlying data —
+// this follows that same established pattern instead of introducing a new
+// one. A stock's setup can obviously change intraday, but the write-up is
+// supplementary color on top of the always-live score/label shown in the UI,
+// not the primary signal, so a day of lag on the prose is an acceptable
+// trade for cutting call volume by roughly 48x.
+const WRITEUP_TTL_MS = 24 * 60 * 60 * 1000;
 // If a call fails, retry sooner than a full success TTL rather than serving
-// the same error for 30 minutes.
+// the same error for a full day.
 const ERROR_RETRY_MS = 3 * 60 * 1000;
 
 interface CachedWriteup { text: string; ts: number; isError: boolean }
@@ -67,6 +86,9 @@ const SYSTEM_PROMPT = [
   "You are given STRUCTURED, machine-computed facts about one ticker — not news, not your own general knowledge of the company.",
   "Write using ONLY the facts given. Do not invent price targets, specific news events, analyst quotes, or catalysts you were not told about.",
   "If something relevant isn't in the facts (e.g. a specific news catalyst), say plainly that it's not known rather than guessing or fabricating one.",
+  "Before writing, actively look through the given facts for anything that CUTS AGAINST the setup, not just what supports it — e.g. momentum facts look strong but volume is light for the size of the move, quality/accumulation primitives are solid but valuation is stretched relative to peers, price is extended above a moving average, or RSI is near an overbought/oversold extreme.",
+  "If you find a genuine contradiction like that in the data, state it plainly in the write-up as a real caveat, in the same factual tone as the rest of the analysis — do not soften it into vague hedging.",
+  "Do not fabricate a caveat if the data doesn't actually support one — if everything given genuinely lines up, it's fine and expected for the write-up to say so instead of manufacturing a fake concern.",
   "Never promise or imply guaranteed returns. This is not financial advice and should read that way.",
 ].join(" ");
 

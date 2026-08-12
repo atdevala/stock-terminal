@@ -8,14 +8,17 @@ import {
   getCachedCandles,      setCachedCandles,
   getCachedRecs,         setCachedRecs,
   getCachedEarnings,     setCachedEarnings,
+  getCachedInsider,      setCachedInsider,
   getCachedSpy,          setCachedSpy,
   getCachedFundamentalsRaw,
   getCachedCandlesRaw,
   getCachedRecsRaw,
   getCachedEarningsRaw,
+  getCachedInsiderRaw,
   getCachedSpyRaw,
   type FundamentalsPayload,
   type CandlesPayload,
+  type InsiderPayload,
 } from "./ext-cache";
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY ?? "";
@@ -55,6 +58,14 @@ export interface ExtendedMetrics {
   epsSurprises?: number[];
   /** Finnhub's own industry classification (e.g. "Semiconductors", "Biotechnology", "Software") — from /stock/profile2's finnhubIndustry field. Data-only for now; not yet used by any scoring math (see scores.ts). */
   industry?: string;
+  /** Count of open-market Buy (code "P") transactions in the trailing 30 days, from Form 3/4/5 filings. */
+  insiderBuys30d?: number;
+  /** Count of open-market Sell (code "S") transactions in the trailing 30 days, from Form 3/4/5 filings. */
+  insiderSells30d?: number;
+  /** Most recent month's Monthly Share Purchase Ratio: -100 (all selling) to +100 (all buying). */
+  insiderMspr?: number;
+  /** "YYYY-MM" the MSPR reading above is for. */
+  insiderMsprMonth?: string;
 }
 
 // ── closes60d live-price audit — the ONE shared "append today's price" helper ──
@@ -480,6 +491,92 @@ async function fetchEarnings(ticker: string): Promise<void> {
   }
 }
 
+// Verified live against this project's real (free-tier) API key before
+// building this: /stock/insider-transactions and /stock/insider-sentiment
+// both return real data on the free tier; /stock/short-interest and
+// /institutional/ownership both 403 (premium-required) on this plan, so
+// neither is wired in. Only a summarized signal is kept (buy/sell counts +
+// latest MSPR reading), never the raw transaction list — that's all
+// scoreFacts() needs, and it keeps the AI context small.
+async function fetchInsiderActivity(ticker: string): Promise<void> {
+  const cached = getCachedInsider(ticker);
+  if (cached) {
+    const ext = extMetricsCache.get(ticker) ?? { ticker };
+    extMetricsCache.set(ticker, {
+      ...ext, ticker,
+      insiderBuys30d:   cached.insiderBuys30d,
+      insiderSells30d:  cached.insiderSells30d,
+      insiderMspr:      cached.insiderMspr,
+      insiderMsprMonth: cached.insiderMsprMonth,
+    });
+    return;
+  }
+
+  const payload: InsiderPayload = {};
+
+  try {
+    const to = new Date();
+    const from = new Date(to.getTime() - 90 * 86400 * 1000); // 90d window, plenty of margin for a 30d rollup
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const data = await finnhubGet(
+      `/stock/insider-transactions?symbol=${ticker}&from=${fmt(from)}&to=${fmt(to)}`
+    ) as { data?: Array<Record<string, unknown>> };
+
+    const cutoff = to.getTime() - 30 * 86400 * 1000;
+    const rows = Array.isArray(data.data) ? data.data : [];
+    let buys = 0;
+    let sells = 0;
+    for (const row of rows) {
+      const txDate = new Date(String(row["transactionDate"] ?? "")).getTime();
+      if (isNaN(txDate) || txDate < cutoff) continue;
+      const code = row["transactionCode"];
+      if (code === "P") buys++;
+      else if (code === "S") sells++;
+    }
+    payload.insiderBuys30d = buys;
+    payload.insiderSells30d = sells;
+  } catch (err) {
+    logger.warn({ ticker, err }, "Insider transactions fetch failed");
+  }
+
+  try {
+    const to = new Date();
+    const from = new Date(to.getTime() - 400 * 86400 * 1000); // wide window; take the latest month present
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    const data = await finnhubGet(
+      `/stock/insider-sentiment?symbol=${ticker}&from=${fmt(from)}&to=${fmt(to)}`
+    ) as { data?: Array<{ year?: number; month?: number; mspr?: number }> };
+
+    const rows = Array.isArray(data.data) ? data.data : [];
+    const latest = rows.reduce<{ year: number; month: number; mspr: number } | null>((acc, row) => {
+      if (row.year === undefined || row.month === undefined || row.mspr === undefined) return acc;
+      if (!acc || row.year > acc.year || (row.year === acc.year && row.month > acc.month)) {
+        return { year: row.year, month: row.month, mspr: row.mspr };
+      }
+      return acc;
+    }, null);
+
+    if (latest) {
+      payload.insiderMspr = latest.mspr;
+      payload.insiderMsprMonth = `${latest.year}-${String(latest.month).padStart(2, "0")}`;
+    }
+  } catch (err) {
+    logger.warn({ ticker, err }, "Insider sentiment fetch failed");
+  }
+
+  if (payload.insiderBuys30d === undefined && payload.insiderMspr === undefined) return;
+
+  setCachedInsider(ticker, payload);
+  const ext = extMetricsCache.get(ticker) ?? { ticker };
+  extMetricsCache.set(ticker, {
+    ...ext, ticker,
+    insiderBuys30d:   payload.insiderBuys30d,
+    insiderSells30d:  payload.insiderSells30d,
+    insiderMspr:      payload.insiderMspr,
+    insiderMsprMonth: payload.insiderMsprMonth,
+  });
+}
+
 /** Fetch SPY daily candles for 60-day relative strength calculations */
 async function fetchSpyCandles(): Promise<void> {
   const cached = getCachedSpy();
@@ -519,8 +616,9 @@ function prewarmExtMetricsCache(): void {
     const candles      = getCachedCandlesRaw(ticker);
     const recs         = getCachedRecsRaw(ticker);
     const earnings     = getCachedEarningsRaw(ticker);
+    const insider      = getCachedInsiderRaw(ticker);
 
-    if (!fundamentals && !candles && !recs && !earnings) continue;
+    if (!fundamentals && !candles && !recs && !earnings && !insider) continue;
 
     const ext = extMetricsCache.get(ticker) ?? { ticker };
     extMetricsCache.set(ticker, {
@@ -544,6 +642,12 @@ function prewarmExtMetricsCache(): void {
       } : {}),
       ...(recs    ? { earningsRevisionsUp: recs.earningsRevisionsUp }  : {}),
       ...(earnings? { epsSurprises:        earnings.epsSurprises }     : {}),
+      ...(insider ? {
+        insiderBuys30d:   insider.insiderBuys30d,
+        insiderSells30d:  insider.insiderSells30d,
+        insiderMspr:      insider.insiderMspr,
+        insiderMsprMonth: insider.insiderMsprMonth,
+      } : {}),
     });
     count++;
   }
@@ -614,6 +718,21 @@ async function loadInitialData(): Promise<void> {
   await fetchSpyCandles();
 }
 
+// Phase 8: Insider transactions + sentiment. NOT awaited from loadInitialData
+// and not part of the sequential phase list above — nothing in scoring reads
+// this data (it's AI-write-up-context only, see ai-context-service.ts), and a
+// cold-start universe with no existing ext-cache would add ~150 tickers x 2
+// calls x 1.5s = ~7.5 minutes to warm-up if it blocked readiness. Firing it
+// as a background task after Phase 1-7 finish means /api/scores is never
+// waiting on it — insider facts simply appear a few minutes later as this
+// phase completes in the background, and TTL_D7 means that cost is paid at
+// most once a week per ticker regardless.
+async function loadInsiderDataInBackground(): Promise<void> {
+  logger.info("Phase 8 (background): Fetching insider transactions/sentiment...");
+  await runBatched(ALL_TICKERS, fetchInsiderActivity);
+  logger.info("  ✓ Insider transactions/sentiment loaded");
+}
+
 // ── Market status ─────────────────────────────────────────────────────────────
 
 async function refreshMarketStatus(): Promise<void> {
@@ -646,6 +765,11 @@ async function periodicMetricsRefresh(): Promise<void> {
     await runBatched(ALL_TICKERS, fetchFundamentals);
     await runBatched(ALL_TICKERS, fetchRecommendations);
     await runBatched(ALL_TICKERS, fetchEarnings);
+    // Same self-gating pattern as the calls above: fetchInsiderActivity checks
+    // its own 7-day cache before ever touching the network, so running it in
+    // this 6h loop doesn't mean 4x/day real calls — just a same-day-cached
+    // no-op on 27 of every 28 passes.
+    await runBatched(ALL_TICKERS, fetchInsiderActivity);
     await fetchSpyCandles();
     logger.info("  ✓ Periodic metrics refresh complete");
   }
@@ -804,4 +928,5 @@ export async function startFinnhubService(): Promise<void> {
   setInterval(() => void refreshMarketStatus(), 30_000);
   void periodicRestRefresh();
   void periodicMetricsRefresh();
+  void loadInsiderDataInBackground();
 }

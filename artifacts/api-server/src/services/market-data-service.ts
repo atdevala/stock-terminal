@@ -81,6 +81,9 @@ export const marketDataService = {
   getAllExtendedMetrics(): ExtendedMetrics[] {
     return getAllExtendedMetrics();
   },
+  getExtendedMetrics(ticker: string): ExtendedMetrics | undefined {
+    return getExtendedMetrics(ticker);
+  },
   getMarketStatus(): MarketStatusData {
     return getMarketStatus();
   },

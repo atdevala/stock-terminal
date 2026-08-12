@@ -46,6 +46,21 @@ export interface RecsPayload {
   earningsRevisionsUp?: boolean;
 }
 
+// Insider Form 3/4/5 transactions + monthly sentiment (MSPR). Filings and
+// monthly sentiment rollups are updated at most a few times a month — TTL_D7
+// (7 days) instead of the 24h fundamentals/recs cadence, since re-fetching
+// daily would just replay the same filings almost every time.
+export interface InsiderPayload {
+  /** Count of open-market Buy (code "P") transactions in the trailing 30 days. */
+  insiderBuys30d?: number;
+  /** Count of open-market Sell (code "S") transactions in the trailing 30 days. */
+  insiderSells30d?: number;
+  /** Most recent month's Monthly Share Purchase Ratio: -100 (all selling) to +100 (all buying). */
+  insiderMspr?: number;
+  /** "YYYY-MM" the MSPR reading above is for. */
+  insiderMsprMonth?: string;
+}
+
 export interface EarningsPayload {
   epsSurprises?: number[];
 }
@@ -65,6 +80,7 @@ interface CacheStore {
   candles:      Record<string, CacheEntry<CandlesPayload>>;
   recs:         Record<string, CacheEntry<RecsPayload>>;
   earnings:     Record<string, CacheEntry<EarningsPayload>>;
+  insider:      Record<string, CacheEntry<InsiderPayload>>;
   spy:          CacheEntry<SpyPayload> | null;
 }
 
@@ -77,6 +93,7 @@ let store: CacheStore = {
   candles:      {},
   recs:         {},
   earnings:     {},
+  insider:      {},
   spy:          null,
 };
 
@@ -101,6 +118,7 @@ export function loadExtCache(): void {
       candles:      parsed.candles      ?? {},
       recs:         parsed.recs         ?? {},
       earnings:     parsed.earnings     ?? {},
+      insider:      parsed.insider      ?? {},
       spy:          parsed.spy          ?? null,
     };
     const n = Object.keys(store.fundamentals).length;
@@ -197,6 +215,20 @@ export function getCachedEarningsRaw(ticker: string): EarningsPayload | null {
 }
 export function setCachedEarnings(ticker: string, data: EarningsPayload): void {
   store.earnings[ticker] = { data, ts: Date.now() };
+  scheduleSave();
+}
+
+// ── Insider activity ──────────────────────────────────────────────────────────
+
+export function getCachedInsider(ticker: string): InsiderPayload | null {
+  const e = store.insider[ticker];
+  return e && isFresh(e.ts, TTL_D7) ? e.data : null;
+}
+export function getCachedInsiderRaw(ticker: string): InsiderPayload | null {
+  return store.insider[ticker]?.data ?? null;
+}
+export function setCachedInsider(ticker: string, data: InsiderPayload): void {
+  store.insider[ticker] = { data, ts: Date.now() };
   scheduleSave();
 }
 
