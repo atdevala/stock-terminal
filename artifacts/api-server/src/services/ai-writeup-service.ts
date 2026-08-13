@@ -27,21 +27,37 @@ const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 // re-entry) pairs than the "~15 stocks" the feature nominally covers —
 // consistent with the 100+ calls/2 days actually observed.
 //
-// Fixed daily cadence instead of change-detection: write-ups already read
-// price-level facts as "current as of generation time," not a live feed, and
-// the other slow-moving inputs this project already caches on disk
-// (ext-cache.ts) all use flat TTLs rather than diffing the underlying data —
-// this follows that same established pattern instead of introducing a new
-// one. A stock's setup can obviously change intraday, but the write-up is
-// supplementary color on top of the always-live score/label shown in the UI,
-// not the primary signal, so a day of lag on the prose is an acceptable
-// trade for cutting call volume by roughly 48x.
+// Fixed daily cadence, PLUS change-detection on the specific facts a
+// write-up asserts directionally (see fingerprint below): a flat TTL alone
+// let a write-up assert "trading below both its 50-day and 200-day average"
+// while the live price shown right next to it had already moved above both
+// — a real, user-visible contradiction (confirmed live on ONDS), not a
+// hypothetical. Moving averages and the setup label don't change every
+// poll, so gating regeneration on them changing, in addition to the 24h
+// ceiling, doesn't reintroduce the original cost problem (100+ calls/2 days
+// for ~15 stocks) — it only forces a refresh exactly when the narrative the
+// write-up commits to (above/below a level) would otherwise go stale-wrong
+// instead of just stale-vague.
 const WRITEUP_TTL_MS = 24 * 60 * 60 * 1000;
 // If a call fails, retry sooner than a full success TTL rather than serving
 // the same error for a full day.
 const ERROR_RETRY_MS = 3 * 60 * 1000;
 
-interface CachedWriteup { text: string; ts: number; isError: boolean }
+interface CachedWriteup { text: string; ts: number; isError: boolean; fingerprint: string }
+
+// Captures the facts most likely to make cached prose read as factually
+// wrong if they drift, rather than just slightly dated — specifically,
+// which side of its own moving averages the price sits on, and the
+// screener's own directional read. Compared against the fingerprint at
+// generation time; a mismatch forces a regenerate regardless of TTL.
+function computeFingerprint(parts: Record<string, string | number | boolean | undefined>): string {
+  return Object.entries(parts).map(([k, v]) => `${k}=${v}`).join("|");
+}
+
+function maPosition(price: number | undefined, ma: number | undefined): "above" | "below" | undefined {
+  if (price === undefined || ma === undefined) return undefined;
+  return price >= ma ? "above" : "below";
+}
 
 const cache = new Map<string, CachedWriteup>();
 const inFlight = new Set<string>();
@@ -92,40 +108,44 @@ const SYSTEM_PROMPT = [
   "Never promise or imply guaranteed returns. This is not financial advice and should read that way.",
 ].join(" ");
 
-async function generate(key: string, buildPrompt: () => Promise<string>): Promise<void> {
+async function generate(key: string, fingerprint: string, buildPrompt: () => Promise<string>): Promise<void> {
   if (inFlight.has(key)) return;
   inFlight.add(key);
   try {
     const userPrompt = await buildPrompt();
     const text = await callAnthropic(SYSTEM_PROMPT, userPrompt);
-    cache.set(key, { text, ts: Date.now(), isError: false });
+    cache.set(key, { text, ts: Date.now(), isError: false, fingerprint });
   } catch (err) {
     logger.warn({ key, err }, "AI write-up generation failed");
     cache.set(key, {
       text: "AI analysis temporarily unavailable — the model call failed. Retrying on the next request.",
       ts: Date.now(),
       isError: true,
+      fingerprint,
     });
   } finally {
     inFlight.delete(key);
   }
 }
 
-function getOrTrigger(key: string, buildPrompt: () => Promise<string>): WriteupResult {
+function getOrTrigger(key: string, fingerprint: string, buildPrompt: () => Promise<string>): WriteupResult {
   if (!isAnthropicConfigured()) {
     return { status: "unavailable", text: "AI analysis unavailable — ANTHROPIC_API_KEY is not configured on the server." };
   }
 
   const cached = cache.get(key);
   const ttl = cached?.isError ? ERROR_RETRY_MS : WRITEUP_TTL_MS;
-  if (cached && Date.now() - cached.ts < ttl) {
+  const fingerprintChanged = cached !== undefined && cached.fingerprint !== fingerprint;
+  if (cached && !fingerprintChanged && Date.now() - cached.ts < ttl) {
     return { status: cached.isError ? "error" : "ready", text: cached.text };
   }
 
-  void generate(key, buildPrompt);
+  void generate(key, fingerprint, buildPrompt);
   // Stale-while-revalidate: serve the last good text (if any) while a fresh
   // one generates in the background, instead of blocking the request on a
-  // multi-second model call.
+  // multi-second model call. A fingerprint change still serves the old text
+  // for this one request rather than blocking — same trade-off as TTL
+  // expiry, just triggered by a different condition.
   return { status: "generating", text: cached && !cached.isError ? cached.text : null };
 }
 
@@ -138,7 +158,12 @@ export const aiWriteupService = {
       price?: number; high52?: number; low52?: number; ma50?: number; ma200?: number;
     },
   ): WriteupResult {
-    return getOrTrigger(`breakout:${ticker}`, async () => {
+    const fingerprint = computeFingerprint({
+      reasonLabel: facts.reasonLabel,
+      aboveMa50: maPosition(facts.price, facts.ma50),
+      aboveMa200: maPosition(facts.price, facts.ma200),
+    });
+    return getOrTrigger(`breakout:${ticker}`, fingerprint, async () => {
       const packet = aiContextService.buildTickerSignalPacket(
         ticker,
         "Explain why this stock is currently a breakout candidate",
@@ -180,7 +205,12 @@ export const aiWriteupService = {
       price?: number; high52?: number; low52?: number; ma50?: number; ma200?: number;
     },
   ): WriteupResult {
-    return getOrTrigger(`options:${ticker}`, async () => {
+    const fingerprint = computeFingerprint({
+      direction: facts.direction,
+      aboveMa50: maPosition(facts.price, facts.ma50),
+      aboveMa200: maPosition(facts.price, facts.ma200),
+    });
+    return getOrTrigger(`options:${ticker}`, fingerprint, async () => {
       const packet = aiContextService.buildOptionsReasoningPacket(
         ticker,
         "Explain this options setup from real volatility and calendar data",
