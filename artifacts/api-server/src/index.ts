@@ -4,6 +4,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { startFinnhubService } from "./lib/finnhub";
 import { startScannerService } from "./lib/scanner";
+import { startBreakoutOutcomeTracker } from "./lib/breakout-outcomes";
 
 // ── Startup environment validation ────────────────────────────────────────────
 // Fail fast with a clear message rather than silently misbehaving.
@@ -52,4 +53,8 @@ app.listen(port, (err) => {
   void startFinnhubService();
   // Start INS market scanner (delayed 10s, then every 15 min)
   void startScannerService();
+  // Start Top Breakout Candidates outcome tracker (every 10 min) — must run
+  // independently of frontend traffic so multi-day checkpoints keep getting
+  // checked even if nobody has the dashboard open.
+  startBreakoutOutcomeTracker();
 });

@@ -281,3 +281,33 @@ export interface SignalDelta {
 export type RefreshScanner200 = {
   message: string;
 };
+
+export interface BreakoutOutcomeCheckpoint {
+  price: number;
+  returnPct: number;
+  checkedAt: number;
+}
+
+export interface BreakoutOutcomeCheckpoints {
+  d1: BreakoutOutcomeCheckpoint | null;
+  d3: BreakoutOutcomeCheckpoint | null;
+  d5: BreakoutOutcomeCheckpoint | null;
+  d10: BreakoutOutcomeCheckpoint | null;
+}
+
+export interface BreakoutOutcomeEntry {
+  id: string;
+  ticker: string;
+  company: string;
+  loggedAt: number;
+  /** YYYY-MM-DD, UTC */
+  loggedDate: string;
+  priceAtLog: number;
+  signalScoreAtLog: number;
+  signalLabelAtLog: string;
+  checkpoints: BreakoutOutcomeCheckpoints;
+  /** True once the d10 checkpoint is filled — no further updates needed. */
+  complete: boolean;
+  /** False once the ticker drops off Top Breakout Candidates, so a later reappearance starts a new entry. */
+  stillActive: boolean;
+}

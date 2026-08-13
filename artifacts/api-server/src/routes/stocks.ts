@@ -5,6 +5,7 @@ import { getCatalystCalendar } from "../lib/catalysts";
 import { rankBreakoutCandidates, rankOptionsCandidates } from "../lib/breakout";
 import { buildPeerGroupPercentiles, resolvePeerGroup } from "../lib/sector";
 import { checkSignalConsistency, getLastConsistencyReport } from "../lib/consistency-check";
+import { getAllBreakoutOutcomes } from "../lib/breakout-outcomes";
 import {
   aiWriteupService,
   macdService,
@@ -106,6 +107,14 @@ router.get("/market-regime", (_req, res) => {
 
 router.get("/signal-deltas", (_req, res) => {
   res.json(signalHistoryService.getAllSignalDeltas());
+});
+
+// Top Breakout Candidates outcome tracker — see lib/breakout-outcomes.ts.
+// Logged/checked by its own independent 10-min background loop (started in
+// index.ts), not by this route — this just serves whatever's currently
+// persisted, sorted most-recent first.
+router.get("/breakout-outcomes", (_req, res) => {
+  res.json(getAllBreakoutOutcomes());
 });
 
 // Serves the Phase-3 signal-consistency safety net's last run, persisted to

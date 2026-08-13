@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  BreakoutOutcomeEntry,
   HealthStatus,
   MarketRegime,
   MarketStatus,
@@ -828,6 +829,81 @@ export function useGetSignalDeltas<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getGetSignalDeltasQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Top Breakout Candidates outcome tracker — logged appearances and their 1/3/5/10-day checkpoint returns
+ */
+export const getGetBreakoutOutcomesUrl = () => {
+  return `/api/breakout-outcomes`;
+};
+
+export const getBreakoutOutcomes = async (
+  options?: RequestInit,
+): Promise<BreakoutOutcomeEntry[]> => {
+  return customFetch<BreakoutOutcomeEntry[]>(getGetBreakoutOutcomesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBreakoutOutcomesQueryKey = () => {
+  return [`/api/breakout-outcomes`] as const;
+};
+
+export const getGetBreakoutOutcomesQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBreakoutOutcomes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBreakoutOutcomes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBreakoutOutcomesQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getBreakoutOutcomes>>> = ({
+    signal,
+  }) => getBreakoutOutcomes({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBreakoutOutcomes>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBreakoutOutcomesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBreakoutOutcomes>>
+>;
+export type GetBreakoutOutcomesQueryError = ErrorType<unknown>;
+
+/**
+ * @summary Top Breakout Candidates outcome tracker — logged appearances and their 1/3/5/10-day checkpoint returns
+ */
+
+export function useGetBreakoutOutcomes<
+  TData = Awaited<ReturnType<typeof getBreakoutOutcomes>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBreakoutOutcomes>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBreakoutOutcomesQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;
