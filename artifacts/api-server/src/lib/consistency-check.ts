@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { StockScore } from "./scores";
 import type { BreakoutCandidate, OptionsCandidate } from "./breakout";
 import { EXTENDED_LABEL_SUFFIX, LOW_QUALITY_LABEL } from "./signal-consistency";
@@ -26,6 +29,64 @@ export interface ConsistencyIssue {
 
 const ACCUMULATE_SIGNAL_SCORE_MIN = 65; // must match AlphaScannerPage.tsx's "accumulate" filter
 const ACCUMULATE_FBRS_MAX = 70;
+
+// Whole-Market-ranking follow-up (2026-08-12): the Breakout/Options gates
+// above didn't cover the Whole Market page's own ranked order, which sorted
+// purely by raw signalScore — a stock could fail the quality floor AND be
+// extended and still rank #1 (confirmed live: SDGR, "LOW QUALITY / AVOID",
+// RSI 74, ranked #1). AlphaScannerPage.tsx's sortRows() now demotes
+// gate-failing stocks below every gate-passing one instead of sorting on
+// signalScore alone. That ranking is computed CLIENT-SIDE from the same
+// /api/scores payload this function already receives, so it's mirrored here
+// rather than imported — keep this in sync by hand if sortRows() changes.
+const WHOLE_MARKET_TOP_N = 20;
+
+function computeWholeMarketRanking(allScores: StockScore[]): StockScore[] {
+  return [...allScores].sort((a, b) => {
+    const aEligible = a.passesQualityFloor && !a.isExtended;
+    const bEligible = b.passesQualityFloor && !b.isExtended;
+    if (aEligible !== bEligible) return aEligible ? -1 : 1;
+    return b.signalScore - a.signalScore;
+  });
+}
+
+// ── Persisted report ──────────────────────────────────────────────────────────
+// Previously this check only ever logged via logger.warn — real findings, but
+// gone the moment Render's ephemeral log stream rotated, with no way to
+// answer "what did the last audit find" after the fact. Writes the latest
+// run's full result (not just failures) to the same persistent Disk the
+// ext-cache/signal-history files already use, so /api/consistency-report can
+// serve a real answer instead of "check the logs."
+const DATA_DIR = process.env.DATA_DIR ?? path.join(path.dirname(fileURLToPath(import.meta.url)), "../../data");
+const REPORT_FILE = path.join(DATA_DIR, "consistency-report.json");
+
+export interface ConsistencyReport {
+  ts: number;
+  scoredUniverseSize: number;
+  breakoutCandidateCount: number;
+  optionsCandidateCount: number;
+  issueCount: number;
+  issues: ConsistencyIssue[];
+}
+
+function saveReport(report: ConsistencyReport): void {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(REPORT_FILE, JSON.stringify(report), "utf-8");
+  } catch (err) {
+    logger.warn({ err }, "Could not save consistency report to disk");
+  }
+}
+
+export function getLastConsistencyReport(): ConsistencyReport | null {
+  try {
+    if (!fs.existsSync(REPORT_FILE)) return null;
+    return JSON.parse(fs.readFileSync(REPORT_FILE, "utf-8")) as ConsistencyReport;
+  } catch (err) {
+    logger.warn({ err }, "Could not read consistency report from disk");
+    return null;
+  }
+}
 
 export function checkSignalConsistency(
   allScores: StockScore[],
@@ -85,9 +146,36 @@ export function checkSignalConsistency(
     }
   }
 
+  // Whole-Market-ranking check: does any gate-failing stock still land in the
+  // top N ranked positions? After the sortRows() fix this should only ever
+  // happen if fewer than WHOLE_MARKET_TOP_N stocks in the whole universe
+  // pass both gates (a thin-eligible-set edge case, not a bug) — everything
+  // else would mean the frontend's ranking and this mirror have drifted out
+  // of sync, which is exactly the kind of silent regression this is here to
+  // catch.
+  const wholeMarketRanking = computeWholeMarketRanking(allScores);
+  wholeMarketRanking.slice(0, WHOLE_MARKET_TOP_N).forEach((score, i) => {
+    if (!score.passesQualityFloor || score.isExtended) {
+      const reasons = [
+        !score.passesQualityFloor ? "fails the VQS quality floor" : null,
+        score.isExtended ? "is currently extended" : null,
+      ].filter(Boolean).join(" and ");
+      issues.push({ ticker: score.ticker, issue: `ranked #${i + 1} on the Whole Market page (top ${WHOLE_MARKET_TOP_N}) but ${reasons}` });
+    }
+  });
+
   if (issues.length > 0) {
     logger.warn({ issues }, `Signal consistency check found ${issues.length} contradiction(s)`);
   }
+
+  saveReport({
+    ts: Date.now(),
+    scoredUniverseSize: allScores.length,
+    breakoutCandidateCount: breakoutCandidates.length,
+    optionsCandidateCount: optionsCandidates.length,
+    issueCount: issues.length,
+    issues,
+  });
 
   return issues;
 }

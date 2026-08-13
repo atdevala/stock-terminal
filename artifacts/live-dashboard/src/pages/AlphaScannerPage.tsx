@@ -194,9 +194,30 @@ function matchesFilter(row: RowData, filter: FilterKey): boolean {
   }
 }
 
+// A stock that fails the shared quality floor or is currently extended (see
+// signal-consistency.ts on the backend — the same isExtended/passesQualityFloor
+// flags Top Breakout Candidates and Options Setups already hard-gate on) can
+// still carry an elevated raw signalScore from pure momentum. Left unchecked,
+// that let a stock like SDGR — labeled "LOW QUALITY / AVOID" with RSI 74 —
+// rank #1 on this page's default "Best Setup" sort, directly contradicting
+// its own label. "All Stocks" is meant to show everyone, including avoid-
+// worthy names (removing them here would defeat the point of that view,
+// unlike Breakout Candidates' curated top-10 which legitimately excludes
+// them) — so this demotes rather than removes: every gate-passing stock
+// ranks above every gate-failing one, and signalScore only breaks ties
+// within each group. "Most Oversold" is left untouched deliberately — it's
+// explicitly hunting for beaten-down names, where "fails the quality floor"
+// isn't a disqualifier, it's often the point.
+function isEligibleForBuySide(score: StockScore): boolean {
+  return score.passesQualityFloor && !score.isExtended;
+}
+
 function sortRows(rows: RowData[], sortBy: SortKey): RowData[] {
   return [...rows].sort((a, b) => {
     if (sortBy === "rsi") return (a.score.rsi ?? 50) - (b.score.rsi ?? 50); // most oversold first
+    const aEligible = isEligibleForBuySide(a.score);
+    const bEligible = isEligibleForBuySide(b.score);
+    if (aEligible !== bEligible) return aEligible ? -1 : 1;
     return b.score.signalScore - a.score.signalScore;
   });
 }

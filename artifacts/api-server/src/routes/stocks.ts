@@ -4,7 +4,7 @@ import { CATEGORIES } from "../lib/stocks-data";
 import { getCatalystCalendar } from "../lib/catalysts";
 import { rankBreakoutCandidates, rankOptionsCandidates } from "../lib/breakout";
 import { buildPeerGroupPercentiles, resolvePeerGroup } from "../lib/sector";
-import { checkSignalConsistency } from "../lib/consistency-check";
+import { checkSignalConsistency, getLastConsistencyReport } from "../lib/consistency-check";
 import {
   aiWriteupService,
   macdService,
@@ -106,6 +106,21 @@ router.get("/market-regime", (_req, res) => {
 
 router.get("/signal-deltas", (_req, res) => {
   res.json(signalHistoryService.getAllSignalDeltas());
+});
+
+// Serves the Phase-3 signal-consistency safety net's last run, persisted to
+// disk (see consistency-check.ts) instead of only ever going to Render's
+// ephemeral log stream. checkSignalConsistency() runs as a side effect of
+// every /options-watch request (polled every 60s by the dashboard), so this
+// is normally at most a minute stale, not something that needs its own
+// trigger.
+router.get("/consistency-report", (_req, res) => {
+  const report = getLastConsistencyReport();
+  if (!report) {
+    res.status(404).json({ error: "No consistency report yet — /options-watch hasn't run since the last restart." });
+    return;
+  }
+  res.json(report);
 });
 
 router.get("/breakout-candidates", (_req, res) => {
