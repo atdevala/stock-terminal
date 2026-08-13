@@ -67,34 +67,22 @@ function scoreTileColor(s: number): string {
   return "text-red-400";
 }
 
-function divergenceStyle(tag: string): string {
-  if (tag === "EARLY OPPORTUNITY")  return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
-  if (tag === "LATE STAGE RISK")    return "bg-red-500/15 text-red-300 border-red-500/30";
-  if (tag === "HIGH CONVICTION")    return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-  return "";
-}
-
-// Flags from the signal-history divergence engine (distinct source from score.divergenceTag above).
+// Flags from the signal-history divergence engine (a genuinely distinct,
+// trend-based read — see historyDivergenceStyle below). score.divergenceTag
+// (ins vs cos) used to be rendered as a second pill here alongside it, but
+// it's the same ins-vs-price-confirmation concept the SETUP column's
+// signalLabel already classifies (e.g. divergenceTag's "EARLY OPPORTUNITY"
+// is exactly signalLabel's "EARLY BREAKOUT SETUP" — both trigger off INS
+// leading COS), just computed a second, older way that predates the
+// consolidation pass. Removed as a display here — score.divergenceTag
+// itself is left computed and intact since ScannerPage.tsx's on-demand scan
+// results still read it independently.
 function historyDivergenceStyle(tag: string): string {
   if (tag === "EARLY IGNITION SETUP")                       return "bg-violet-500/15 text-violet-300 border-violet-500/30";
   if (tag === "INSTITUTIONAL ACCUMULATION BEFORE REPRICING") return "bg-teal-500/15 text-teal-300 border-teal-500/30";
   if (tag === "SPECULATIVE MOMENTUM (UNCONFIRMED)")          return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
   if (tag === "LATE CYCLE / EXHAUSTION RISK")                return "bg-red-500/15 text-red-300 border-red-500/30";
   return "bg-zinc-700/20 text-zinc-300 border-zinc-600/30";
-}
-
-function tierStyle(tier: number): string {
-  if (tier === 3) return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
-  if (tier === 2) return "bg-blue-500/15 text-blue-300 border-blue-500/30";
-  if (tier === 1) return "bg-zinc-700/40 text-zinc-400 border-zinc-600/30";
-  return "";
-}
-
-function tierLabel(tier: number): string {
-  if (tier === 3) return "T3";
-  if (tier === 2) return "T2";
-  if (tier === 1) return "T1";
-  return "";
 }
 
 function fmt(v: number | undefined, suffix = "%", decimals = 1): string {
@@ -337,12 +325,9 @@ export function StockRow({
   const isUp = quote.change >= 0;
   const changeColor = isUp ? "text-green-500" : "text-red-500";
 
-  const divTag = score?.divergenceTag;
-  const hasDivTag = divTag && divTag.length > 0;
   const fbrs = score?.fbrs ?? 0;
   const showFbrsCaution = fbrs > 70;
   const isSuperstock = score?.isSuperstock ?? false;
-  const tier = score?.convictionTier ?? 0;
 
   return (
     <>
@@ -374,18 +359,8 @@ export function StockRow({
             {isSuperstock && (
               <span className="text-[11px] select-none" title="Superstock Candidate — INS ≥ 72 · ACS ≥ 68 · FBRS < 28">⭐</span>
             )}
-            {tier > 0 && (
-              <span className={cn("text-[9px] font-bold px-1 py-0.5 rounded border leading-none", tierStyle(tier))}>
-                {tierLabel(tier)}
-              </span>
-            )}
           </div>
           <div className="text-xs text-muted-foreground truncate max-w-[200px]" title={stock.company}>{stock.company}</div>
-          {hasDivTag && (
-            <div className={cn("mt-1 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border inline-block", divergenceStyle(divTag))}>
-              {divTag}
-            </div>
-          )}
           {signalDelta?.divergence && (
             <div className={cn("mt-1 text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border inline-block", historyDivergenceStyle(signalDelta.divergence))}>
               {signalDelta.divergence}
