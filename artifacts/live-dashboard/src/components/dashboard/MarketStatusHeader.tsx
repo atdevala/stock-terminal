@@ -66,7 +66,7 @@ export function MarketStatusHeader() {
     <div className="flex items-center justify-between py-3 px-6 border-b border-border bg-card/50 backdrop-blur">
       <div className="flex items-center gap-4">
         <h1 className="text-xl font-bold tracking-tight text-foreground flex items-center gap-2">
-          ATDEVALA STOCK WATCHLIST
+          ATDEVALA TERMINAL
         </h1>
         <div className="h-4 w-px bg-border"></div>
         <div className="flex items-center gap-2" data-testid="market-status">
