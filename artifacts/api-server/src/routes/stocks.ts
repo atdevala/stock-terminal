@@ -286,32 +286,6 @@ router.get("/debug/valuation", (_req, res) => {
   res.json({ samples, allRows: rows });
 });
 
-// TEMPORARY — re-exposes checkSignalConsistency's already-computed return
-// value (normally discarded at the /options-watch call site, only ever
-// logged server-side) so the full-universe consistency sweep from the
-// consolidation pass can be inspected on demand instead of relying on
-// Render's log stream, which isn't retrievable after the fact. Remove once
-// checked.
-router.get("/debug/consistency-check", async (_req, res) => {
-  try {
-    const scores = scoreService.computeScores();
-    const extByTicker = new Map(marketDataService.getAllExtendedMetrics().map(e => [e.ticker, e]));
-    const quotesMap = new Map(marketDataService.getAllQuotes().map(q => [q.ticker, q]));
-    const optionsCandidates = await rankOptionsCandidates(scores, extByTicker, quotesMap, 5);
-    const breakoutCandidates = rankBreakoutCandidates(scores, 10);
-    const issues = checkSignalConsistency(scores, breakoutCandidates, optionsCandidates);
-    res.json({
-      scoredUniverseSize: scores.length,
-      breakoutCandidateCount: breakoutCandidates.length,
-      optionsCandidateCount: optionsCandidates.length,
-      issueCount: issues.length,
-      issues,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
 router.get("/catalysts", async (req, res) => {
   try {
     const daysAhead = Number(req.query["days"]) || 10;
